@@ -1,0 +1,12 @@
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+	<input>
+		<net-file value="net.net.xml" />
+		<route-files value="routes.xml" />
+		<additional-files value="vTypes.add.xml,output.add.xml,stations.add.xml" />
+	</input>
+	<report>
+		<no-step-log value="true" />
+	</report>
+	<output>
+		<chargingstations-output value="output/chargingstations.out.xml" /><chargingstations-output.aggregated value="true" /></output>
+</sumoConfiguration>

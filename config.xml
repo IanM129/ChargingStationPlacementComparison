@@ -1,0 +1,86 @@
+<config>
+	<group name="prep">
+		<param name="preprocess" type="bool">
+			<default>True</default>
+			<value>True</value>
+		</param>
+		<param name="recreateNetwork" type="bool">
+			<default>False</default>
+			<value>False</value>
+		</param>
+		<param name="saveInputs" type="bool">
+			<default>True</default>
+			<value>True</value>
+		</param>
+	</group>
+	<group name="sim">
+		<param name="stepLength" type="float">
+			<default>0.1</default>
+			<value>0.1</value>
+		</param>
+		<param name="vehicleCount" type="int">
+			<default>100</default>
+			<value>200</value>
+		</param>
+		<param name="saveLog" type="bool">
+			<default>True</default>
+			<value>True</value>
+		</param>
+		<param name="visualize" type="bool">
+			<default>False</default>
+			<value>False</value>
+		</param>
+		<param name="frameDur" type="float">
+			<default>0.01</default>
+			<value>0.01</value>
+		</param>
+		<param name="printResults" type="bool">
+			<default>False</default>
+			<value>False</value>
+		</param>
+	</group>
+	<group name="electric">
+		<param name="penetration" type="float">
+			<default>0.8</default>
+			<value>0.8</value>
+		</param>
+		<param name="needToChargeProb" type="float">
+			<default>1.0</default>
+			<value>1.0</value>
+		</param>
+		<param name="batteryEmptyThreshold" type="float">
+			<default>2.0</default>
+			<value>2.0</value>
+		</param>
+		<param name="manualChargeDecide" type="bool">
+			<default>True</default>
+			<value>True</value>
+		</param>
+	</group>
+	<group name="station">
+		<param name="capacity" type="int">
+			<default>10</default>
+			<value>10</value>
+		</param>
+		<param name="waitQueue" type="int">
+			<default>10</default>
+			<value>10</value>
+		</param>
+		<param name="fillReverse" type="bool">
+			<default>True</default>
+			<value>True</value>
+		</param>
+		<param name="moneyPerKWH" type="float"> <!-- euro -->
+			<default>0.25</default>
+			<value>0.25</value>
+			<param name="red" type="float">
+				<default>0.35</default>
+				<value>0.35</value>
+			</param>
+			<param name="blue" type="float">
+				<default>0.25</default>
+				<value>0.25</value>
+			</param>
+		</param>
+	</group>
+</config>

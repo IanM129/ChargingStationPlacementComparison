@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-05-11T23:50:01.167583+01:00 by Eclipse SUMO sumo 1.25.0
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="manhattan/data//net.net.xml"/>
+        <route-files value="manhattan/data//routes.xml"/>
+        <additional-files value="manhattan/data//vTypes.add.xml,manhattan/data//output.add.xml,manhattan/data//stations.add.xml"/>
+    </input>
+
+    <output>
+        <chargingstations-output value="manhattan/data//output/chargingstations.out.xml"/>
+        <chargingstations-output.aggregated value="true"/>
+        <tripinfo-output value="manhattan/data//output/20260511_234958/trip_stats.xml"/>
+    </output>
+
+    <time>
+        <step-length value="0.1"/>
+    </time>
+
+    <report>
+        <no-step-log value="true"/>
+    </report>
+
+    <traci_server>
+        <remote-port value="64685"/>
+    </traci_server>
+
+    <gui_only>
+        <start value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<chargingstations-export>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="25" type="electric" totalEnergyChargedIntoVehicle="138.54" chargingBegin="38.00" chargingEnd="48.40" actualBatteryCapacity="1481.36" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="79" type="electric" totalEnergyChargedIntoVehicle="125.35" chargingBegin="42.30" chargingEnd="51.70" actualBatteryCapacity="2524.58" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_1" vehicle="19" type="electric" totalEnergyChargedIntoVehicle="187.36" chargingBegin="38.80" chargingEnd="52.90" actualBatteryCapacity="2885.48" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_0" vehicle="94" type="electric" totalEnergyChargedIntoVehicle="97.64" chargingBegin="45.60" chargingEnd="52.90" actualBatteryCapacity="2481.71" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_0" vehicle="5" type="electric" totalEnergyChargedIntoVehicle="120.07" chargingBegin="51.30" chargingEnd="60.30" actualBatteryCapacity="1899.83" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="63" type="electric" totalEnergyChargedIntoVehicle="186.04" chargingBegin="46.60" chargingEnd="60.60" actualBatteryCapacity="3069.86" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="2" type="electric" totalEnergyChargedIntoVehicle="398.47" chargingBegin="32.80" chargingEnd="62.90" actualBatteryCapacity="1687.28" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_1" vehicle="20" type="electric" totalEnergyChargedIntoVehicle="167.57" chargingBegin="51.70" chargingEnd="64.30" actualBatteryCapacity="2052.35" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_A7A8_1" vehicle="89" type="electric" totalEnergyChargedIntoVehicle="191.32" chargingBegin="51.60" chargingEnd="66.00" actualBatteryCapacity="2954.03" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_0" vehicle="24" type="electric" totalEnergyChargedIntoVehicle="121.39" chargingBegin="61.00" chargingEnd="70.10" actualBatteryCapacity="2388.83" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_1" vehicle="36" type="electric" totalEnergyChargedIntoVehicle="93.68" chargingBegin="63.40" chargingEnd="70.40" actualBatteryCapacity="1282.96" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_1" vehicle="80" type="electric" totalEnergyChargedIntoVehicle="190.00" chargingBegin="59.70" chargingEnd="74.00" actualBatteryCapacity="2985.06" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_0" vehicle="4" type="electric" totalEnergyChargedIntoVehicle="100.28" chargingBegin="66.60" chargingEnd="74.10" actualBatteryCapacity="1427.31" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_0" vehicle="28" type="electric" totalEnergyChargedIntoVehicle="184.72" chargingBegin="60.50" chargingEnd="74.40" actualBatteryCapacity="2016.91" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="59" type="electric" totalEnergyChargedIntoVehicle="126.67" chargingBegin="66.70" chargingEnd="76.20" actualBatteryCapacity="2468.32" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="31" type="electric" totalEnergyChargedIntoVehicle="252.01" chargingBegin="60.60" chargingEnd="79.60" actualBatteryCapacity="2067.30" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_1" vehicle="99" type="electric" totalEnergyChargedIntoVehicle="114.79" chargingBegin="76.10" chargingEnd="84.70" actualBatteryCapacity="2740.51" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_F8G8_1" vehicle="76" type="electric" totalEnergyChargedIntoVehicle="182.08" chargingBegin="74.20" chargingEnd="87.90" actualBatteryCapacity="2148.90" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>
+    <chargingEvent chargingStationId="pcsStation_B2B3_0" vehicle="51" type="electric" totalEnergyChargedIntoVehicle="225.63" chargingBegin="72.70" chargingEnd="89.70" actualBatteryCapacity="2721.12" maximumBatteryCapacity="8000.00" minPower="50000.00" maxPower="50000.00" minCharge="1.32" maxCharge="1.32" minEfficiency="0.95" maxEfficiency="0.95"/>

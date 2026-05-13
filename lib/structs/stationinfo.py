@@ -1,0 +1,120 @@
+import math
+
+import lib.graphing.utility as graphutil
+
+import lib.xml.parkingNetGen as parkingNetGen
+
+
+
+#### Station info
+class StationInfo:
+    # name_id           station id without index
+    # edge_id           normal edge id
+    # dedge_id          detailed edge id
+    # redge_id          actual edge the station is on
+    # park_id           parking id (without index)
+    # capacity          capacity of each parking space
+    # total_capacity    summed capacity
+    # occupied          (tuple) occupied spot count
+    # suffix            id suffix
+    
+    def __init__(self, edge_id, total_capacity : float, dedge_id=None, redge_id=None, suffix=""):
+        self.edge_id = edge_id
+        self.name_id = parkingNetGen.getStationID(edge_id, suffix=suffix, with_index=False)
+        #self.ids =(parkingNetGen.getStationID(edge_id, suffix=suffix), parkingNetGen.getStationID(edge_id, suffix=suffix, reverse=True))
+        #     ids = (name_id + "_0", name_id + "_1")
+        self.park_id = parkingNetGen.getParkingIDOfStation(self.name_id)
+        self.total_capacity = total_capacity
+        first_capacity = math.floor(total_capacity / 2.0)
+        self.capacity = (first_capacity, total_capacity - first_capacity)
+        self.occupied = [0, 0]
+        if dedge_id == None: pass; #WIP (if needed)
+        self.dedge_id = dedge_id
+        if redge_id == None: redge_id = parkingNetGen.getEdgeID(edge_id, suffix=suffix);
+        self.redge_id = redge_id
+        self.suffix = suffix
+    @staticmethod
+    def fromDetailedEdge(dedge_id, total_capacity, suffix=""):
+        edge_id = graphutil.translateDetailedRoad(dedge_id, as_tuple=False)
+        s = StationInfo(edge_id, total_capacity, dedge_id=dedge_id, suffix=suffix);
+        return s
+    def getID(self, reverse=False, with_index=True):
+        return self.name_id + ("_1" if reverse else "_0"); #self.ids[1 if reverse else 0];
+    #station ids (2 -> normal and reverse)
+    def getIDs(self): return (self.name_id + "_0", self.name_id + "_1"); #self.ids;
+    def requestSpot(self, auto_take=False, search_reverse=True):
+        if search_reverse:
+            if self.occupied[1] < self.capacity[1]:
+                if auto_take: self.takeSpot(1); #self.occupied[1] += 1;
+                return 1;
+            elif self.occupied[0] < self.capacity[0]:
+                if auto_take: self.takeSpot(0); #self.occupied[0] += 1;
+                return 0;
+        else:
+            if self.occupied[0] < self.capacity[0]:
+                if auto_take: self.takeSpot(0); #self.occupied[0] += 1;
+                return 0;
+            elif self.occupied[1] < self.capacity[1]:
+                if auto_take: self.takeSpot(1); #self.occupied[1] += 1;
+                return 1;
+        return -1;
+    def takeSpot(self, side_index):
+        self.occupied[side_index] += 1;
+        #print(self.name_id, " taken spot on", "second" if side_index == 1 else "first", "side:", self.occupied)
+    def releaseSpot(self, side_index):
+        self.occupied[side_index] -= 1;
+        #print(self.name_id, " released spot on", "second" if side_index == 1 else "first", "side:", self.occupied)
+    def __repr__(self):
+        return f"PCS({self.edge_id},|{self.total_capacity}|)"
+class StationInfoDataset:
+    def __init__(self, arr):
+        self.arr = arr;
+        self.IDs = None; self.IDss = None;
+        self.parkIDss = None;
+        self.nedges = None; self.dedges = None;
+        self.rev_dict = {}
+        for i in range(len(arr)):
+            self.rev_dict[arr[i].getID()] = i
+    def listEdges(self):
+        if not self.nedges:
+            self.nedges = [si.edge_id for si in self.arr]
+        return self.nedges
+    def listDedges(self):
+        if not self.dedges:
+            self.dedges = [si.dedge_id for si in self.arr]
+        return self.dedges
+    def listIDss(self):
+        if not self.IDss:
+            self.IDss = [si.getIDs() for si in self.arr]
+        return self.IDss
+    def listIDs(self, reverse=False):
+        if not self.IDs:
+            self.IDs = [si.getID(reverse=reverse) for si in self.arr]
+        return self.IDs
+    def listParkIDss(self):
+        if not self.parkIDss:
+            self.parkIDss = [(si.park_id + "_0", si.park_id + "_1") for si in self.arr]
+        return self.parkIDss
+    def __getitem__(self, idx): return self.arr[idx];
+    def getByID(self, x): return self.arr[self.rev_dict[x]];
+    def getIndexByID(self, x): return self.rev_dict[x];
+    def __iter__(self):
+        for el in self.arr:
+            yield el
+    def __len__(self): return len(self.arr);
+    def __repr__(self):
+        s = f"StationInfoDataset [{len(self.arr)}]:\n[";
+        first = True
+        for e in self.arr:
+            if first: first = False;
+            else: s += ", "
+            s += str(e)
+        s += "]"; return s;
+    def printEdges(self):
+        s = "["
+        first = True;
+        for e in self.arr:
+            if first: first = False;
+            else: s += ", ";
+            s += str(e.edge_id)
+        return s + "]"

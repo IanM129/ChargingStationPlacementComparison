@@ -1,0 +1,429 @@
+import sys
+import os
+from subprocess import call, DEVNULL
+import time
+from datetime import datetime
+import random
+import math
+import numpy as np
+import sumolib
+import traci
+import traci.constants as tc
+import xml.etree.ElementTree as ET
+import matplotlib.pyplot as plt
+import pathlib
+import networkx as nx
+import re
+
+sumoBinary = sumolib.checkBinary('sumo')
+import randomTrips
+jtrrouterBinary = sumolib.checkBinary('jtrrouter')
+
+import lib.graphing as graphing  #= lib/graphing/__init__.py
+import preprocess as prep
+
+from lib.sumo.params import Parameters
+
+import lib.sumo.utility as sumoutil
+import lib.traci_utility as traciutil
+
+from lib.structs.stationinfo import StationInfo, StationInfoDataset
+from lib.structs.trip import Trip, TripDataset
+from lib.structs.evaluation import Evaluation
+
+import lib.algorithms.algorithms as alg
+
+import lib.graphing.utility as graphutil
+import lib.graphing.draw as graphdraw
+
+import lib.xml.parkingNetGen as parkingNetGen
+import lib.xml.tripsGen as tripsGen
+import lib.xml.output as xmlOut
+
+
+#### Parameters
+## Preprocess
+#PREPROCESS = True
+#RECREATE_NETWORK = True
+#SAVE_INPUTS = True
+## Simulation
+#STEP_LENGTH = 0.4
+#VEHICLE_COUNT = 200
+#VISUALIZE = False
+#FRAME_DUR = 0.01
+#SAVE_LOG = True
+## Electric
+#EV_PEN = 0.8
+#NEED_TO_CHARGE_PROBABILITY = 1.0
+#BATTERY_EMPTY_THRESHOLD = 2.0
+#MANUAL_CHARGE_DECIDE = True
+## Station
+#STATION_CAPACITY = 10
+#WAIT_QUEUE_SIZE = 10
+#STATION_FILL_REVERSE = False
+#MONEY_PER_KWH = 0.25  # (used euro)
+
+
+## Recharge cost function
+def stationCostFunction(detour_time, detour_distance):
+    return detour_time + detour_distance
+
+def preprocess(data_path, sumo_filename, output_path, trips, k, params=None):
+    if not params: params = Parameters.default();
+    sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
+    ## Folder organization
+    #output_path = data_path + "/" + output_folder + "/" + output_subfolder
+    pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
+    #### Pre-loop
+    ## Network
+    global base_net, G
+    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
+    G = graphing.netToGraph(data_path + "/base_net.net.xml")
+    ## Preprocess sumo config
+    sumocfg_tree = ET.parse(sumo_filepath)
+    sumocfg_tree = prep.config_enableStations(sumocfg_tree, enable=True)
+    sumocfg_tree = xmlOut.config_enableStationOutput(sumocfg_tree, enable=True, aggregate=True)
+    sumocfg_tree = xmlOut.config_enableBatteryOutput(sumocfg_tree, enable=False)
+    sumocfg_tree.write(sumo_filepath)
+    ## Load XMLs
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    vTypes_tree = ET.parse(data_path + "/vTypes.add.xml", parser=parser)
+    ## Update XML settings
+    prep.enableBattery(vTypes_tree, True)
+    prep.enableStationFinder(vTypes_tree, not params["electric.manualChargeDecide"])
+    vTypes_tree.write(data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
+    ## Side vars
+    global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
+    network_diameter = float(nx.diameter(G, weight="length"))
+    EV_len = parkingNetGen.getVehicleLength(vTypes_tree);
+    min_gap = prep.getMinGapFromAddTree(vTypes_tree)
+    max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+    min_charge = prep.calcApproxChargeNeeded(network_diameter / k) + 200; # padding
+    min_charge_p = min_charge / max_charge;
+    # Trip len
+    global avg_trip_len, avg_trip_charge;
+    avg_trip_len = 0.0;
+    for trip in trips.values():
+        avg_trip_len += trip.total_distance
+    avg_trip_len /= len(trips)
+    avg_trip_charge = prep.calcApproxChargeNeeded(avg_trip_len);
+
+
+####
+def removeFromSimulationVars(vehicles : set, params):
+    global sim_EVs
+    sim_EVs -= vehicles;
+    if params["electric.manualChargeDecide"]:
+        global will_need_to_charge, going_to_charge, charging
+        will_need_to_charge -= vehicles;
+        for vehID in vehicles:
+            going_to_charge.pop(vehID, None);
+            if vehID in charging:
+                si_index, park_side = charging[vehID][0]
+                stations[si_index].releaseSpot(park_side)
+                charging.pop(vehID, None);
+#### Sumo
+def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, stations,
+                output_folder, output_subfolder="solo", params=None):
+    if not params: params = Parameters.config();
+#### PREPROCESS
+    k = len(stations)
+    sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
+    output_path = data_path + "/" + output_folder
+    if params["saveLog"] or params["saveInputs"] or params["saveOutputs"]:
+        output_path += "/" + output_subfolder
+    if params["prep.preprocess"]:
+        preprocess(data_path, sumo_filename, output_path, trips, k, params=None)
+    global base_net, G
+    global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
+    global avg_trip_len, avg_trip_charge
+    
+#### PRE STATION WRITE
+    ## Reload graphs
+    G = graphing.netToGraph(data_path + "/base_net.net.xml")
+    G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
+    ## Write stations to XML
+    parkingNetGen.addStationsToNetwork(base_net, stations,
+                                       data_path, write=True, #out_data_path=data_path,
+                                       network_filepath=data_path + "/base_net.net.xml",
+                                       vehicle_length=EV_len, min_gap=min_gap, wait_queue_size=params["station.waitQueue"])
+    #print("-- stations written to network XML. (at '" + (output_path + "/net.net.xml") + "')")
+    # Reload net
+    net = sumolib.net.readNet(data_path + "/net.net.xml")
+#### POST STATION WRITE
+    # Induction loop
+    xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=data_path + "/output.add.xml",
+                                                output_filepath=output_folder + "/loop.out.xml", overwrite=True)
+    # Edge based macroscopic traffic measures
+    xmlOut.config_createEdgeOutputFile(xml_filepath=data_path + "/output.add.xml",
+                                       output_filepath=output_folder + "/edgeData.out.xml",
+                                       overwrite=False)
+    ## Fix stops
+    trips = prep.fixTripEdges(base_net, net, stations.listEdges(),
+                              routes_filepath=output_path + "/trips.xml",
+                              write=True, output_filepath=data_path + "/routes.xml",
+                              trips=trips)
+    ## Copy inputs
+    if params["prep.saveInputs"]:
+        prep.copyFileForSimulation(data_path + "/net.net.xml", output_path + "/net.net.xml")            # net
+        prep.copyFileForSimulation(data_path + "/stations.add.xml", output_path + "/stations.add.xml")  # stations
+        #prep.copyFileForSimulation(data_path + "/routes.xml", output_path + "/trips.xml")              # trips
+    ## Command
+    if params["saveLog"]: log_filepath = output_path + "/log.txt"
+    else: log_filepath = None;
+    cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
+                                   log_filepath=log_filepath,
+                                   trip_stats_filepath=output_path + "/trip_stats.xml")
+    print("-> SUMO command:\n'" + ' '.join(cmnd) + "'")
+#### SIMULATION
+    global sim_EVs
+    sim_EVs = set(); manually_added_last_step = set();
+    EVs_count = 0; total_veh_count = 0;
+    set_need_to_charge_cnt = 0;
+    sttn_util_rate = {}
+    if params["electric.manualChargeDecide"]:
+        global will_need_to_charge, going_to_charge, charging
+        will_need_to_charge = set()
+        going_to_charge = {}
+        charging = {}
+        ev_ntc_charge = {}
+        remaining_range = {}
+    if params["visualize"]:
+        veh_colors = {}
+    for sttn_edge_id, _ in stations.listIDss():
+        sttn_util_rate[sttn_edge_id] = [0, 0];
+    ## Run simulation
+    sim_stime = time.perf_counter()
+    traci.start(cmnd)
+    ## Subscriptions
+    traci.simulation.subscribe([
+            traci.constants.VAR_DEPARTED_VEHICLES_IDS,                          #
+            traci.constants.VAR_ARRIVED_VEHICLES_IDS                            # getArrivedIDList()
+            #traci.constants.VAR_TELEPORT_END
+    ])
+    for sttn_info in stations:
+        park_id = sttn_info.park_id
+        traciutil.subscribeParkingVehicleCount(park_id + "_0")
+        traciutil.subscribeParkingVehicleCount(park_id + "_1")
+    ## Loop
+    while traci.simulation.getMinExpectedNumber() > 0: #and traci.simulation.getTime() < duration:
+        # Step
+        traci.simulationStep();
+        data_sim = traci.simulation.getSubscriptionResults()
+
+        #### Process state
+        ## Arrived
+        # -> remove arrived EVs
+        arrived = set(data_sim.get(tc.VAR_ARRIVED_VEHICLES_IDS, []))
+        removeFromSimulationVars(arrived, params)
+
+        ## STEP
+        if params["electric.manualChargeDecide"]:
+            vaporized = set()
+            go_charge_this_step = {}
+            for vehID in sim_EVs:
+                cur_edge = traci.vehicle.getRoadID(vehID);
+                if cur_edge and cur_edge[0] != ':':
+                    charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
+                    if params["electric.manualChargeDecide"]:
+                        # Check if battery empty
+                        if charge <= params["electric.batteryEmptyThreshold"]:
+                            traci.vehicle.remove(vehID, reason=3)
+                            vaporized.add(vehID)
+                        # Check if needs to search for a charging station
+                        if (vehID in will_need_to_charge) and (charge < ev_ntc_charge[vehID]): # find charging station
+                            route = traci.vehicle.getRoute(vehID);
+                            cur_index = traci.vehicle.getRouteIndex(vehID);
+                            next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
+                            # Get charging station and station trip
+                            target_station, station_trip, station_route = traciutil.findClosestChargingStation(vehID, charge, stations, stationCostFunction,
+                                                                                                               route=route, cur_index=cur_index,
+                                                                                                               next_dest_index=next_dest_index_r)
+                            # Update new route and trip
+                            new_route = station_route + route[next_dest_index_r + 1:]
+                            #trips[vehID].update(station_trip, index=cur_index)
+                            next_dest_index_t = traciutil.getNextDestIndexInTrip(vehID, trips[vehID], route, cur_index)
+                            trips[vehID].insertToNextDestination(station_trip, next_dest_index_t)
+                            # Set stop
+                            target_si = stations.getByID(target_station)
+                            traci.vehicle.setRoute(vehID, new_route)
+                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
+                            # Update set
+                            go_charge_this_step[vehID] = target_station
+                if params["visualize"]:
+                    # Color by charge
+                    traciutil.colorByCharge(vehID, charge, veh_colors, max_charge)
+            # Update sets and dicts
+            will_need_to_charge -= go_charge_this_step.keys()
+            going_to_charge.update(go_charge_this_step)
+            removeFromSimulationVars(vaporized, params) #sim_EVs -= vaporized
+            #if len(vaporized) > 0: print("> Vaporized:", vaporized);
+
+        ## Vehicles driving to charge stations
+            start_charging_this_step = {};
+            for vehID in going_to_charge:
+                if traci.vehicle.isStopped(vehID):
+                    target_station = going_to_charge[vehID]
+                    target_si_index = stations.getIndexByID(target_station)
+                    target_si = stations[target_si_index]
+                    target_parks = (target_si.park_id + "_0", target_si.park_id + "_1")
+                    # Request a charging/parking spot
+                    parking_spot_side = target_si.requestSpot(auto_take=True, search_reverse=params["station.fillReverse"])
+                    found_spot = (parking_spot_side != -1)
+                    if found_spot:
+                        traci.vehicle.setParkingAreaStop(vehID, target_parks[parking_spot_side])
+                        traci.vehicle.resume(vehID)
+                        start_charging_this_step[vehID] = (target_si_index, parking_spot_side)
+                    # else keep waiting
+        ## Vehicles charging
+            done_charging_this_step = set()
+            for vehID in charging:
+                if traci.vehicle.isStopped(vehID):
+                    charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
+                    charge_target = charging[vehID][1]
+                    if charge >= charge_target and charge >= ev_ntc_charge[vehID]:
+                        si_index, park_side = charging[vehID][0]
+                        stations[si_index].releaseSpot(park_side)
+                        # Check if can make journey; if not keep monitoring it
+                        approx_charge_needed = traciutil.calcNeededChargeLeft(vehID, trips[vehID])
+                        # DISTANCE
+                        route = traci.vehicle.getRoute(vehID)
+                        cur_index = traci.vehicle.getRouteIndex(vehID)
+                        cur_edge = route[cur_index]
+                        next_dest_index = traciutil.getNextDestIndexInTrip(vehID, trips[vehID], route, cur_index)
+                        distance = trips[vehID].remainingDistanceFromEdge(cur_edge, next_dest_index)
+                        if approx_charge_needed > charge:
+                            will_need_to_charge.add(vehID)
+                        traci.vehicle.resume(vehID)
+                        done_charging_this_step.add(vehID)
+            # Update dict (done charging)
+            for vehID in done_charging_this_step:
+                charging.pop(vehID, None)
+            # Update dict (found spot/started charging)
+            for vehID in start_charging_this_step:
+                going_to_charge.pop(vehID, None)
+                charge_target = min(traciutil.calcNeededChargeLeft(vehID, trips[vehID]) + 500, max_charge) # padding so it doesn't need to go recharge
+                charging[vehID] = (start_charging_this_step[vehID], charge_target)
+            
+        ######################
+        ## Newly added
+        departed = set(data_sim.get(tc.VAR_DEPARTED_VEHICLES_IDS, []))
+        for vehID in departed:
+            total_veh_count += 1;
+            vtype = traci.vehicle.getTypeID(vehID)
+            if vtype == "electric":
+                sim_EVs.add(vehID); EVs_count += 1;
+                # Set when vehicle needs to charge
+                need_to_charge_level = random.uniform(0.15, 0.4)
+                if params["electric.manualChargeDecide"]:
+                    ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
+                else:
+                    traci.vehicle.setParameter(vehID, "device.stationfinder.needToChargeLevel", str(need_to_charge_level))
+                # Set battery charge on start
+                #min_charge = prep.calcApproxChargeNeeded(dist_radius); min_charge_p = min_charge / max_charge;
+                trip_len = trips[vehID].total_distance
+                approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
+                if random.random() < params["electric.needToChargeProb"]:
+                    # v1 : random.uniform(0.2, 0.3) * max_charge
+                    # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
+                    # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
+                    set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
+                    set_charge_p = set_charge / max_charge
+                    set_need_to_charge_cnt += 1
+                else:
+                    set_charge = max_charge
+                traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(min(set_charge, max_charge)))
+                if params["electric.manualChargeDecide"]:
+                    will_need_to_charge.add(vehID)
+
+
+        ## Keep tracking of station use per time
+        for si in stations:
+            #traci.chargingstation.getVehicleCount(st_id) #traci.parkingarea.getVehicleCount(si.park_id + "_0")
+            sttn_veh_cnt = traciutil.getStepParkingVehicleCount(si.park_id + "_0")
+            #traci.chargingstation.getVehicleCount(st_id_r) #traci.parkingarea.getVehicleCount(si.park_id + "_1")
+            sttn_veh_cnt += traciutil.getStepParkingVehicleCount(si.park_id + "_1")
+            sttn_util_rate[si.getID()][1] += sttn_veh_cnt;
+            if sttn_veh_cnt > 0: sttn_util_rate[si.getID()][0] += 1;
+
+                    
+
+    ## Simulation done
+    sim_time = traci.simulation.getTime()
+    traci.close()
+    sim_etime = time.perf_counter()
+    steps_processed = int(sim_time / params["stepLength"])
+    if params["printResults"]:
+        print("\n")
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds")
+        print(f"         vehicle count: {total_veh_count:6d}")
+        print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %; expected {round((params['electric.penetration'])*100, 2):4.2f} %)")
+        print()
+
+#### POSTPROCESS
+    results.clear();
+    ## Process step data
+    # Utilization rate
+    for si in stations:
+        st_id = si.getID(); st_cap = si.total_capacity;
+        sttn_util_rate[st_id] = (float(sttn_util_rate[st_id][0] / steps_processed),
+                                 float(sttn_util_rate[st_id][1] / (steps_processed * st_cap)));
+
+    ## Total charge from station
+    if params["printResults"]:
+        print("Total charge used per station | utlization rate:")
+    stations_charges_data = xmlOut.getAllStationCharges(data_path)
+    station_charges = {}
+    veh_charges = {}
+    sttn_vehicle_count = {}
+    total_charge = 0
+    for si in stations:
+        station_ids = si.getIDs()
+        total = 0.0;
+        sttn_vehicle_count[si.getID()] = 0
+        for station_id in station_ids:
+            if station_id in stations_charges_data:
+                charges = stations_charges_data[station_id];
+                sttn_vehicle_count[si.getID()] += len(charges)
+                for vehID in charges.keys():
+                    for charge in charges[vehID]:
+                        total += float(charge["totalEnergy"])
+                    if vehID not in veh_charges: veh_charges[vehID] = set();
+                    veh_charges[vehID].add(si.getID())
+        if params["printResults"]:
+            print(f"  {si.edge_id:12s}: {round(total, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                  f"(util: {round(sttn_util_rate[si.getID()][0]*100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1]*100.0,2):5.2f} %)")
+        station_charges[si.getID()] = total
+        EVs_charged = len(veh_charges.keys()); EVs_charged_ratio = EVs_charged / set_need_to_charge_cnt;
+        total_charge += total
+    money_earned = (total_charge * float(params["station.moneyPerKWH"])) / 1000.0
+    if params["printResults"]:
+        print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
+        print(f"  > money earned: {round(money_earned, 2)}€ ({round(params['station.moneyPerKWH'],2)}€ per KWh)")
+        print()
+    results.setStationData(stations, sttn_util_rate, total_charge)
+    
+    ## Get flow at edges
+    edge_stats = xmlOut.getEdgeLoopStats(data_path, file_path=output_folder + "/loop.out.xml",
+                                         max_flow=True)
+    edge_data = xmlOut.getEdgeDataStats(data_path, file_path=output_folder + "/edgeData.out.xml")
+    results.setEdgeData(edge_stats, edge_data)
+
+    ## Get vaporized vehicles and edges where they vaporized
+    vaporized_count = 0
+    for data in edge_data.values():
+        vap = data["vaporized"]
+        if vap > 0: vaporized_count += vap
+    arrived_EVs_cnt = EVs_count - vaporized_count
+    arrived_EVs_ratio = float(arrived_EVs_cnt) / float(EVs_count)
+    if params["printResults"]:
+        print(f"Total vaporized: {vaporized_count}")
+        print(f"--> Arrived EVs ratio: {round(arrived_EVs_ratio*100, 2):5.2f} % ({arrived_EVs_cnt} / {EVs_count}) [total: {total_veh_count}]")
+        print(f"--> EVs charged ratio: {round(EVs_charged_ratio*100, 2):5.2f} % ({EVs_charged} / {set_need_to_charge_cnt})")
+        print()
+    results.setVehicleData(vehicle_count=total_veh_count,
+                           EV_count=EVs_count, EV_set_charge=set_need_to_charge_cnt,
+                           EV_arrived=arrived_EVs_cnt, EV_charged=EVs_charged)
+
+    return results
+        

@@ -1,0 +1,23 @@
+<additional>
+	<vType id="conventional" accel="2.6" decel="4.5" sigma="0.5" maxSpeed="130" vClass="passenger" mass="1500" color="1,1,1" />
+    <vType id="electric" accel="2.6" decel="4.5" sigma="0.5" maxSpeed="130" vClass="passenger" mass="1500" length="5" emissionClass="Energy/unknown" color="0,1,0">
+		<param key="has.battery.device" value="true" />
+        <param key="device.battery.capacity" value="4000" />
+        <param key="maximumPower" value="1000" />
+        <param key="frontSurfaceArea" value="2.6" />
+        <param key="airDragCoefficient" value="0.35" />
+        <param key="rotatingMass" value="40" />
+        <param key="radialDragCoefficient" value="0.1" />
+        <param key="rollDragCoefficient" value="0.01" />
+        <param key="constantPowerIntake" value="100" />
+        <param key="propulsionEfficiency" value="0.85" />
+        <param key="recuperationEfficiency" value="0.25" />
+        <param key="stoppingThreshold" value="0.1" />
+        <param key="device.battery.maximumChargeRate" value="150000" />
+		<param key="has.stationfinder.device" value="true" />
+		<param key="device.stationfinder.rescueTime" value="0" />
+		<param key="device.stationfinder.rescueAction" value="none" />
+		<param key="device.stationfinder.needToCharge" value="0.4" />
+		<param key="device.stationfinder.saturatedChargeLevel" value="0.8" />
+	</vType>
+</additional>
