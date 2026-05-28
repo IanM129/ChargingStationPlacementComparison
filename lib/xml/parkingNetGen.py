@@ -146,9 +146,12 @@ def extractNetworkFeatures(network_tree=None, network_filepath=None):
                 })
     return (nodes_tree, edges_tree)
 ## Write network
-def writeToXML(nodes_tree, edges_tree, output_filepath):
+def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=False):
     nodes_filepath = "new_nodes.nod.xml"
     edges_filepath = "new_edges.edg.xml"
+    if temp_folder != "":
+        nodes_filepath = temp_folder + "/" + nodes_filepath;
+        edges_filepath = temp_folder + "/" + edges_filepath;
     nodes_tree.write(nodes_filepath); edges_tree.write(edges_filepath);
     call([netconvertBinary,
           '--no-turnarounds.except-deadend', 'true',
@@ -156,8 +159,11 @@ def writeToXML(nodes_tree, edges_tree, output_filepath):
           '-n', nodes_filepath,
           '-e', edges_filepath,
           '-o', output_filepath],
-          stdout=DEVNULL)
-    os.remove(nodes_filepath); os.remove(edges_filepath);
+          stdout=DEVNULL,
+          stderr=DEVNULL)
+    if delete:
+        os.remove(nodes_filepath);
+        os.remove(edges_filepath);
 
 # Maybe make it use sumolib instead of xml
 def createParkingNet(nodes_tree, edges_tree, add_tree, edge_id, edge_tuple, offset=0, vehicle_length=5,
@@ -266,7 +272,8 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")
-        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml")
+        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
+                   temp_folder=output_path)
     else:
         return (nodes_tree, edges_tree, stations_tree)
 def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,

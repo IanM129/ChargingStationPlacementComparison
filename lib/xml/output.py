@@ -295,6 +295,9 @@ def clean(data_path):
             "vTypes.add.xml",
             "output.add.xml",
             "stations.add.xml",
+            # Temp net
+            "new_edges.edg.xml",
+            "new_nodes.nod.xml",
             # Output
             "output/loop.out.xml",
             "output/edgeData.out.xml",

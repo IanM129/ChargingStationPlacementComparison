@@ -9,6 +9,8 @@ output
 networks/**/output
 networks/**/net.net.xml
 networks/**/routes.xml
+networks/**/new_edges.edg.xml
+networks/**/new_nodes.nod.xml
 networks/**/vTypes.add.xml
 networks/**/output.add.xml
 networks/**/stations.add.xml

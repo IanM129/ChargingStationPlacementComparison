@@ -23,7 +23,7 @@
 			0
 		</param>
 		<param name="vehicleCount" type="int" default="100">
-			100
+			200
 		</param>
 		<!-- [-inf, -0.0]: percent of network radius; [0.0, inf] absolute value in meters -->
 		<param name="minDistance" type="float" default="-0.5">
@@ -106,7 +106,7 @@
 			True
 		</param>
 		<param name="measureTime" type="bool" default="False">
-			True
+			False
 		</param>
 	</group>
 	<group name="reward">
