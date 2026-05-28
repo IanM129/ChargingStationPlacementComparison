@@ -17,6 +17,21 @@ def netHasEdgeID(net, edge_id):
         net.getEdge(edge_id); return True;
     except KeyError: return False;
 
+## Node edge
+def genNodeEdgeID(from_id : str, to_id : str) -> str:
+    return from_id + NODE_EDGE_ID_SEPARATOR + to_id
+def getNodesFromNodeEdgeID(node_edge_id : str) -> (str, str):
+    from_node_id = node_edge_id[:node_edge_id.index(NODE_EDGE_ID_SEPARATOR)];
+    to_node_id = node_edge_id[node_edge_id.index(NODE_EDGE_ID_SEPARATOR)+1:];
+    return (from_node_id, to_node_id)
+def isNodeEdge(n : str) -> bool:
+    return NODE_EDGE_ID_SEPARATOR in n;
+def areNodeEdgesSameNode(a : str, b : str) -> bool:
+    from_a, _ = getNodesFromNodeEdgeID(a)
+    from_b, _ = getNodesFromNodeEdgeID(b)
+    return from_a == from_b
+
+
 ## Get nodes from road id
 def getNodesFromRoadID(road_id):
     from_id = road_id[:road_id.index(ROAD_ID_SEPARATOR)]
@@ -220,6 +235,8 @@ def insertNodes(G, start_id, end_id, count, name="", bidirectional=True,
 #### Radius calculations
 ## Inside radius
 def getNodesInRadius(G, center, radius, reverse_roads=False) -> set:
+    if center not in G:
+        raise Exception(f"Node {center} not in graph!")
     checked = set()
     heap = TupleMaxHeap(); heap.push((radius, center));
     all_lens = nx.get_edge_attributes(G, "length")
@@ -236,6 +253,8 @@ def getNodesInRadius(G, center, radius, reverse_roads=False) -> set:
                         heap.push((dis_left - distance, next_node))
     return checked
 def getNodesInRadius_withDistance(G, center, radius, reverse_roads=False) -> dict:
+    if center not in G:
+        raise Exception(f"Node {center} not in graph!")
     result = {};
     heap = TupleMaxHeap(); heap.push((radius, center));
     all_lens = nx.get_edge_attributes(G, "length")

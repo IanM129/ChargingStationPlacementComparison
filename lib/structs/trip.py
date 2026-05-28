@@ -1,3 +1,5 @@
+import numpy as np
+
 import traci
 
 class Trip:
@@ -108,3 +110,5 @@ class TripDataset:
     def __len__(self): return len(self.dict);
     def keys(self): return self.dict.keys();
     def values(self): return self.dict.values();
+    def averageTripLen(self):
+        return np.mean([trip.total_distance for trip in self.dict.values()])

@@ -5,6 +5,19 @@ import lib.graphing.utility as graphutil
 
 
 
+def dictToElement(d, root=None):
+    if root == None: root = ET.Element("dictionary");
+    for key, value in d.items():
+        child = root.find(key)
+        if child == None: child = ET.SubElement(root, key)
+        else: child.clear()
+        if isinstance(value, list):
+            for el in value:
+                el_child = ET.SubElement(child, "element")
+                el_child.text = el
+        else: child.text = str(value);
+    return root
+
 #### Output config for sumo config file
 def config_getOutputElement(root):
     output_el = root.find("output")
@@ -140,6 +153,41 @@ def getStationCharges(data_path, station_id) -> dict[list[dict]]:
             arr.append(charge)
             result[vehID] = arr;
     return result;
+## Trips
+def getTripStats(filepath):
+    result = {}
+    tree = ET.parse(filepath)
+    root = tree.getroot()
+    count = 0; battery_count = 0;
+    trip_duration = 0.0
+    trip_length = 0.0
+    wait_time = 0.0
+    wait_count = 0
+    stop_time = 0.0
+    time_loss = 0.0
+    energy_consumed = 0.0
+    for item in root.findall("tripinfo"):
+        count += 1
+        trip_duration += float(item.get("duration"))
+        trip_length += float(item.get("routeLength"))
+        wait_time = float(item.get("waitingTime"))
+        wait_count = int(item.get("waitingCount"))
+        stop_time = float(item.get("stopTime"))
+        time_loss = float(item.get("timeLoss"))
+        if (item.get("vType") == "electric"):
+            bat_item = item.find("battery")
+            battery_count += 1
+            energy_consumed = float(bat_item.get("totalEnergyConsumed"))
+    if count == 0.0: count = 1.0;
+    if battery_count == 0.0: battery_count = 1.0;
+    result["tripDuration"] = trip_duration / count
+    result["tripLength"] = trip_length / count
+    result["waitTime"] = wait_time / count
+    result["waitCount"] = wait_count / count
+    result["stopTime"] = stop_time / count
+    result["timeLoss"] = time_loss / count
+    result["energyConsumed"] = energy_consumed / battery_count
+    return result
 ## Vehicle break down warnings
 def getBreakdownWarnings(log_filepath):
     events = []

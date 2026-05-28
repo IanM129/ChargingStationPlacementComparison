@@ -13,6 +13,7 @@ class StationInfo:
     # dedge_id          detailed edge id
     # redge_id          actual edge the station is on
     # park_id           parking id (without index)
+    # dnode_id          detailed road node id
     # capacity          capacity of each parking space
     # total_capacity    summed capacity
     # occupied          (tuple) occupied spot count
@@ -28,11 +29,20 @@ class StationInfo:
         first_capacity = math.floor(total_capacity / 2.0)
         self.capacity = (first_capacity, total_capacity - first_capacity)
         self.occupied = [0, 0]
-        if dedge_id == None: pass; #WIP (if needed)
+        #if dedge_id == None:
+        #    dedge_id = graphutil.translateNetEdgeToDetailedEdgeID(edge_id);
         self.dedge_id = dedge_id
         if redge_id == None: redge_id = parkingNetGen.getEdgeID(edge_id, suffix=suffix);
         self.redge_id = redge_id
+        self.dnode_id = None
         self.suffix = suffix
+    def setDetailedNode(self, net):
+        net_edge = net.getEdge(self.edge_id)
+        node_f = net_edge.getFromNode().getID(); node_t = net_edge.getToNode().getID();
+        if node_f <= node_t:
+            self.dnode_id = graphutil.getRoadIDFromNodes(node_f, node_t)
+        else:
+            self.dnode_id = graphutil.getRoadIDFromNodes(node_t, node_f)
     @staticmethod
     def fromDetailedEdge(dedge_id, total_capacity, suffix=""):
         edge_id = graphutil.translateDetailedRoad(dedge_id, as_tuple=False)
@@ -72,6 +82,7 @@ class StationInfoDataset:
         self.IDs = None; self.IDss = None;
         self.parkIDss = None;
         self.nedges = None; self.dedges = None;
+        self.dnodes = None;
         self.rev_dict = {}
         for i in range(len(arr)):
             self.rev_dict[arr[i].getID()] = i
@@ -79,10 +90,27 @@ class StationInfoDataset:
         if not self.nedges:
             self.nedges = [si.edge_id for si in self.arr]
         return self.nedges
-    def listDedges(self):
+    def listDedges(self, net=None):
         if not self.dedges:
-            self.dedges = [si.dedge_id for si in self.arr]
+            return None
+            self.dedges = [None] * len(self.arr) #[si.dedge_id for si in self.arr]
+            for i in range(len(self.arr)):
+                si = self.arr[i]
+                if si.dedge_id == None:
+                    if net == None: raise Exception("No net given to fetch detailed edge.");
+                    si.setDetailedEdge(net)
+                self.dedges[i] = si.dedge_id
         return self.dedges
+    def listDNodes(self, net=None):
+        if not self.dnodes:
+            self.dnodes = [None] * len(self.arr) #[si.dedge_id for si in self.arr]
+            for i in range(len(self.arr)):
+                si = self.arr[i]
+                if si.dnode_id == None:
+                    if net == None: raise Exception("No net given to fetch detailed edge.");
+                    si.setDetailedNode(net)
+                self.dnodes[i] = si.dnode_id
+        return self.dnodes
     def listIDss(self):
         if not self.IDss:
             self.IDss = [si.getIDs() for si in self.arr]

@@ -13,13 +13,6 @@ import lib.graphing.draw as graphdraw
 
 
 
-#### Utility
-def isGraphCovered(G, centers, radius):
-    covered = set()
-    for center in centers:
-        center_covered = graphutil.getNodesInRadius(G, center, radius)
-        covered = center_covered.union(covered)
-    return len(covered) == len(G.nodes())
 ## Choosing next center
 # Choose by finding the node with the maximum distance to its closest center
 def chooseFarthestFromCenters(G, candidates, distance_to_centers):
@@ -238,13 +231,14 @@ def closestFirstCoverageBased(G, G_d, candidates, k, radius, debug=False):
 
 ## 
 def radiusBinarySearch(G, G_d, candidates, k, epsilon=50, distribution_alg=None, debug=False) -> tuple[float,list]:
-    if distribution_alg == None: distribution_alg = farthestFirstCoverageBased;
+    if distribution_alg == None:
+        distribution_alg = farthestFirstCoverageBased;
     max_radius = float(nx.diameter(G_d, weight="length")) / (math.ceil(k / 2))
     a = 0; b = max_radius; radius = 0; centers = [];
     while (b - a > epsilon):
         radius = (b + a) / 2
         centers = distribution_alg(G, G_d, candidates, k, radius, debug=False)
-        feasible = len(centers) < k or isGraphCovered(G_d, centers, radius);
+        feasible = len(centers) < k or coverAlgs.isGraphCovered(G_d, centers, radius);
         if feasible: b = radius;
         else: a = radius;
     if debug:
@@ -260,14 +254,13 @@ def radiusBinarySearch_EdgeWeights(G, G_d, candidates, k, edge_value_weights,
         centers = farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius,
                                                          edge_value_weights=edge_value_weights, first_station=first_station,
                                                          default_edge_weight=default_edge_weight, debug=False)
-        feasible = len(centers) < k or isGraphCovered(G_d, centers, radius);
+        feasible = len(centers) < k or coverAlgs.isGraphCovered(G_d, centers, radius);
         if feasible: b = radius;
         else: a = radius;
     if debug:
         graphdraw.drawCenters(G_d, centers, radius, node_labels=False, edge_labels=False)
         plt.show()
     return (radius, centers)
-
 
 
 

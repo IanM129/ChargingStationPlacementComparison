@@ -1,10 +1,13 @@
 from datetime import datetime
+import time
 import random
 import pathlib
 import sumolib
 import networkx as nx
 import copy
 import numpy as np
+import matplotlib.pyplot as plt
+import xml.etree.ElementTree as ET
 from tqdm import tqdm
 
 import torch
@@ -12,47 +15,103 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Multinomial
 from torch_geometric.nn import GCNConv
+from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx as torch_from_networkx
 
-#from lib.gnn.env import ChargingEnv
+from lib.utility import clamp
+
 from lib.gnn.model1 import EdgeGNN
+from lib.gnn.model2 import EdgePosGNN
 import lib.gnn.utility as gnnutil
 
 import lib.visual_utility as visutil
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
+import lib.graphing.utility as graphutil
+import lib.graphing.draw as graphdraw
 import preprocess as prep
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip
-from lib.structs.edge_translator import EdgeTranslator
+from lib.structs.graphtranslator import GraphTranslator
 from lib.structs.evaluation import Evaluation
+from lib.structs.params import Parameters
 
 import lib.xml.tripsGen as tripsGen
 
-from lib.sumo.params import Parameters
+import lib.algorithms.coverage as coverAlg
+
 from lib.sumo.blank import sumoBlankRun
 from lib.sumo.solo import sumoSoloRun
 
 
 ###### FUNCTIONS
 #### Utility
-def extractEdgeAttrs(G, edge_stats, edge_data):
-    edge_attrs = {"vehicles" : {}, "flow" : {}, "vaporized" : {}}
-    ids = nx.get_edge_attributes(G, "id")
-    for edge in G.edges():
-        edge_id = ids[edge]
-        stats = edge_stats.get(edge_id, {"vehicles" : 0, "flow" : 0.0})
-        edge_attrs["vehicles"][edge] = stats["vehicles"]
-        edge_attrs["flow"][edge] = stats["flow"]
-        data = edge_data.get(edge_id, {"entered" : 0, "vaporized" : 0})
-        edge_attrs["vaporized"][edge] = data["vaporized"]
-    return edge_attrs
-def applyEdgeAttributes(G, edge_attrs):
-    nx.set_edge_attributes(G, edge_attrs["vehicles"], "vehicles")
-    nx.set_edge_attributes(G, edge_attrs["flow"], "flow")
-    nx.set_edge_attributes(G, edge_attrs["vaporized"], "vaporized")
-    return G
+## Edge attributes
+def createEdgeAttrUpdateList(attr_update, attr_list):
+    return [(a if (a in attr_update) else None) for a in attr_list]
+def applyBaseGraphEdgeAttributes(graph, G, translator, attrs):
+    global edge_attr_list, edge_attr_map
+    num_features = len(edge_attr_list)
+    new_edge_attrs = np.zeros((graph.edge_index.shape[1], num_features))
+    edges = translator.getEdges()
+    # Apply
+    for attr in attrs:
+        if attr in edge_attr_map:
+            attr_i = edge_attr_map[attr]
+            match (attr):
+                case "travelTime":
+                    travelTime = nx.get_edge_attributes(G, "travelTime")
+                    travelTime = [(travelTime[e]) for e in edges]
+                    new_edge_attrs[:, attr_i] = travelTime;
+        else:
+            raise Exception(f"Unknown attribute '{attr}'")
+    graph.edge_attr = torch.as_tensor(new_edge_attrs, dtype=torch.float32, device=device)
+    return graph
+# From results
+def applyResultsToGraph(graph, translator, attrs, results):
+    global edge_attr_list, edge_attr_map
+    num_features = len(edge_attr_list)
+    #new_edge_attrs = np.zeros((graph.edge_index.shape[1], num_features))
+    edges = translator.getEdges()
+    # Apply
+    for attr in attrs:
+        if attr in edge_attr_map:
+            attr_i = edge_attr_map[attr]
+            match (attr):
+                # Edges
+                case "vehicles":
+                    vehicles = translator.dictToEdgeAttributes(results.edge_data["vehicles"], dtype=float)
+                    #print("vehicles:", vehicles.shape, "\n", vehicles)
+                    vehicles = torch.from_numpy(vehicles).to(graph.edge_attr.device)
+                    graph.edge_attr[:, attr_i] = vehicles;
+                case "flow":
+                    flow = translator.dictToEdgeAttributes(results.edge_data["flow"], dtype=float)
+                    #print("flow:", flow.shape, "\n", flow)
+                    flow = torch.from_numpy(flow).to(graph.edge_attr.device)
+                    graph.edge_attr[:, attr_i] = flow;
+                case "vaporized":
+                    vaporized = translator.dictToEdgeAttributes(results.edge_data["vaporized"], dtype=float)
+                    #print("vaporized:", vaporized.shape, "\n", vaporized)
+                    vaporized = torch.from_numpy(vaporized).to(graph.edge_attr.device)
+                    graph.edge_attr[:, attr_i] = vaporized;
+                # Stations
+                case "charged":
+                    charged = np.zeros(len(edges), dtype=float)
+                    for edge in results.station_data["charged"]:
+                        edge_ind = translator.edgeToIndex(edge)
+                        charged[edge_ind] = results.station_data["charged"][edge]
+                    #print("charged:", charged.shape, "\n", charged)
+                    charged = torch.from_numpy(charged).to(graph.edge_attr.device)
+                    graph.edge_attr[:, attr_i] = charged;
+                # Other
+                case _:
+                    raise Exception(f"Undefined attribute '{attr}'")
+        else:
+            raise Exception(f"Unknown attribute '{attr}'")
+    return graph
+
+
 def calculate_log_probs(logits, selected_indices):
     log_probs = []
     mask = torch.ones_like(logits, dtype=torch.bool)
@@ -72,17 +131,113 @@ def getReward_flow(selected_edges, graph, iteration):
     global edge_attr_map
     flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
     return flow_sum
-def runSimulation(selected_edges, graph, G, params, edge_translator, iteration=None):
-    stations = []
-    for edge in selected_edges: stations.append(StationInfo(edge, STATION_CAPACITY));
-    stations = StationInfoDataset(stations)
-    results = Evaluation(edge_translator)
-    results = sumoSoloRun(base_net, data_path, "manhattan", trips, stations, params=params, results=results,
-                          output_folder=output_folder, output_subfolder="solo_" + str(iteration))
-    edge_attrs = extractEdgeAttrs(G, edge_stats, edge_data)
+def rewardFunction(stations, results, params, formula):
+    reward = 0.0
+    # Coverage penalty
+    if ((factor := params["reward.coverage"]) != 0.0) or (params["reward.coverage.monitor"]):
+        global coverage_radius_target
+        coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d, stations.listDNodes(base_net),
+                                                                    epsilon=50,
+                                                                    max_radius=network_diameter))
+        #train_results["coverage"][iteration] = float(coverage_radius);
+        if factor != 0.0:
+            radius_n = -np.tanh(coverage_radius / coverage_radius_target)
+            reward += factor * radius_n;
+            formula["coverage"] = (coverage_radius, float(radius_n));
+        else: formula["coverage"] = (coverage_radius, 0.0);
+    # Charge
+    if ((factor := params["reward.charge"]) != 0.0) or (params["reward.charge.monitor"]):
+        global sess_charge_scale
+        charge_val = float(results.station_data["totalCharge"])
+        #train_results["charge"][iteration] = float(charge_val);
+        if factor != 0.0:
+            if sess_charge_scale == None:
+                charge_n = 0.0;
+                sess_charge_scale = charge_val
+            else:
+                charge_n = np.tanh(charge_val / sess_charge_scale)
+                sess_charge_scale = (sess_charge_scale * 0.95) + (charge_val * 0.05)
+            reward += factor * charge_n
+            formula["charge"] = (float(charge_val), float(charge_n));
+        else: formula["charge"] = (float(charge_val), 0.0);
+    # Duration and completeness
+    if ((factor := params["reward.simDuration"]) != 0.0) or (params["reward.simDuration.monitor"]):
+        global sess_duration_scale
+        fully_complete = results.fullyCompleted
+        sim_time = float(results.simulationTime)
+        #train_results["simDuration"][iteration] = float(sim_time);
+        if factor != 0.0:
+            time_n = -np.tanh(sim_time / sess_duration_scale)
+            sess_duration_scale = (sess_duration_scale * 0.95) + (sim_time * 0.05)
+            if not fully_complete: time_n -= 0.5;
+            reward += factor * time_n
+            formula["simDuration"] = (sim_time, float(time_n));
+        else: formula["simDuration"] = (sim_time, 0.0);
+    # Trips (average)
+    if ((factor := params["reward.tripDuration"]) != 0.0) or (params["reward.tripDuration.monitor"]):
+        trip_duration = float(results.trip_data["tripDuration"])
+        #train_results["tripDuration"][iteration] = float(results.trip_data["tripDuration"])
+        if factor != 0.0:
+            tripdur_n = trip_duration
+            reward += factor * tripdur_n
+            formula["tripDuration"] = (trip_duration, tripdur_n);
+        else: formula["tripDuration"] = (trip_duration, 0.0);
+    # Trip length (average)
+    if ((factor := params["reward.tripLength"]) != 0.0) or (params["reward.tripLength.monitor"]):
+        trip_length = float(results.trip_data["tripLength"])
+        #train_results["tripLength"][iteration] = float(results.trip_data["tripLength"])
+        global average_trip_len
+        if factor != 0.0:
+            triplen_n = -np.tanh(trip_length / (average_trip_len * 2.0))
+            reward += factor * triplen_n
+            formula["tripLength"] = (trip_length, float(triplen_n));
+        else: formula["tripLength"] = (trip_length, 0.0);
+    # Trip wait time (average)
+    if ((factor := params["reward.waitTime"]) != 0.0) or (params["reward.waitTime.monitor"]):
+        wait_time = float(results.trip_data["waitTime"])
+        #train_results["waitTime"][iteration] = float(0.0)
+        if factor != 0.0:
+            waittime_n = wait_time
+            reward += factor * waittime_n
+            formula["waitTime"] = (wait_time, float(waittime_n));
+        else: formula["waitTime"] = (wait_time, 0.0);
+    # Stop time (average)
+    if ((factor := params["reward.stopTime"]) != 0.0) or (params["reward.stopTime.monitor"]):
+        stop_time = float(results.trip_data["stopTime"])
+        #train_results["stopTime"][iteration] = float(results.trip_data["stopTime"])
+        if factor != 0.0:
+            stoptime_n = stop_time
+            reward += factor * stoptime_n
+            formula["stopTime"] = (stop_time, float(stoptime_n));
+        else: formula["stopTime"] = (stop_time, 0.0);
+    # Time lost (average)
+    if ((factor := params["reward.timeLoss"]) != 0.0) or (params["reward.timeLoss.monitor"]):
+        time_loss = float(results.trip_data["timeLoss"])
+        #train_results["timeLoss"][iteration] = float(results.trip_data["timeLoss"])
+        if factor != 0.0:
+            timeloss_n = time_loss
+            reward += factor * timeloss_n
+            formula["timeLoss"] = (time_loss, float(timeloss_n));
+        else: formula["timeLoss"] = (time_loss, 0.0);
+    # Energy consumed (average)
+    if ((factor := params["reward.energyConsumed"]) != 0.0) or (params["reward.energyConsumed.monitor"]):
+        energy_consumed = float(results.trip_data["energyConsumed"])
+        #train_results["energyConsumed"][iteration] = float(results.trip_data["energyConsumed"])
+        if factor != 0.0:
+            enrgcons_n = energy_consumed
+            reward += factor * 0.0
+            formula["energyConsumed"] = (energy_consumed, float(enrgcons_n));
+        else: formula["energyConsumed"] = (energy_consumed, 0.0);
+    #train_results["reward"][iteration] = reward
+    formula["reward"] = (float(reward), 0.0)
+    return reward
+def runSimulation(G, stations, graph, base_trips, params, translator, iteration=None, debug=False):
+    trips = copy.deepcopy(base_trips)
+    results = Evaluation(translator)
+    results = sumoSoloRun(base_net, G, data_path, "manhattan", trips, results, stations, params=params,
+                          output_folder=output_folder, output_subfolder="solo_" + str(iteration),
+                          debug=debug)
     return results
-def getReward(results, last_results):
-    return results.station_data["totalCharge"] - last_results.station_data["totalCharge"]
         
 
 
@@ -91,154 +246,300 @@ def getReward(results, last_results):
 filepath = "manhattan/";
 data_path = filepath + "data/";
 in_data_path = data_path + "manhattan";
-## Simulation
-vehicle_count = 100
-STATION_CAPACITY = 10
-ev_penetration = 0.8
-## Stations
-k = 3
+## Training
+edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
+edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
 
 
 if __name__ == "__main__":
+    # Adjust params
+    params = Parameters.config()
+    print(params.groupPrint())
+    # Load params
+    #global VEHICLE_COUNT, STATION_CAPACITY, EV_PEN, K
+    VEHICLE_COUNT = params["sim.vehicleCount"]
+    MAX_DURATION = params["sim.maxDuration"]
+    DURATION_SET = MAX_DURATION > 0
+    MIN_DISTANCE = params["sim.minDistance"]
+    MAX_DISTANCE = params["sim.maxDistance"]
+    EV_PEN = params["electric.penetration"]
+    STATION_CAPACITY = params["station.capacity"]
+    K = params["station.k"]
+    ITERATIONS = params["training.iterations"]
+    MEASURE_TIME = params["training.measureTime"]
+    PRINTS = params["training.progressDebugs"]
+    PROGRESS_PRINT = params["training.printProgress"]
+    PROGRESS_WRITE = params["training.writeProgress"]
+    PROGRESS_DRAW = params["training.drawProgress"]
+    
 ####### LOADING
-    # Graph
-    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
-    G = graphing.netToGraph(data_path + "/base_net.net.xml",
-                            lengths=True, travel_time=True,
-                            internal_lengths=False, node_position=True)
-    print(G);
-    # Edge translator
-    edge_trans = EdgeTranslator(base_net, G)
-    # Other
+    # Torch init
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
+    ## Graph
+    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
+    base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
+                                 lengths=True, travel_time=True,
+                                 internal_lengths=False, node_position=True)
+    base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d));
+    num_nodes = base_G.number_of_nodes()
+    # Detailed graph for coverage calculations
+    global coverage_G_d
+    coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
+    #graphing.discretizeGraph(coverage_G_d, 1, add_max=1, roads_only=True)
+    #graphdraw.drawGraph(coverage_G_d)
+    #plt.show()
+    # Edge translator
+    translator = GraphTranslator(base_G)
+    ## PyG Data
+    # Edge index
+    edge_index = translator.getEdgeIndexArray()
+    edge_index = torch.as_tensor(edge_index, dtype=torch.int, device=device)
+    # Pos
+    pos = nx.get_node_attributes(base_G, "pos")
+    pos = translator.dictToNodePos(pos)
+    pos = torch.as_tensor(pos, dtype=torch.float32, device=device)
+    # Create
+    graph = Data(num_nodes=num_nodes,edge_index=edge_index, pos=pos)
+    if graph.x == None:
+        graph.x = torch.ones(num_nodes, 1, dtype=torch.float32)
+    # Edge attributes
+    edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
+    applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
+    ## Other
+    global network_diameter, coverage_radius_target, charge_max_eval
+    network_diameter = float(nx.diameter(base_G, weight="length"))
+    coverage_radius_target = network_diameter / np.sqrt(K)
+    sess_charge_scale = None; #1000.0;
+    sess_duration_scale = MAX_DURATION if (DURATION_SET) else 1000.0;
+    ## Globals
+    if MIN_DISTANCE < 0:
+        MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
+    if MAX_DISTANCE < 0:
+        MAX_DISTANCE = abs(MAX_DISTANCE * network_diameter)
+    
 ###### PRE-RUN
     # Datetime now (for file organization)
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
     output_folder = "output/" + start_datetime_str
     output_path = data_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Generate trips for the whole training session
-    network_diameter = float(nx.diameter(G, weight="length"))
-    trips = tripsGen.main(base_net, G, vehicle_count, output_path + "/trips.xml",
-                          #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
-                          destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
-                          #min_distance_per_des=(network_diameter / 4.0),
-                          min_distance=network_diameter*0.5,
-                          max_distance=network_diameter*2.0,
-                          ev_pen=ev_penetration)
+    base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
+                               #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
+                               destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
+                               #min_distance_per_des=(network_diameter / 4.0),
+                               min_distance=network_diameter*0.5,
+                               max_distance=network_diameter*2.0,
+                               ev_pen=EV_PEN)
+    average_trip_len = base_trips.averageTripLen()
     # Prepare results
-    results = Evaluation(edge_trans)
+    results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
-    # Adjust params
-    params = Parameters.config()
-    params["sim.visualize"] = False
-    params["prep.saveInputs"] = False
-    params["sim.saveLog"] = False
-    params["sim.printResults"] = False
-    print(params)
-    params["prep.saveLog"] = 0.0
-    print(params)
-    exit()
     # Prepare files
     prep.copyFileForSimulation(data_path + "/base_net.net.xml", data_path + "/net.net.xml")
     prep.copyFileForSimulation(output_path + "/trips.xml", data_path + "/routes.xml")
     ## Run
-    if True:
-        results = sumoBlankRun(base_net, data_path, "manhattan", trips, results, params=params,
-                                             output_folder=output_folder, output_subfolder="blank")
-    else:
-        stations = random.sample(base_net.getEdges(), k)
-        for i in range(len(stations)): stations[i] = StationInfo(stations[i].getID(), STATION_CAPACITY);
-        stations = StationInfoDataset(stations)
-        print(stations)
-        results = sumoSoloRun(base_net, data_path, "manhattan", trips, results, stations, params=params,
-                                            output_folder=output_folder, output_subfolder="solo")
-    ## Extract edge attributes
-    edge_attrs = extractEdgeAttrs(G, edge_stats, edge_data)
-    ## Update G
-    G = applyEdgeAttributes(G, edge_attrs)
-    ## PyG graph
-    node_map = {node: i for i, node in enumerate(G.nodes())}
-    edge_map = {edge: i for i, edge in enumerate(G.edges())}
-    edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized"]
-    edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
-    graph = torch_from_networkx(G,
-                    group_node_attrs=["pos"],
-                    group_edge_attrs=edge_attr_list)
-    print(graph)
-
-    # Calculate max possible flow (brute force)
-    max_flow = 0.0
-    flows = [graph.edge_attr[i, edge_attr_map["flow"]].sum().item() for i in range(graph.num_edges)]
-    max_inds = []
-    for i in range(k):
-        mind = int(np.argmax(flows))
-        max_flow += flows[mind]
-        flows[mind] = 0.0
-        max_inds.append(mind)
-    print("max flow indeces:", max_inds)
+    results = sumoBlankRun(base_net, data_path, "manhattan", base_trips, results, params=params,
+                           output_folder=output_folder, output_subfolder="blank")
+    ## Update graph (Data)
+    graph = applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
 
 
 ###### TRAINING
     #### Preprocess
-    graph.to(device)
-    model = EdgeGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64)
+    graph = graph.to(device)
+    model = EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64) #EdgeGNN
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    run_reward = None; effect_on_run_reward = 0.1;
+    run_reward = None;
+    effect_on_run_reward = 0.1;
+    entropy_coeff = 0.01;
+    # Progress printing
+    print_every = ITERATIONS / PRINTS
+    if PROGRESS_WRITE:
+        f = open(output_path + "/training/progress.txt", "w"); f.close();
+        #f = open(output_path + "/training/best.xml", "w"); f.close()
+        best_tree = ET.ElementTree(ET.fromstring("<best></best>"))
+    if MEASURE_TIME:
+        eval_time = 0.0; rewardcalc_time = 0.0; envupdate_time = 0.0;
+    # Monitor training results
+    global train_results
+    train_results = gnnutil.initializeResultsDict(params, ITERATIONS)
+    best = gnnutil.initializeBestDict(params)
     #### Loop
-    for iteration in tqdm(range(10000)):        #for iteration in range(10000):
+    pbar = tqdm(total=ITERATIONS)
+    iteration = 0
+    sim_tries = 0
+    best_modified = {}
+    while iteration < ITERATIONS:
         model.train()
         optimizer.zero_grad()
 
-        # 2. Get edge scores from your GNN
+        #### 1. Get edge scores and probability
         # x: [intersections, features], edge_index: [2, roads], edge_attr: [roads, features]
-        logits = model(graph.x, graph.edge_index, graph.edge_attr)
-
-        # 3. Convert scores to a probability distribution over edges
+        logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
         probs = torch.softmax(logits, dim=0)
 
-        # 4. Agent selects 'n' edges (hubs) based on probabilities
+        #### 2. Select k edges
         # Sampling (multinomial)
-        selected_indices_t = torch.multinomial(probs, num_samples=k, replacement=False)
-        log_probs = calculate_log_probs(logits, selected_indices_t) #m.log_prob()
+        selected_indices_t = torch.multinomial(probs, num_samples=K, replacement=False)
+        log_probs = calculate_log_probs(logits, selected_indices_t)
         selected_edge_indices = selected_indices_t.tolist()
-        selected_edges = [(e[0], e[1]) for e in edges_arr[selected_edge_indices]]
-        selected_edge_ids = [edge_to_id_map[edge] for edge in selected_edges]
+        selected_edges = [translator.indexToEdge(sei) for sei in selected_edge_indices]
+        selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
+        # Transform to stations
+        stations = []
+        for edge in selected_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY));
+        stations = StationInfoDataset(stations)
 
-        # 5. Run evaluation
+        if sim_tries > 10:
+            raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {stations.listEdges()}.")
+
+        #### 3. Run evaluation
         last_results = results
-        results = runSimulation(selected_edge_ids, graph, G, params, edge_translator, iteration)
+        if (iteration == 1): params["prep.preprocess"] = False;
+        if MEASURE_TIME: sim_stime = time.perf_counter();
+        try:
+            results = runSimulation(base_G, stations, graph, base_trips, params, translator, iteration,
+                                    debug=False)
+            sim_tries = 0
+        except:
+            # Very rarely crashes when setting stop for charging
+            print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}, retrying...")
+            sim_tries += 1
+            continue
+        if MEASURE_TIME:
+            sim_etime = time.perf_counter();
+            eval_time += sim_etime - sim_stime;
 
-        # 5. Environment Reward        
-        flow = getReward(results, last_results)
-        reward = flow
-        if run_reward == None: run_reward = reward;
+        #### 4. Calcualte reward
+        if MEASURE_TIME: sim_stime = time.perf_counter();
+        formula = {}
+        reward = rewardFunction(stations, results, params, formula)
+        gnnutil.updateResultsDict(train_results, formula, iteration)
+        best_modified = gnnutil.updateBestDict(best, stations.listEdges(), formula, modified=best_modified)
+        # Running reward/advantage
+        if run_reward == None:
+            run_reward = reward;
         else:
             run_reward = ((1 - effect_on_run_reward) * run_reward) +\
                          (effect_on_run_reward * reward)
-        advantage = reward - run_reward
+        advantage = float(reward - run_reward)
+        if MEASURE_TIME:
+            sim_etime = time.perf_counter();
+            rewardcalc_time += sim_etime - sim_stime;
             
 
-        # 6. Policy Gradient Update
-        # Loss = -log_prob * reward (we minimize negative to maximize reward)
-        loss = -(log_probs.sum()) * advantage;  #-torch.stack(log_probs).mean() * reward
-
+        # 5. Policy Gradient Update
+        # Entropy bonus
+        #entropy_bonus = -entropy_coeff * entropy.mean()
+        # Loss; minimize negative to maximize reward
+        loss = (-log_probs.sum() * advantage)# + entropy_bonus;
         loss.backward()
         optimizer.step()
 
-        if iteration % 100 == 0:
-            print(iteration)
-            print("  chosen:", selected_edge_indices)
-            print(f"  flow:   {flow:10.4f}  | {max_flow}")
-            print(f"  reward: {reward:7.2f}  | {run_reward:0.2f}")
-            print("  loss: ", loss.item())
-            print(" ", len(set(selected_edge_indices).intersection(set(max_inds))), "/", k)
-            print()
+        # 6. Update environment
+        if MEASURE_TIME: sim_stime = time.perf_counter();
+        graph = applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged"], results)
+        if MEASURE_TIME:
+            sim_etime = time.perf_counter();
+            envupdate_time += sim_etime - sim_stime;
+
+        iteration += 1
+        pbar.update(1)
+        
+        # Debug
+        if (iteration + 1) % print_every == 0:
+            s = f"> {(iteration + 1):5d} / {ITERATIONS}:\n"
+            s += "  chosen: " + str(selected_edge_indices) + "\n"
+            #s += f"  flow:   {flow:10.4f}  | {max_flow}\n";
+            s += f"  reward: {reward:7.2f}  | {run_reward:0.2f}\n";
+            s += "  loss: " + str(loss.item()) + "\n"
+            #s += " " + str(len(set(selected_edge_indices).intersection(set(max_inds)))) + "/" + str(K) + "\n"
+            if MEASURE_TIME:
+                avg_eval_time = eval_time / (iteration + 1)
+                avg_reward_time = rewardcalc_time / (iteration + 1)
+                avg_envupdate_time = envupdate_time / (iteration + 1)
+                s += f"  average part durations:\n"
+                s += f"    evaluation:          {round(avg_eval_time, 2)}\n"
+                s += f"    reward calculation:  {round(avg_reward_time, 2)}\n"
+                s += f"    env update:          {round(avg_envupdate_time, 2)}\n"
+            s += "\n"
+            s += str(formula) + "\n"
+            if PROGRESS_PRINT: print(s);
+            if PROGRESS_WRITE:
+                # Write in progress log
+                with open(output_path + "/training/progress.txt", "a") as f:
+                    f.write(s)
+                    f.write(str(results))
+                    f.write("\n")
+                # Write best
+                gnnutil.updateBestTree(best_tree, best, best_modified)
+                ET.indent(best_tree, space="    ")
+                best_tree.write(output_path + "/training/best.xml");
+            if PROGRESS_DRAW:
+                # Draw current evaluation
+                plt.close()
+                fig, ax = plt.subplots()
+                ew_range = (0.1, 2.0)
+                max_flow = max(results.edge_data["flow"].values()) / (ew_range[1] - ew_range[0])
+                edge_weights = {key: ((ew_range[0] + (value / max_flow))) for key, value in results.edge_data["flow"].items()}
+                graphdraw.drawEdgeWeights(base_G, edge_weights, ax=ax, default_width=0.0)
+                station_weights = {si.edge_id: (results.station_data["charged"][translator.IDToEdge(si.edge_id)]) for si in stations}
+                graphdraw.drawCircleStations(base_G, base_net, stations.listEdges(), fig, ax, circle_size=50, font_size=8, station_weights=station_weights)
+                fig.savefig(output_path + f"/training/iteration_{(iteration + 1)}.jpg")
+                plt.close(fig)
+                # Draw coverage
+                if "coverage" in formula:
+                    fig, ax = plt.subplots()
+                    graphdraw.drawCenters(coverage_G_d, stations.listDNodes(), formula["coverage"][0], ax=ax,
+                                          node_size=150, node_labels=False, edge_labels=False)
+                    ax.set_title(f"Radius: " + str(round(formula["coverage"][0], 2)))
+                    fig.savefig(output_path + f"/training/coverage_{(iteration + 1)}.jpg")
+pbar.close()
+
+#### Finish and save
+pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
+# Save model
+torch.save(model.state_dict(), output_path + "/results/model.pt")
+# Save training results
+
+# Show training results
+figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS)
+for stat in figs:
+    fig, ax = figs[stat]
+    fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
+plt.show()
 
 
 
 
-    
+
+
+
+
+
+
+
+
+"""
+# "edge_attrs" middleman variable (OBSOLETE)
+def extractEdgeAttrs(G, edge_stats, edge_data):
+    edge_attrs = {"vehicles" : {}, "flow" : {}, "vaporized" : {}}
+    ids = nx.get_edge_attributes(G, "id")
+    for edge in G.edges():
+        edge_id = ids[edge]
+        stats = edge_stats.get(edge_id, {"vehicles" : 0, "flow" : 0.0})
+        edge_attrs["vehicles"][edge] = stats["vehicles"]
+        edge_attrs["flow"][edge] = stats["flow"]
+        data = edge_data.get(edge_id, {"entered" : 0, "vaporized" : 0})
+        edge_attrs["vaporized"][edge] = data["vaporized"]
+    return edge_attrs
+def applyEdgeAttributes(G, edge_attrs):
+    nx.set_edge_attributes(G, edge_attrs["vehicles"], "vehicles")
+    nx.set_edge_attributes(G, edge_attrs["flow"], "flow")
+    nx.set_edge_attributes(G, edge_attrs["vaporized"], "vaporized")
+    return G
+"""

@@ -19,21 +19,8 @@ from lib.structs.vector import normalizeVector
 
 
 import lib.graphing.astar as astar
-import lib.graphing.utility as graphutil
+import lib.graphing.utility as util
 import lib.graphing.draw as graphdraw
-
-
-
-def genNodeEdgeID(from_id : str, to_id : str) -> str:
-    return from_id + NODE_EDGE_ID_SEPARATOR + to_id
-def getNodesFromNodeEdgeID(node_edge_id : str) -> (str, str):
-    from_node_id = node_edge_id[:node_edge_id.index(NODE_EDGE_ID_SEPARATOR)];
-    to_node_id = node_edge_id[node_edge_id.index(NODE_EDGE_ID_SEPARATOR)+1:];
-    return (from_node_id, to_node_id)
-def areNodeEdgesSameNode(a : str, b : str) -> bool:
-    from_a, _ = getNodesFromNodeEdgeID(a)
-    from_b, _ = getNodesFromNodeEdgeID(b)
-    return from_a == from_b
 
 
 
@@ -79,16 +66,28 @@ def netToGraph(net_xml_filepath,
                 attrs[edge_nxid]["travelTime"] = travel_t;
     nx.set_edge_attributes(G, attrs)
     return G
-def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=True):
+def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=True, add_road_centers=False):
     net = sumolib.net.readNet(net_xml_filepath)
     net_internal = sumolib.net.readNet(net_xml_filepath, withInternal=True)
     G = nx.DiGraph()
+    pos = {}; degs = {}
     for edge in net.getEdges():
-        from_id = edge.getFromNode().getID();
-        to_id = edge.getToNode().getID();
+        from_node = edge.getFromNode(); to_node = edge.getToNode();
+        from_id = from_node.getID(); to_id = to_node.getID();
         length = edge.getLength();
-        start = genNodeEdgeID(from_id, to_id); end = genNodeEdgeID(to_id, from_id);
-        G.add_edge(start, end, length=length)
+        start = util.genNodeEdgeID(from_id, to_id); end = util.genNodeEdgeID(to_id, from_id);
+        if add_road_centers:
+            if from_id < to_id: dn_id = util.getRoadIDFromNodes(from_id, to_id);
+            else: dn_id = util.getRoadIDFromNodes(to_id, from_id);
+            length_h = length / 2.0;
+            G.add_edge(start, dn_id, length=length_h);
+            G.add_edge(dn_id, end, length=length_h);
+            if save_position:
+                from_x, from_y = from_node.getCoord(); to_x, to_y = to_node.getCoord();
+                from_x = float(from_x); from_y = float(from_y); to_x = float(to_x); to_y = float(to_y);
+                pos[dn_id] = (from_x + ((to_x - from_x) / 2.0), from_y + ((to_y - from_y) / 2.0));
+        else:
+            G.add_edge(start, end, length=length);
     for node in net.getNodes():
         for conn in node.getConnections():
             length = net_internal.getLane(conn.getViaLaneID()).getLength()
@@ -97,22 +96,24 @@ def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=T
             mid_node_id = from_edge.getToNode().getID();
             end_node_id = to_edge.getToNode().getID();
             if start_node_id != end_node_id:
-                start = genNodeEdgeID(mid_node_id, start_node_id);
-                end = genNodeEdgeID(mid_node_id, end_node_id);
+                start = util.genNodeEdgeID(mid_node_id, start_node_id);
+                end = util.genNodeEdgeID(mid_node_id, end_node_id);
                 G.add_edge(start, end, length=length);
     if save_position or save_junction_deg:
-        pos = {}; degs = {}
         for node in G.nodes:
-            from_node_id, to_node_id = getNodesFromNodeEdgeID(node);
-            from_node = net.getNode(from_node_id); to_node = net.getNode(to_node_id)
-            if save_position:
-                from_x, from_y = from_node.getCoord(); to_x, to_y = to_node.getCoord();
-                from_x = float(from_x); from_y = float(from_y); to_x = float(to_x); to_y = float(to_y);
-                direction = normalizeVector(to_x - from_x, to_y - from_y)
-                pos[node] = (from_x + (10 * direction[0]), from_y + (10 * direction[1]))
-            if save_junction_deg:
-                junc_deg = len(from_node.getIncoming())
-                degs[node] = junc_deg
+            if util.isNodeEdge(node):
+                from_node_id, to_node_id = util.getNodesFromNodeEdgeID(node);
+                from_node = net.getNode(from_node_id); to_node = net.getNode(to_node_id)
+                if save_position:
+                    from_x, from_y = from_node.getCoord(); to_x, to_y = to_node.getCoord();
+                    from_x = float(from_x); from_y = float(from_y); to_x = float(to_x); to_y = float(to_y);
+                    direction = normalizeVector(to_x - from_x, to_y - from_y)
+                    pos[node] = (from_x + (10 * direction[0]), from_y + (10 * direction[1]))
+                if save_junction_deg:
+                    junc_deg = len(from_node.getIncoming())
+                    degs[node] = junc_deg
+            else:
+                degs[node] = 2;
         if save_position:
             nx.set_node_attributes(G, pos, "pos")
         if save_junction_deg:
@@ -122,24 +123,26 @@ def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=T
 #### Networkx graph to line graph
 def lineGraph(G):
     G_line = nx.line_graph(G)
+    return G_line
     
 
 #### Graph utility
-def discretizeGraph(G, max_distance, add_pos=True, add_min=0, roads_only=False, road_id_separator='.'):
+def discretizeGraph(G, max_distance, add_min=0, add_max=-1, roads_only=False):
     edges = set()
     for edge in G.edges():
-        if edge[::-1] not in edges:
-            edges.add(edge)
+        if edge[0] <= edge[1]: edges.add(edge);
+        else: edges.add(edge[::-1]);
     lengths = nx.get_edge_attributes(G, "length")
     for edge in edges:
-        if roads_only and areNodeEdgesSameNode(edge[0], edge[1]):
+        if roads_only and util.areNodeEdgesSameNode(edge[0], edge[1]):
             continue;
         length = lengths[edge]
         node_count = max(math.floor(length / max_distance), add_min)
+        if add_max > 0: node_count = min(node_count, add_max)
         if node_count == 1:
-            graphutil.insertNode(G, edge[0], edge[1])
+            util.insertNode(G, edge[0], edge[1])
         elif node_count > 1:
-            graphutil.insertNodes(G, edge[0], edge[1], node_count, length=length)
+            util.insertNodes(G, edge[0], edge[1], node_count, length=length)
     return
 
 
@@ -222,7 +225,7 @@ if __name__ == "__main__":
         print("\nA* path 1:\n    detailed:", path_d, "\n    len:", pathLength(G_d, path_d))
         print("    normal:  ", path, "\n    len:", pathLength(G, path))
         path_d = astar.detailed(G_d, "A0", "G8", use_spatial_heuristic=False)
-        path = graphutil.translateDetailedPath(path_d)
+        path = util.translateDetailedPath(path_d)
         print("\nA* path 2:\n    detailed:", path_d, "\n    len:", pathLength(G_d, path_d))
         print("    normal:  ", path, "\n    len:", pathLength(G, path))
     if False:  # Edge points and paths
@@ -230,11 +233,11 @@ if __name__ == "__main__":
         b = EdgePoint(G, "B2", "C2", 0); print(b);
         path_d = astar.detailedEdgePoint(G_d, a, b)
         print("\nA* path ep:\n    detailed:", path_d);
-        print("    len:", graphutil.pathLength(G_d, path_d))
+        print("    len:", util.pathLength(G_d, path_d))
         print("    shortest len:", astar.detailedEdgePoint(G_d, a, b, length_only=True))
-        path = graphutil.translateDetailedPath(path_d)
+        path = util.translateDetailedPath(path_d)
         print("    normal:", path)
-        print("    len:", graphutil.pathLength(G, path))
+        print("    len:", util.pathLength(G, path))
     if False:  # Candidate list and farthest-first station distribution
         #discretizeGraph(G, 40)
         candidates, peri_choice, in_radius, cand_in_radius, chosen = bestStationDistribution(G, G_d, 6)
@@ -251,8 +254,8 @@ if __name__ == "__main__":
         #node_colors = setColors({}, candidates, "lightgreen")
         nodes_covered = set(); edges_covered = set();
         for i in range(len(stations)):
-            nodes_covered = nodes_covered.union(graphutil.getNodesInRadius(G_d, stations[i], radius))
-            edges_covered = edges_covered.union(graphutil.getEdgesInRadius(G_d, stations[i], radius, ignore_edges=edges_covered))
+            nodes_covered = nodes_covered.union(util.getNodesInRadius(G_d, stations[i], radius))
+            edges_covered = edges_covered.union(util.getEdgesInRadius(G_d, stations[i], radius, ignore_edges=edges_covered))
         node_colors = graphdraw.setColors(node_colors, nodes_covered, "lightgreen")
         edge_colors = graphdraw.setColors({}, edges_covered, "lightgreen")
         node_colors = graphdraw.setColors(node_colors, stations, "green")

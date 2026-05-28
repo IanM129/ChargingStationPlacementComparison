@@ -144,7 +144,7 @@ if __name__ == "__main__":
     else:
         algorithm = 2
         situation = "Manhattan"
-        visualize = True
+        visualize = False
         #duration = 300
 
     sumo_binary = "sumo-gui" if visualize else "sumo"

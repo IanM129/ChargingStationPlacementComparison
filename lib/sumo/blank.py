@@ -29,6 +29,7 @@ import lib.traci_utility as traciutil
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip
 from lib.structs.evaluation import Evaluation
+from lib.structs.params import Parameters
 
 import lib.algorithms.algorithms as alg
 
@@ -40,13 +41,11 @@ import lib.xml.tripsGen as tripsGen
 import lib.xml.output as xmlOut
 
 
-def preprocess(data_path, sumo_filename, output_folder,
-               output_subfolder="blank", params=None):
-    #if params: setParams(params);
-    if not params: params = Parameters.config();
+def preprocess(data_path, sumo_filename, output_path, params=None):
+    if not params: params = Parameters.default();
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
     ## Folder organization
-    output_path = data_path + "/" + output_folder + "/" + output_subfolder
+    #output_path = data_path + "/" + output_folder + "/" + output_subfolder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     #### Pre-loop
     ## Preprocess sumo config
@@ -66,13 +65,16 @@ def preprocess(data_path, sumo_filename, output_folder,
 
 def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
                  output_folder, output_subfolder="blank",
-                 params=None):
-    #if params: setParams(params);
-    if not params: params = Parameters.config();
+                 params=None, debug=False):
+    if not params: params = Parameters.default();
+    MAX_DURATION = params["sim.maxDuration"]
+    DURATION_SET = MAX_DURATION > 0
 #### PREPROCESS
+    output_path = data_path + "/" + output_folder
+    if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
+        output_path += "/" + output_subfolder
     if params["preprocess"]:
-        preprocess(data_path, sumo_filename, output_folder,
-                  output_subfolder, params)
+        preprocess(data_path, sumo_filename, output_path, params)
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
     output_path = data_path + "/" + output_folder + "/" + output_subfolder
 #### MAIN
@@ -91,18 +93,24 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     if params["saveLog"]: log_filepath = output_path + "/log.txt"
     else: log_filepath = None;
     cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"], log_filepath)
-    print("-> SUMO command:\n'" + ' '.join(cmnd) + "'")
+    if debug: print("-> SUMO command:\n'" + ' '.join(cmnd) + "'");
         
 #### SIMULATION
+    fully_completed = True;
     EVs_count = 0; total_veh_count = 0;
     ## Run simulation
-    sim_stime = time.perf_counter()
+    if debug:
+        sim_stime = time.perf_counter()
     traci.start(cmnd)
     ## Subscriptions
     traci.simulation.subscribe([
         traci.constants.VAR_DEPARTED_VEHICLES_IDS
     ])
     while traci.simulation.getMinExpectedNumber() > 0: #and traci.simulation.getTime() < duration:
+        # Check max duration
+        if DURATION_SET:
+            if traci.simulation.getTime() >= MAX_DURATION:
+                fully_completed = False; break;
         # Step
         traci.simulationStep();
         data_sim = traci.simulation.getSubscriptionResults()
@@ -121,19 +129,26 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     ## Simulation done
     sim_time = traci.simulation.getTime()
     traci.close()
-    sim_etime = time.perf_counter()
-    steps_processed = int(sim_time / params["sim.step_length"])
-    print("\n")
-    print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds")
-    print(f"         vehicle count: {total_veh_count:6d}")
-    print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %)")
-    print()
+    if debug:
+        sim_etime = time.perf_counter()
+        steps_processed = int(sim_time / params["sim.stepLength"])
+        print("\n")
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds")
+        print(f"         vehicle count: {total_veh_count:6d}")
+        print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %)")
+        print()
 
 #### POSTPROCESS
     results.clear()
+    results.setSimulationData(fully_completed, sim_time)
     ## Get flow at edges
     edge_stats = xmlOut.getEdgeLoopStats(data_path, file_path=output_folder + "/loop.out.xml",
                                          max_flow=True)
     edge_data = xmlOut.getEdgeDataStats(data_path, file_path=output_folder + "/edgeData.out.xml")
-    return edge_stats, edge_data
+    results.setEdgeData(edge_stats, edge_data)
+    results.setVehicleData(vehicle_count=total_veh_count,
+                           EV_count=0, EV_set_charge=0,
+                           EV_arrived=0, EV_charged=0)
+    results.setStationData([], None, None, 0.0)
+    return results
         

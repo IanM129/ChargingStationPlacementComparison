@@ -1,6 +1,6 @@
 import os
 import math
-from subprocess import call, check_output
+from subprocess import call, check_output, DEVNULL
 import xml.etree.ElementTree as ET
 import sumolib
 
@@ -155,7 +155,8 @@ def writeToXML(nodes_tree, edges_tree, output_filepath):
           #'-s', output_filepath,
           '-n', nodes_filepath,
           '-e', edges_filepath,
-          '-o', output_filepath])
+          '-o', output_filepath],
+          stdout=DEVNULL)
     os.remove(nodes_filepath); os.remove(edges_filepath);
 
 # Maybe make it use sumolib instead of xml

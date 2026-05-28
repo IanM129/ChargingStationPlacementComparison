@@ -22,14 +22,13 @@ jtrrouterBinary = sumolib.checkBinary('jtrrouter')
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import preprocess as prep
 
-from lib.sumo.params import Parameters
-
 import lib.sumo.utility as sumoutil
 import lib.traci_utility as traciutil
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip, TripDataset
 from lib.structs.evaluation import Evaluation
+from lib.structs.params import Parameters
 
 import lib.algorithms.algorithms as alg
 
@@ -68,7 +67,7 @@ import lib.xml.output as xmlOut
 def stationCostFunction(detour_time, detour_distance):
     return detour_time + detour_distance
 
-def preprocess(data_path, sumo_filename, output_path, trips, k, params=None):
+def preprocess(G, data_path, sumo_filename, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
     ## Folder organization
@@ -76,9 +75,9 @@ def preprocess(data_path, sumo_filename, output_path, trips, k, params=None):
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     #### Pre-loop
     ## Network
-    global base_net, G
-    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
-    G = graphing.netToGraph(data_path + "/base_net.net.xml")
+    #global base_net, base_G
+    #base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
+    #G = graphing.netToGraph(data_path + "/base_net.net.xml")
     ## Preprocess sumo config
     sumocfg_tree = ET.parse(sumo_filepath)
     sumocfg_tree = prep.config_enableStations(sumocfg_tree, enable=True)
@@ -113,7 +112,7 @@ def preprocess(data_path, sumo_filename, output_path, trips, k, params=None):
 def removeFromSimulationVars(vehicles : set, params):
     global sim_EVs
     sim_EVs -= vehicles;
-    if params["electric.manualChargeDecide"]:
+    if MANUAL_CHARGE_DECIDE: #params["electric.manualChargeDecide"]:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge -= vehicles;
         for vehID in vehicles:
@@ -123,32 +122,33 @@ def removeFromSimulationVars(vehicles : set, params):
                 stations[si_index].releaseSpot(park_side)
                 charging.pop(vehID, None);
 #### Sumo
-def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, stations,
-                output_folder, output_subfolder="solo", params=None):
-    if not params: params = Parameters.config();
+def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, results, stations,
+                output_folder, output_subfolder="solo", params=None, debug=False):
+    if not params: params = Parameters.default();
+    global MANUAL_CHARGE_DECIDE
+    MAX_DURATION = params["sim.maxDuration"]
+    DURATION_SET = MAX_DURATION > 0
+    MANUAL_CHARGE_DECIDE = params["electric.manualChargeDecide"]
 #### PREPROCESS
     k = len(stations)
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
     output_path = data_path + "/" + output_folder
-    if params["saveLog"] or params["saveInputs"] or params["saveOutputs"]:
+    if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["prep.preprocess"]:
-        preprocess(data_path, sumo_filename, output_path, trips, k, params=None)
-    global base_net, G
+        preprocess(G, data_path, sumo_filename, output_path, trips, k, params)
+    #global base_net, G
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
     global avg_trip_len, avg_trip_charge
     
 #### PRE STATION WRITE
-    ## Reload graphs
-    G = graphing.netToGraph(data_path + "/base_net.net.xml")
-    G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
     ## Write stations to XML
     parkingNetGen.addStationsToNetwork(base_net, stations,
                                        data_path, write=True, #out_data_path=data_path,
                                        network_filepath=data_path + "/base_net.net.xml",
                                        vehicle_length=EV_len, min_gap=min_gap, wait_queue_size=params["station.waitQueue"])
     #print("-- stations written to network XML. (at '" + (output_path + "/net.net.xml") + "')")
-    # Reload net
+    # Load modified net
     net = sumolib.net.readNet(data_path + "/net.net.xml")
 #### POST STATION WRITE
     # Induction loop
@@ -173,15 +173,17 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
     else: log_filepath = None;
     cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
                                    log_filepath=log_filepath,
-                                   trip_stats_filepath=output_path + "/trip_stats.xml")
-    print("-> SUMO command:\n'" + ' '.join(cmnd) + "'")
+                                   trip_stats_filepath=output_path + "/tripStats.xml")
+    if debug:
+        print("-> SUMO command:\n'" + ' '.join(cmnd) + "'")
 #### SIMULATION
+    fully_completed = True;
     global sim_EVs
     sim_EVs = set(); manually_added_last_step = set();
     EVs_count = 0; total_veh_count = 0;
     set_need_to_charge_cnt = 0;
     sttn_util_rate = {}
-    if params["electric.manualChargeDecide"]:
+    if MANUAL_CHARGE_DECIDE:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
         going_to_charge = {}
@@ -193,8 +195,8 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
     for sttn_edge_id, _ in stations.listIDss():
         sttn_util_rate[sttn_edge_id] = [0, 0];
     ## Run simulation
-    sim_stime = time.perf_counter()
-    traci.start(cmnd)
+    if params["printResults"]: sim_stime = time.perf_counter();
+    traci.start(cmnd);
     ## Subscriptions
     traci.simulation.subscribe([
             traci.constants.VAR_DEPARTED_VEHICLES_IDS,                          #
@@ -206,7 +208,11 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
         traciutil.subscribeParkingVehicleCount(park_id + "_0")
         traciutil.subscribeParkingVehicleCount(park_id + "_1")
     ## Loop
-    while traci.simulation.getMinExpectedNumber() > 0: #and traci.simulation.getTime() < duration:
+    while traci.simulation.getMinExpectedNumber() > 0:
+        # Check max duration
+        if DURATION_SET:
+            if traci.simulation.getTime() >= MAX_DURATION:
+                fully_completed = False; break;
         # Step
         traci.simulationStep();
         data_sim = traci.simulation.getSubscriptionResults()
@@ -218,14 +224,14 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
         removeFromSimulationVars(arrived, params)
 
         ## STEP
-        if params["electric.manualChargeDecide"]:
+        if MANUAL_CHARGE_DECIDE:
             vaporized = set()
             go_charge_this_step = {}
             for vehID in sim_EVs:
                 cur_edge = traci.vehicle.getRoadID(vehID);
                 if cur_edge and cur_edge[0] != ':':
                     charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
-                    if params["electric.manualChargeDecide"]:
+                    if MANUAL_CHARGE_DECIDE:
                         # Check if battery empty
                         if charge <= params["electric.batteryEmptyThreshold"]:
                             traci.vehicle.remove(vehID, reason=3)
@@ -315,7 +321,7 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
                 sim_EVs.add(vehID); EVs_count += 1;
                 # Set when vehicle needs to charge
                 need_to_charge_level = random.uniform(0.15, 0.4)
-                if params["electric.manualChargeDecide"]:
+                if MANUAL_CHARGE_DECIDE:
                     ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
                 else:
                     traci.vehicle.setParameter(vehID, "device.stationfinder.needToChargeLevel", str(need_to_charge_level))
@@ -333,8 +339,7 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
                 else:
                     set_charge = max_charge
                 traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(min(set_charge, max_charge)))
-                if params["electric.manualChargeDecide"]:
-                    will_need_to_charge.add(vehID)
+                if MANUAL_CHARGE_DECIDE: will_need_to_charge.add(vehID);
 
 
         ## Keep tracking of station use per time
@@ -351,17 +356,18 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
     ## Simulation done
     sim_time = traci.simulation.getTime()
     traci.close()
-    sim_etime = time.perf_counter()
     steps_processed = int(sim_time / params["stepLength"])
     if params["printResults"]:
+        sim_etime = time.perf_counter()
         print("\n")
-        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds")
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
         print(f"         vehicle count: {total_veh_count:6d}")
         print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %; expected {round((params['electric.penetration'])*100, 2):4.2f} %)")
         print()
 
 #### POSTPROCESS
     results.clear();
+    results.setSimulationData(fully_completed, sim_time)
     ## Process step data
     # Utilization rate
     for si in stations:
@@ -401,7 +407,11 @@ def sumoSoloRun(net, data_path, sumo_filename, trips : TripDataset, results, sta
         print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
         print(f"  > money earned: {round(money_earned, 2)}€ ({round(params['station.moneyPerKWH'],2)}€ per KWh)")
         print()
-    results.setStationData(stations, sttn_util_rate, total_charge)
+    results.setStationData(stations, sttn_util_rate, station_charges, total_charge)
+
+    ## Trip stats/info
+    trip_stats = xmlOut.getTripStats(output_path + "/tripStats.xml")
+    results.setTripData(trip_stats)
     
     ## Get flow at edges
     edge_stats = xmlOut.getEdgeLoopStats(data_path, file_path=output_folder + "/loop.out.xml",

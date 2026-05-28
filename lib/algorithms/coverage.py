@@ -3,6 +3,27 @@ import networkx as nx
 import lib.graphing.utility as graphutil
 
 
+
+#### Coverage utility
+def isGraphCovered(G, centers, radius):
+    covered = set()
+    for center in centers:
+        center_covered = graphutil.getNodesInRadius(G, center, radius)
+        covered = center_covered.union(covered)
+    return len(covered) == len(G.nodes())
+# Binary search the radius of optimal coverage for given centers
+def coverageRadiusBinarySearch(G_d, centers, max_radius=0, epsilon=50):
+    if max_radius == 0:
+        max_radius = float(nx.diameter(G_d, weight="length")) / (math.ceil(len(centers) / 2))
+    a = 0; b = max_radius;
+    while (b - a > epsilon):
+        radius = (b + a) / 2
+        feasible = isGraphCovered(G_d, centers, radius);
+        if feasible: b = radius;
+        else: a = radius;
+    return radius
+
+
 #### Coverage based optimization
 ## Nodes
 # nodes, amount of covered nodes, returns candidate
