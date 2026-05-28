@@ -1,6 +1,5 @@
+import sys
 import numpy as np
-
-import traci
 
 class Trip:
     # destinations
@@ -18,6 +17,7 @@ class Trip:
     def __setitem__(self, idx, value):
         self.destinations[idx] = value;
     def insertToNextDestination(self, other_trip, next_dest_index):
+        from lib.traci_utility import traci as traci
         next_dest_edge = self[next_dest_index]
         if other_trip[-1] != next_dest_edge:
             print(self.fullPrint())
@@ -73,6 +73,7 @@ class Trip:
     def remainingDistance(self, index):
         return sum(self.distances[index:]);
     def remainingDistanceFromEdge(self, edge, next_dest_index):
+        from lib.traci_utility import traci as traci
         if next_dest_index == 0:
             raise Exception("Next destination index cannot be 0.")
         res = 0

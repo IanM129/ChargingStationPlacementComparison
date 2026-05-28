@@ -20,12 +20,15 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx as torch_from_networkx
 
+#import libsumo as traci
+
 from lib.utility import clamp, welford, ema, ema_welford, zscore
 
 from lib.gnn.model1 import EdgeGNN
 from lib.gnn.model2 import EdgePosGNN
 import lib.gnn.utility as gnnutil
 
+import lib.traci_utility as traciutil
 import lib.visual_utility as visutil
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
@@ -308,6 +311,7 @@ if __name__ == "__main__":
     DURATION_SET = MAX_DURATION > 0
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
+    VISUALIZE = params["sim.visualize"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
@@ -318,6 +322,16 @@ if __name__ == "__main__":
     PROGRESS_PRINT = params["training.printProgress"]
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
+    # Traci switch
+    #global LIBSUMO
+    LIBSUMO = not VISUALIZE
+    #if LIBSUMO:
+    #    import libsumo as traci
+    #else:
+    #    import traci
+    #traciutil.libsumoInit(LIBSUMO)
+    traciutil.initialize(LIBSUMO)
+    from lib.traci_utility import traci as traci
     
 ####### LOADING
     # Torch init
@@ -448,6 +462,9 @@ if __name__ == "__main__":
         stations = []
         for edge in selected_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY));
         stations = StationInfoDataset(stations)
+        # Check if double
+        if len(selected_edge_indices) != len(set(selected_edge_indices)):
+            print("ERROR: One edge selected twice:", selected_edge_indices, "->", stations.listEdges())
 
         if sim_tries > 10:
             raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {stations.listEdges()}.")
@@ -461,9 +478,10 @@ if __name__ == "__main__":
                                     debug=False)
             sim_tries = 0
         except Exception as e:
-            # Very rarely crashes when setting stop for charging
+            # Very rarely crashes when setting stop for charging - WIP
             print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}:\n", e, "\nretrying...")
             sim_tries += 1
+            traci.close()
             continue
         if MEASURE_TIME:
             sim_etime = time.perf_counter();

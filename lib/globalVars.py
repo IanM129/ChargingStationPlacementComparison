@@ -1,5 +1,3 @@
-
-
 NODE_EDGE_ID_SEPARATOR = '*'
 def setNodeEdgeIdSeparator(new_val : str):
     NODE_EDGE_ID_SEPARATOR = new_val;

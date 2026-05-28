@@ -26,6 +26,8 @@ SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-or-later
 
     <junctions>
         <no-turnarounds value="true"/>
+		<!-- Intersection left turn clash fix attempt -->
+		<default.radius value="8"/>
     </junctions>
 
 </netgenerateConfiguration>

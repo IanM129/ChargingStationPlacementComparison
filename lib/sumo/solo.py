@@ -8,7 +8,7 @@ import random
 import math
 import numpy as np
 import sumolib
-import traci
+#import libsumo as traci
 import traci.constants as tc
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
@@ -42,29 +42,6 @@ import lib.xml.output as xmlOut
 
 MAIN_DIR = pathlib.Path(__main__.__file__).resolve().parent
 os.chdir(MAIN_DIR)
-
-
-#### Parameters
-## Preprocess
-#PREPROCESS = True
-#RECREATE_NETWORK = True
-#SAVE_INPUTS = True
-## Simulation
-#STEP_LENGTH = 0.4
-#VEHICLE_COUNT = 200
-#VISUALIZE = False
-#FRAME_DUR = 0.01
-#SAVE_LOG = True
-## Electric
-#EV_PEN = 0.8
-#NEED_TO_CHARGE_PROBABILITY = 1.0
-#BATTERY_EMPTY_THRESHOLD = 2.0
-#MANUAL_CHARGE_DECIDE = True
-## Station
-#STATION_CAPACITY = 10
-#WAIT_QUEUE_SIZE = 10
-#STATION_FILL_REVERSE = False
-#MONEY_PER_KWH = 0.25  # (used euro)
 
 
 ## Recharge cost function
@@ -111,6 +88,13 @@ def preprocess(G, data_path, sumo_filename, output_path, trips, k, params=None):
         avg_trip_len += trip.total_distance
     avg_trip_len /= len(trips)
     avg_trip_charge = prep.calcApproxChargeNeeded(avg_trip_len);
+    # libsumo
+    global LIBSUMO
+    LIBSUMO = params["sim.visualize"]
+    if LIBSUMO:
+        import libsumo as traci
+    else:
+        import traci
 
 
 ####
@@ -131,9 +115,14 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
                 output_path, output_subfolder="solo", params=None, debug=False):
     if not params: params = Parameters.default();
     global MANUAL_CHARGE_DECIDE
+    CPU_THREADS = params["sim.cpuThreads"]
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
     MANUAL_CHARGE_DECIDE = params["electric.manualChargeDecide"]
+    VISUALIZE = params["sim.visualize"]
+    # Traci switching
+    if VISUALIZE: import traci;
+    else: import libsumo as traci;
 #### PREPROCESS
     k = len(stations)
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
@@ -178,6 +167,7 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
     if params["saveLog"]: log_filepath = output_path_full + "/log.txt"
     else: log_filepath = None;
     cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
+                                   threads=CPU_THREADS,
                                    log_filepath=log_filepath,
                                    trip_stats_folder=data_path + "/output")
     if debug:
@@ -259,7 +249,11 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
                             # Set stop
                             target_si = stations.getByID(target_station)
                             traci.vehicle.setRoute(vehID, new_route)
-                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
+                            try:
+                                traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
+                            except e:
+                                print("Failed to stop.")
+                                raise Exception(e);
                             # Update set
                             go_charge_this_step[vehID] = target_station
                 if params["visualize"]:

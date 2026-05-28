@@ -8,7 +8,7 @@ netconvertBinary = sumolib.checkBinary('netconvert')
 
 from lib.globalVars import *
 
-from lib.structs.stationinfo import StationInfo, StationInfoDataset
+from lib.structs.stationinfo import StationInfoDataset
 
 
 STATION_IN_LANES = 3

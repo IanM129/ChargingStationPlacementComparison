@@ -1,9 +1,22 @@
-import traci
+import sys
+#import libsumo as traci
 import traci.constants as tc
 
-from lib.structs.stationinfo import StationInfo, StationInfoDataset
+#from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip
 
+global traci
+traci = None
+
+#### Initialize -> must be called for traci to libsumo switch
+def initialize(libsumo_on):
+    global traci
+    if libsumo_on:
+        import libsumo as traci_m
+        traci = traci_m
+    else:
+        import traci as traci_m
+        traci = traci_m
 
 #### Subscriptions and steps
 def subscribeParkingVehicleCount(park_id):
@@ -58,6 +71,8 @@ def getNextDestIndexInTrip(vehID, trip, route=None, cur_index=-1):
             return i + 1;
         last_index = dest_index
     return -1
+#def simFindRoute(a, b):
+#    return traci.simulation.findRoute(a, b)
 
 
 #### Charge
