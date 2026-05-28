@@ -50,29 +50,35 @@ def stationCostFunction(detour_time, detour_distance):
 
 def preprocess(G, data_path, sumo_filename, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
-    sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
+    #output_path_full = str(MAIN_DIR) + "/" + output_path
     ## Folder organization
-    #output_path = data_path + "/" + output_folder + "/" + output_subfolder
+    output_path_full = str(MAIN_DIR) + "/" + output_path
+    cache_data_path = output_path_full + "/_cache/"
+    cache_output_path = cache_data_path + "/output/"
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(data_path + "/output").mkdir(parents=True, exist_ok=True)
+    pathlib.Path(cache_output_path).mkdir(parents=True, exist_ok=True)
     #### Pre-loop
-    ## Network
-    #global base_net, base_G
-    #base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
-    #G = graphing.netToGraph(data_path + "/base_net.net.xml")
     ## Preprocess sumo config
+    # Copy
+    prep.copyFile(data_path + "/" + sumo_filename + ".sumocfg",
+                  cache_data_path + "/" + sumo_filename + ".sumocfg")
+    sumo_filepath = cache_data_path + "/" + sumo_filename + ".sumocfg"
+    # Modify
     sumocfg_tree = ET.parse(sumo_filepath)
     sumocfg_tree = prep.config_enableStations(sumocfg_tree, enable=True)
     sumocfg_tree = xmlOut.config_enableStationOutput(sumocfg_tree, enable=True, aggregate=True)
     sumocfg_tree = xmlOut.config_enableBatteryOutput(sumocfg_tree, enable=False)
     sumocfg_tree.write(sumo_filepath)
+    ## Copy requred files to run simulation
+    prep.copyFile(data_path + "/base_net.net.xml", cache_data_path + "/base_net.net.xml")
+    #prep.copyFile(output_path + "/trips.xml", cache_data_path + "/routes.xml")
     ## Load XMLs
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
     vTypes_tree = ET.parse("networks/vTypes.add.xml", parser=parser)
     ## Update XML settings
     prep.enableBattery(vTypes_tree, True)
     prep.enableStationFinder(vTypes_tree, not params["electric.manualChargeDecide"])
-    vTypes_tree.write(data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
+    vTypes_tree.write(cache_data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
     ## Side vars
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
     network_diameter = float(nx.diameter(G, weight="length"))
@@ -125,14 +131,14 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
     else: import libsumo as traci;
 #### PREPROCESS
     k = len(stations)
-    sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
-    #output_path = data_path + "/" + output_folder
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["prep.preprocess"]:
         preprocess(G, data_path, sumo_filename, output_path, trips, k, params)
     output_path_full = str(MAIN_DIR) + "/" + output_path
-    data_out_path = data_path + "/output/"
+    cache_data_path = output_path_full + "/_cache/"
+    cache_output_path = cache_data_path + "/output/"
+    sumo_filepath = cache_data_path + "/" + sumo_filename + ".sumocfg"
     #global base_net, G
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
     global avg_trip_len, avg_trip_charge
@@ -140,36 +146,35 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
 #### PRE STATION WRITE
     ## Write stations to XML
     parkingNetGen.addStationsToNetwork(base_net, stations,
-                                       data_path, write=True, #output_path=data_path
-                                       network_filepath=data_path + "/base_net.net.xml",
+                                       data_path, write=True, output_path=cache_data_path,
+                                       network_filepath=cache_data_path + "/base_net.net.xml",
                                        vehicle_length=EV_len, min_gap=min_gap, wait_queue_size=params["station.waitQueue"])
     #print("-- stations written to network XML. (at '" + (output_path + "/net.net.xml") + "')")
     # Load modified net
-    net = sumolib.net.readNet(data_path + "/net.net.xml")
+    net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
 #### POST STATION WRITE
     # Induction loop
-    xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=data_path + "/output.add.xml",
-                                                relative_out_filepath="output/loop.out.xml", overwrite=True)
+    xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=cache_data_path + "/output.add.xml",
+                                                relative_out_filepath=cache_output_path + "/loop.out.xml", overwrite=True)
     # Edge based macroscopic traffic measures
-    xmlOut.config_createEdgeOutputFile(xml_filepath=data_path + "output.add.xml",
-                                       relative_out_filepath="output/edgeData.out.xml", overwrite=False)
+    xmlOut.config_createEdgeOutputFile(xml_filepath=cache_data_path + "/output.add.xml",
+                                       relative_out_filepath=cache_output_path + "/edgeData.out.xml", overwrite=False)
     ## Fix stops
     trips = prep.fixTripEdges(base_net, net, stations.listEdges(),
-                              routes_filepath=data_out_path + "/trips.xml",
-                              write=True, output_filepath=data_path + "/routes.xml",
+                              routes_filepath=output_path + "/trips.xml",
+                              write=True, output_filepath=cache_data_path + "/routes.xml",
                               trips=trips)
     ## Copy inputs
     if params["prep.saveInputs"]:
-        prep.copyFileForSimulation(data_path + "/net.net.xml", output_path + "/net.net.xml")            # net
-        prep.copyFileForSimulation(data_path + "/stations.add.xml", output_path + "/stations.add.xml")  # stations
-        #prep.copyFileForSimulation(data_path + "/routes.xml", output_path + "/trips.xml")              # trips
+        prep.copyFile(cache_data_path + "/net.net.xml", output_path + "/net.net.xml")            # net
+        prep.copyFile(cache_data_path + "/stations.add.xml", output_path + "/stations.add.xml")  # stations
     ## Command
     if params["saveLog"]: log_filepath = output_path_full + "/log.txt"
     else: log_filepath = None;
     cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
                                    threads=CPU_THREADS,
                                    log_filepath=log_filepath,
-                                   trip_stats_folder=data_path + "/output")
+                                   trip_stats_folder=cache_output_path)
     if debug:
         print("-> SUMO command:\n'" + ' '.join(cmnd) + "'")
 #### SIMULATION
@@ -378,7 +383,7 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
     ## Total charge from station
     if params["printResults"]:
         print("Total charge used per station | utlization rate:")
-    stations_charges_data = xmlOut.getAllStationCharges(data_path)
+    stations_charges_data = xmlOut.getAllStationCharges(cache_data_path)
     station_charges = {}
     veh_charges = {}
     sttn_vehicle_count = {}
@@ -410,13 +415,13 @@ def sumoSoloRun(base_net, G, data_path, sumo_filename, trips : TripDataset, resu
     results.setStationData(stations, sttn_util_rate, station_charges, total_charge)
 
     ## Trip stats/info
-    trip_stats = xmlOut.getTripStats(data_path + "/output")
+    trip_stats = xmlOut.getTripStats(cache_output_path)
     results.setTripData(trip_stats)
     
     ## Get flow at edges
-    edge_stats = xmlOut.getEdgeLoopStats(data_path + "/output/loop.out.xml",
+    edge_stats = xmlOut.getEdgeLoopStats(cache_output_path + "/loop.out.xml",
                                          max_flow=True)
-    edge_data = xmlOut.getEdgeDataStats(data_path + "/output/edgeData.out.xml")
+    edge_data = xmlOut.getEdgeDataStats(cache_output_path + "/edgeData.out.xml")
     results.setEdgeData(edge_stats, edge_data)
 
     ## Get vaporized vehicles and edges where they vaporized

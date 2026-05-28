@@ -305,7 +305,6 @@ if __name__ == "__main__":
     params = Parameters.config()
     print(params.groupPrint())
     # Load params
-    #global VEHICLE_COUNT, STATION_CAPACITY, EV_PEN, K
     VEHICLE_COUNT = params["sim.vehicleCount"]
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
@@ -323,14 +322,7 @@ if __name__ == "__main__":
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
     # Traci switch
-    #global LIBSUMO
-    LIBSUMO = not VISUALIZE
-    #if LIBSUMO:
-    #    import libsumo as traci
-    #else:
-    #    import traci
-    #traciutil.libsumoInit(LIBSUMO)
-    traciutil.initialize(LIBSUMO)
+    traciutil.initialize(not VISUALIZE)
     from lib.traci_utility import traci as traci
     
 ####### LOADING
@@ -399,8 +391,8 @@ if __name__ == "__main__":
     results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
     # Prepare files
-    prep.copyFileForSimulation(data_path + "/base_net.net.xml", data_path + "/net.net.xml")
-    prep.copyFileForSimulation(output_path + "/trips.xml", data_path + "/routes.xml")
+    #prep.copyFile(data_path + "/base_net.net.xml", data_path + "/net.net.xml")
+    #prep.copyFile(output_path + "/trips.xml", data_path + "/routes.xml")
     ## Run
     results = sumoBlankRun(base_net, data_path, network_name, base_trips, results, params=params,
                            output_path=output_path, output_subfolder="blank")

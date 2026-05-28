@@ -230,7 +230,7 @@ def getMinGapFromAddTree(add_tree):
 
 
 #### Other
-def copyFileForSimulation(source_path, target_path):
+def copyFile(source_path, target_path):
     shutil.copyfile(source_path, target_path)
 
 """
