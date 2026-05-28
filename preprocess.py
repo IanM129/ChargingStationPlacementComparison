@@ -8,7 +8,7 @@ import sumolib
 netgenBinary = sumolib.checkBinary('netgenerate')
 jtrrouterBinary = sumolib.checkBinary('jtrrouter')
 duarouterBinary = sumolib.checkBinary('duarouter')
-import randomTrips
+import lib.sumo.randomTrips as randomTrips
 
 from lib.structs.trip import Trip, TripDataset
 

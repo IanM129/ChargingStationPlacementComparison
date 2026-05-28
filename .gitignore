@@ -1,2 +1,16 @@
 # Ignore pycache
 **/__pycache__
+
+# Ignore virtual environment
+/_venv
+
+# Output folders
+output
+
+# Big networks
+networks/Zagreb
+
+_helpinfo
+
+Diplomski_rad_predlozak_travanj_2020.doc
+zad_hr_0036542234_94.pdf

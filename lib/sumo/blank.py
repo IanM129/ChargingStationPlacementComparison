@@ -1,5 +1,6 @@
 import sys
 import os
+import __main__
 from subprocess import call, DEVNULL
 import time
 from datetime import datetime
@@ -16,7 +17,7 @@ import networkx as nx
 import re
 
 sumoBinary = sumolib.checkBinary('sumo')
-import randomTrips
+#import randomTrips
 jtrrouterBinary = sumolib.checkBinary('jtrrouter')
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
@@ -40,6 +41,10 @@ import lib.xml.parkingNetGen as parkingNetGen
 import lib.xml.tripsGen as tripsGen
 import lib.xml.output as xmlOut
 
+SCRIPT_DIR = pathlib.Path(__main__.__file__).resolve().parent
+os.chdir(SCRIPT_DIR)
+
+
 
 def preprocess(data_path, sumo_filename, output_path, params=None):
     if not params: params = Parameters.default();
@@ -47,6 +52,7 @@ def preprocess(data_path, sumo_filename, output_path, params=None):
     ## Folder organization
     #output_path = data_path + "/" + output_folder + "/" + output_subfolder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(data_path + "/output").mkdir(parents=True, exist_ok=True)
     #### Pre-loop
     ## Preprocess sumo config
     sumocfg_tree = ET.parse(sumo_filepath)
@@ -56,7 +62,7 @@ def preprocess(data_path, sumo_filename, output_path, params=None):
     sumocfg_tree.write(sumo_filepath)
     ## Load XMLs
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
-    vTypes_tree = ET.parse(data_path + "/vTypes.add.xml", parser=parser)
+    vTypes_tree = ET.parse("networks/vTypes.add.xml", parser=parser)
     ## Update XML settings
     prep.enableBattery(vTypes_tree, False)
     prep.enableStationFinder(vTypes_tree, False)
@@ -64,33 +70,34 @@ def preprocess(data_path, sumo_filename, output_path, params=None):
 
 
 def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
-                 output_folder, output_subfolder="blank",
+                 output_path, output_subfolder="blank",
                  params=None, debug=False):
     if not params: params = Parameters.default();
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
 #### PREPROCESS
-    output_path = data_path + "/" + output_folder
+    #output_path = data_path + "/" + output_folder
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["preprocess"]:
         preprocess(data_path, sumo_filename, output_path, params)
     sumo_filepath = data_path + "/" + sumo_filename + ".sumocfg"
-    output_path = data_path + "/" + output_folder + "/" + output_subfolder
+    #output_path = output_path + "/" + output_subfolder
+    output_path_full = str(SCRIPT_DIR) + "/" + output_path
 #### MAIN
     #### Process
     ## Preprocess output config (post station generation)
     # Induction loop
     xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=data_path + "/output.add.xml",
-                                                output_filepath=output_folder + "/loop.out.xml", overwrite=True)
+                                                relative_out_filepath="output/loop.out.xml", overwrite=True)
     # Edge based macroscopic traffic measures
     xmlOut.config_createEdgeOutputFile(xml_filepath=data_path + "/output.add.xml",
-                                       output_filepath=output_folder + "/edgeData.out.xml",
+                                       relative_out_filepath="output/edgeData.out.xml",
                                        overwrite=False)
     ## Copy requred files to run simulation
     ...
     ## Command
-    if params["saveLog"]: log_filepath = output_path + "/log.txt"
+    if params["saveLog"]: log_filepath = output_path_full + "/log.txt"
     else: log_filepath = None;
     cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"], log_filepath)
     if debug: print("-> SUMO command:\n'" + ' '.join(cmnd) + "'");
@@ -142,9 +149,9 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     results.clear()
     results.setSimulationData(fully_completed, sim_time)
     ## Get flow at edges
-    edge_stats = xmlOut.getEdgeLoopStats(data_path, file_path=output_folder + "/loop.out.xml",
+    edge_stats = xmlOut.getEdgeLoopStats(filepath=data_path + "output/loop.out.xml",
                                          max_flow=True)
-    edge_data = xmlOut.getEdgeDataStats(data_path, file_path=output_folder + "/edgeData.out.xml")
+    edge_data = xmlOut.getEdgeDataStats(filepath=data_path + "output/edgeData.out.xml")
     results.setEdgeData(edge_stats, edge_data)
     results.setVehicleData(vehicle_count=total_veh_count,
                            EV_count=0, EV_set_charge=0,

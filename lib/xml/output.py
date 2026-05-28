@@ -1,3 +1,4 @@
+import os
 import xml.etree.ElementTree as ET
 import re
 
@@ -73,9 +74,10 @@ def config_enableBatteryOutput(sumocfg, enable=True):
     else:
         return tree;
 #### Output config for additional output file
-def config_createInductionLoopOutputFile(edges, xml_filepath="output.add.xml", output_filepath="loop.out.xml", overwrite=True):
+def config_createInductionLoopOutputFile(edges, xml_filepath="output.add.xml",
+                                         relative_out_filepath="loop.out.xml", overwrite=True):
     if not xml_filepath.endswith(".xml"): xml_filepath += ".xml";
-    if not output_filepath.endswith(".xml"): output_filepath += ".xml";
+    if not relative_out_filepath.endswith(".xml"): relative_out_filepath += ".xml";
     if overwrite:
         tree = ET.ElementTree(ET.fromstring("<additional></additional>"))
     else:
@@ -92,13 +94,14 @@ def config_createInductionLoopOutputFile(edges, xml_filepath="output.add.xml", o
                 "lane" : laneID,
                 "pos" : str(lane_length / 2),
                 #"period" : "0",
-                "file" : output_filepath
+                "file" : relative_out_filepath
                 })
             i += 1
     tree.write(xml_filepath)
-def config_createEdgeOutputFile(xml_filepath="output.add.xml", output_filepath="edgeData.out.xml", overwrite=True):
+def config_createEdgeOutputFile(xml_filepath="output.add.xml",
+                                relative_out_filepath="edgeData.out.xml", overwrite=True):
     if not xml_filepath.endswith(".xml"): xml_filepath += ".xml";
-    if not output_filepath.endswith(".xml"): output_filepath += ".xml";
+    if not relative_out_filepath.endswith(".xml"): relative_out_filepath += ".xml";
     if overwrite:
         tree = ET.ElementTree(ET.fromstring("<additional></additional>"))
     else:
@@ -107,7 +110,7 @@ def config_createEdgeOutputFile(xml_filepath="output.add.xml", output_filepath="
     el = ET.SubElement(root, "edgeData", {
         "id" : "0",
         #"period" : "0",
-        "file" : output_filepath
+        "file" : relative_out_filepath
         })
     tree.write(xml_filepath)
 
@@ -136,7 +139,7 @@ def getAllStationCharges(data_path) -> dict[dict[list[dict]]]:
     return result;
 def getStationCharges(data_path, station_id) -> dict[list[dict]]:
     result = {}
-    tree = ET.parse(data_path + "/output/chargingstations.out.xml")
+    tree = ET.parse(data_path + "/chargingstations.out.xml")
     root = tree.getroot()
     for e in root.findall("chargingEvent"):
         csID = e.get("chargingStationId")
@@ -154,9 +157,9 @@ def getStationCharges(data_path, station_id) -> dict[list[dict]]:
             result[vehID] = arr;
     return result;
 ## Trips
-def getTripStats(filepath):
+def getTripStats(folder_path):
     result = {}
-    tree = ET.parse(filepath)
+    tree = ET.parse(folder_path + "/tripStats.out.xml")
     root = tree.getroot()
     count = 0; battery_count = 0;
     trip_duration = 0.0
@@ -226,9 +229,9 @@ def getBatteryDepletionWarnings(log_filepath):
                 events.append((vehID, time))
     return events;
 ## Edge stats
-def getEdgeLoopStats(data_path, file_path="output/loop.out.xml", max_flow=False, max_vehicles=False) -> dict:
+def getEdgeLoopStats(filepath, max_flow=False, max_vehicles=False) -> dict:
     result = {}
-    tree = ET.parse(data_path + "/" + file_path)
+    tree = ET.parse(filepath)
     root = tree.getroot()
     if max_flow: max_flow_val = 0.0;
     if max_vehicles: max_vehs_val = 0.0;
@@ -265,9 +268,9 @@ def getEdgeLoopStats(data_path, file_path="output/loop.out.xml", max_flow=False,
     if max_flow: result["_maxFlow"] = float(max_flow_val);
     if max_vehicles: result["_maxVehicles"] = float(max_vehs_val);
     return result
-def getEdgeDataStats(data_path, file_path="output/edgeData.out.xml"):
+def getEdgeDataStats(filepath):
     result = {}
-    tree = ET.parse(data_path + "/" + file_path)
+    tree = ET.parse(filepath)
     root = tree.getroot()
     for e in root.find("interval").findall("edge"):
         edgeID = e.get("id")
@@ -281,3 +284,26 @@ def getEdgeDataStats(data_path, file_path="output/edgeData.out.xml"):
         else: raise Exception("Found same edge multiple times in edgeData?");
     return result
     
+
+
+def clean(data_path):
+    files_to_delete = [
+            # Base
+            "net.net.xml",
+            "routes.xml",
+            # Additional
+            "vTypes.add.xml",
+            "output.add.xml",
+            "stations.add.xml",
+            # Output
+            "output/loop.out.xml",
+            "output/edgeData.out.xml",
+            "output/chargingstations.out.xml",
+            "output/tripStats.out.xml"
+        ]
+    for file in files_to_delete:
+        filepath = data_path + "/" + file;
+        if os.path.exists(filepath):
+            os.remove(filepath);
+    # Output folder
+    os.rmdir(data_path + "/output")

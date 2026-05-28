@@ -1,5 +1,6 @@
 <config>
 	<group name="prep">
+		<!-- Training automatically disables after first iteration -->
 		<param name="preprocess" type="bool" default="True">
 			True
 		</param>
@@ -80,7 +81,7 @@
 	</group>
 	<group name="training">
 		<param name="iterations" type="int" default="10000">
-			400
+			2
 		</param>
 		<param name="progressDebugs" type="int" default="10">
 			400

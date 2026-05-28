@@ -69,7 +69,6 @@ class Evaluation:
         self.edge_data["flow"] = {};
         self.edge_data["vaporized"] = {};
         for edge in self.translator.getEdges():
-            self.edge_data[edge] = {}
             edge_id = self.translator.edgeToID(edge)
             data = edge_data.get(edge_id, {"entered" : 0, "vaporized" : 0})
             stats = edge_stats.get(edge_id, {"vehicles" : 0, "flow" : 0.0})
@@ -99,3 +98,20 @@ class Evaluation:
         #s += "- edge_data:\n    " + str(self.edge_data) + "\n"
         s += "- stations:\n    " + str( self.station_data) + "\n"
         return s
+    # Other
+    def printEdgeData(self):
+        print("Edge data:\n- Vehicles:")
+        max_e_len = 0.0
+        for key in self.edge_data["vehicles"].keys():
+            if len(str(key)) > max_e_len: max_e_len = len(str(key));
+        s = ""
+        for key, value in self.edge_data["vehicles"].items():
+            s += "  {0:{prec}s}: {1}\n".format(str(key), value, prec=max_e_len)
+        print(s); print("- Flow:"); s = "";
+        for key, value in self.edge_data["flow"].items():
+            s += "  {0:{prec}s}: {1}\n".format(str(key), value, prec=max_e_len)
+        print(s); print("- Vaporized:"); s = "";
+        for key, value in self.edge_data["vaporized"].items():
+            s += "  {0:{prec}s}: {1}\n".format(str(key), value, prec=max_e_len)
+        print(s)
+        return ""

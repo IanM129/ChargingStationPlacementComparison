@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import time
 import random
@@ -38,11 +39,15 @@ from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
 
 import lib.xml.tripsGen as tripsGen
+import lib.xml.output as xmlOut
 
 import lib.algorithms.coverage as coverAlg
 
 from lib.sumo.blank import sumoBlankRun
 from lib.sumo.solo import sumoSoloRun
+
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+os.chdir(SCRIPT_DIR)
 
 
 ###### FUNCTIONS
@@ -235,7 +240,7 @@ def runSimulation(G, stations, graph, base_trips, params, translator, iteration=
     trips = copy.deepcopy(base_trips)
     results = Evaluation(translator)
     results = sumoSoloRun(base_net, G, data_path, "manhattan", trips, results, stations, params=params,
-                          output_folder=output_folder, output_subfolder="solo_" + str(iteration),
+                          output_path=output_path, output_subfolder="solo_" + str(iteration),
                           debug=debug)
     return results
         
@@ -243,9 +248,10 @@ def runSimulation(G, stations, graph, base_trips, params, translator, iteration=
 
 ###### SETTINGS
 ## Filesystem
-filepath = "manhattan/";
-data_path = filepath + "data/";
-in_data_path = data_path + "manhattan";
+network_name = "manhattan"
+data_path = "networks/" + network_name + "/";
+in_data_path = data_path + network_name;
+output_path = "output/"
 ## Training
 edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
@@ -321,8 +327,8 @@ if __name__ == "__main__":
 ###### PRE-RUN
     # Datetime now (for file organization)
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = "output/" + start_datetime_str
-    output_path = data_path + "/" + output_folder
+    output_folder = network_name + "_" + start_datetime_str
+    output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Generate trips for the whole training session
@@ -341,8 +347,8 @@ if __name__ == "__main__":
     prep.copyFileForSimulation(data_path + "/base_net.net.xml", data_path + "/net.net.xml")
     prep.copyFileForSimulation(output_path + "/trips.xml", data_path + "/routes.xml")
     ## Run
-    results = sumoBlankRun(base_net, data_path, "manhattan", base_trips, results, params=params,
-                           output_folder=output_folder, output_subfolder="blank")
+    results = sumoBlankRun(base_net, data_path, network_name, base_trips, results, params=params,
+                           output_path=output_path, output_subfolder="blank")
     ## Update graph (Data)
     graph = applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
 
@@ -404,10 +410,11 @@ if __name__ == "__main__":
         try:
             results = runSimulation(base_G, stations, graph, base_trips, params, translator, iteration,
                                     debug=False)
+            results.printEdgeData()
             sim_tries = 0
-        except:
+        except Exception as e:
             # Very rarely crashes when setting stop for charging
-            print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}, retrying...")
+            print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}:\n", e, "\nretrying...")
             sim_tries += 1
             continue
         if MEASURE_TIME:
@@ -505,12 +512,13 @@ pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
 # Save model
 torch.save(model.state_dict(), output_path + "/results/model.pt")
 # Save training results
-
-# Show training results
 figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS)
 for stat in figs:
     fig, ax = figs[stat]
     fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
+# Clean up files
+xmlOut.clean(data_path)
+# Show training results
 plt.show()
 
 

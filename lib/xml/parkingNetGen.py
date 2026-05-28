@@ -236,12 +236,12 @@ def addStationPOIs(net_filepath, add_filepath, station_edges, suffix=""):
 
 #### Write stations to XML
 def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
-                         data_path, out_data_path="", write=True,
+                         data_path, output_path="", write=True,
                          network_tree=None, network_filepath=None,
                          stations_tree=None,stations_filepath=None,
                          vehicle_length=-1, min_gap=2.5, wait_queue_size=2,
                          suffix="", reverse_angle=False):
-    if write and out_data_path == "": out_data_path = data_path;
+    if write and output_path == "": output_path = data_path;
     if vehicle_length <= 0:
         vTypes_tree = ET.parse(data_path + "/vTypes.add.xml");
         veh_len = getVehicleLength(vTypes_tree);
@@ -265,13 +265,13 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  wait_queue=wait_queue_size, min_gap=min_gap,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
-        stations_tree.write(out_data_path + "/stations.add.xml")
-        writeToXML(nodes_tree, edges_tree, out_data_path + "/net.net.xml")
+        stations_tree.write(output_path + "/stations.add.xml")
+        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml")
     else:
         return (nodes_tree, edges_tree, stations_tree)
 def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                             nodes_tree, edges_tree, stations_tree,
-                            write=True, out_data_path="",
+                            output_path="", write=True,
                             vehicle_length=5, min_gap=2.5, wait_queue_size=2,
                             suffix="", reverse_angle=False):
     # Main
@@ -284,8 +284,8 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  wait_queue=wait_queue_size, min_gap=min_gap,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
-        stations_tree.write(out_data_path + "/stations.add.xml")
-        writeToXML(nodes_tree, edges_tree, out_data_path + "/net.net.xml")
+        stations_tree.write(output_path + "/stations.add.xml")
+        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml")
     else:
         return (nodes_tree, edges_tree, stations_tree)
 
