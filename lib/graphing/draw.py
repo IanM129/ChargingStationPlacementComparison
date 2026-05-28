@@ -52,9 +52,9 @@ def drawCenters(G, centers, radius, ax=None, base_node_clr="grey",
             node_colors_arr.append("green"); centers_detected.add(node);
         elif node in nodes_covered: node_colors_arr.append("lightgreen");
         else: node_colors_arr.append(base_node_clr);
-    if len(centers_detected) < len(centers):
-        miss = set(centers) - centers_detected
-        raise Exception("Didn't detect some of the centers: " + str(miss) + " / " + str(centers))
+    miss = set(centers) - centers_detected
+    if len(miss) > 0:
+        raise Exception("Didn't detect some of the centers:\n- " + str(miss) + " / " + str(centers))
     edge_colors_arr = []
     for edge in G.edges():
         if edge in edges_covered: edge_colors_arr.append("green");
