@@ -310,3 +310,31 @@ def clean(data_path):
             os.remove(filepath);
     # Output folder
     os.rmdir(data_path + "/output")
+def cleanCache(cache_data_path, network_name):
+    files_to_delete = [
+            # Base
+            "base_net.net.xml",
+            "net.net.xml",
+            "routes.xml",
+            network_name + ".sumocfg",
+            # Additional
+            "vTypes.add.xml",
+            "output.add.xml",
+            "stations.add.xml",
+            # Temp net
+            "new_edges.edg.xml",
+            "new_nodes.nod.xml",
+            # Output
+            "output/loop.out.xml",
+            "output/edgeData.out.xml",
+            "output/chargingstations.out.xml",
+            "output/tripStats.out.xml"
+        ]
+    for file in files_to_delete:
+        filepath = cache_data_path + "/" + file;
+        if os.path.exists(filepath):
+            os.remove(filepath);
+    # Output folder
+    os.rmdir(cache_data_path + "/output")
+    # Cache folder
+    os.rmdir(cache_data_path)

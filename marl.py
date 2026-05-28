@@ -1,5 +1,4 @@
 import os
-import sys
 import math
 from datetime import datetime
 import time
@@ -280,10 +279,10 @@ def rewardFunction(stations, results, params, formula):
     #train_results["reward"][iteration] = reward
     formula["reward"] = (float(reward), 0.0)
     return reward
-def runSimulation(network_name, G, stations, graph, base_trips, params, translator, iteration=None, debug=False):
+def runSimulation(G, stations, graph, base_trips, params, translator, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
     results = Evaluation(translator)
-    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations, params=params,
+    results = sumoSoloRun(base_net, G, data_path, "manhattan", trips, results, stations, params=params,
                           output_path=output_path, output_subfolder="solo_" + str(iteration),
                           debug=debug)
     return results
@@ -291,15 +290,17 @@ def runSimulation(network_name, G, stations, graph, base_trips, params, translat
 
 
 ###### SETTINGS
+## Filesystem
+network_name = "manhattan"
+data_path = "networks/" + network_name + "/";
+in_data_path = data_path + network_name;
+output_path = "output/"
 ## Training
 edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
 
 
 if __name__ == "__main__":
-    # Parse arguments
-    if len(sys.argv) < 2: network_name = "manhattan";
-    else: network_name = str(sys.argv[1]);
     # Adjust params
     params = Parameters.config()
     print(params.groupPrint())
@@ -325,11 +326,6 @@ if __name__ == "__main__":
     from lib.traci_utility import traci as traci
     
 ####### LOADING
-    # Folder paths (file organization)
-    data_path = "networks/" + network_name + "/";
-    in_data_path = data_path + network_name;
-    output_path = "output/"
-    print("Using network '" + network_name + "' under '" + data_path + "'")
     # Torch init
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     ## Graph
@@ -338,7 +334,7 @@ if __name__ == "__main__":
                                  lengths=True, travel_time=True,
                                  internal_lengths=False, node_position=True)
     base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
-    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d));
     num_nodes = base_G.number_of_nodes()
     # Detailed graph for coverage calculations
     global coverage_G_d
@@ -376,7 +372,7 @@ if __name__ == "__main__":
         MAX_DISTANCE = abs(MAX_DISTANCE * network_diameter)
     
 ###### PRE-RUN
-    # Datetime now (file organization)
+    # Datetime now (for file organization)
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
     output_folder = network_name + "_" + start_datetime_str
     output_path = output_path + "/" + output_folder
@@ -470,8 +466,7 @@ if __name__ == "__main__":
         if (iteration == 1): params["prep.preprocess"] = False;
         if MEASURE_TIME: sim_stime = time.perf_counter();
         try:
-            results = runSimulation(network_name, base_G, stations, graph, base_trips,
-                                    params, translator, iteration,
+            results = runSimulation(base_G, stations, graph, base_trips, params, translator, iteration,
                                     debug=False)
             sim_tries = 0
         except Exception as e:
