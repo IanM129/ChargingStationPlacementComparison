@@ -1,4 +1,5 @@
 import os
+import math
 from datetime import datetime
 import time
 import random
@@ -19,7 +20,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx as torch_from_networkx
 
-from lib.utility import clamp
+from lib.utility import clamp, welford, ema, ema_welford, zscore
 
 from lib.gnn.model1 import EdgeGNN
 from lib.gnn.model2 import EdgePosGNN
@@ -138,7 +139,7 @@ def getReward_flow(selected_edges, graph, iteration):
     return flow_sum
 def rewardFunction(stations, results, params, formula):
     reward = 0.0
-    # Coverage penalty
+    # Coverage penalty (bounded with target; minimize)
     if ((factor := params["reward.coverage"]) != 0.0) or (params["reward.coverage.monitor"]):
         global coverage_radius_target
         coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d, stations.listDNodes(base_net),
@@ -150,86 +151,125 @@ def rewardFunction(stations, results, params, formula):
             reward += factor * radius_n;
             formula["coverage"] = (coverage_radius, float(radius_n));
         else: formula["coverage"] = (coverage_radius, 0.0);
-    # Charge
+    # Charge (EMA -> Z-score -> tanh; maximize)
     if ((factor := params["reward.charge"]) != 0.0) or (params["reward.charge.monitor"]):
-        global sess_charge_scale
+        global charge_mean, charge_var
         charge_val = float(results.station_data["totalCharge"])
         #train_results["charge"][iteration] = float(charge_val);
         if factor != 0.0:
-            if sess_charge_scale == None:
-                charge_n = 0.0;
-                sess_charge_scale = charge_val
-            else:
-                charge_n = np.tanh(charge_val / sess_charge_scale)
-                sess_charge_scale = (sess_charge_scale * 0.95) + (charge_val * 0.05)
+            # EMA -> Z-score -> tanh
+            charge_mean, charge_var = ema_welford(charge_val, charge_mean, charge_var, alpha=EMA_ALPHA)
+            z = zscore(charge_val, charge_mean, math.sqrt(charge_var))
+            charge_n = np.tanh(z)
+            # Running scale
+            #if sess_charge_scale == None:
+            #    charge_n = 0.0; sess_charge_scale = charge_val;
+            #else:
+            #    charge_n = np.tanh(charge_val / sess_charge_scale)
+            #    sess_charge_scale = (sess_charge_scale * 0.95) + (charge_val * 0.05)
+            # Reward
             reward += factor * charge_n
             formula["charge"] = (float(charge_val), float(charge_n));
         else: formula["charge"] = (float(charge_val), 0.0);
-    # Duration and completeness
+    # Duration (EMA -> Z-score -> tanh; minimize) and completeness
     if ((factor := params["reward.simDuration"]) != 0.0) or (params["reward.simDuration.monitor"]):
-        global sess_duration_scale
+        global simDuration_mean, simDuration_var
         fully_complete = results.fullyCompleted
         sim_time = float(results.simulationTime)
         #train_results["simDuration"][iteration] = float(sim_time);
         if factor != 0.0:
-            time_n = -np.tanh(sim_time / sess_duration_scale)
-            sess_duration_scale = (sess_duration_scale * 0.95) + (sim_time * 0.05)
+            # EMA -> Z-score -> tanh
+            simDuration_mean, simDuration_var = ema_welford(sim_time, simDuration_mean, simDuration_var, alpha=EMA_ALPHA)
+            z = zscore(sim_time, simDuration_mean, math.sqrt(simDuration_var))
+            time_n = -np.tanh(z)
+            # Basic scaling
+            #-np.tanh(sim_time / sess_duration_scale)
+            #sess_duration_scale = (sess_duration_scale * 0.95) + (sim_time * 0.05)
+            # Not completed penalty
             if not fully_complete: time_n -= 0.5;
+            # Reward
             reward += factor * time_n
             formula["simDuration"] = (sim_time, float(time_n));
         else: formula["simDuration"] = (sim_time, 0.0);
-    # Trips (average)
+    # Trip duration [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.tripDuration"]) != 0.0) or (params["reward.tripDuration.monitor"]):
+        global tripDuration_mean, tripDuration_var
         trip_duration = float(results.trip_data["tripDuration"])
         #train_results["tripDuration"][iteration] = float(results.trip_data["tripDuration"])
         if factor != 0.0:
-            tripdur_n = trip_duration
+            # EMA -> Z-score -> tanh
+            tripDuration_mean, tripDuration_var = ema_welford(trip_duration, tripDuration_mean, tripDuration_var, alpha=EMA_ALPHA)
+            z = zscore(trip_duration, tripDuration_mean, math.sqrt(tripDuration_var))
+            tripdur_n = -np.tanh(z)
+            # Reward
             reward += factor * tripdur_n
             formula["tripDuration"] = (trip_duration, tripdur_n);
         else: formula["tripDuration"] = (trip_duration, 0.0);
-    # Trip length (average)
+    # Trip length [average] (using calculated average trip length from blank simulation; minimize)
     if ((factor := params["reward.tripLength"]) != 0.0) or (params["reward.tripLength.monitor"]):
         trip_length = float(results.trip_data["tripLength"])
         #train_results["tripLength"][iteration] = float(results.trip_data["tripLength"])
         global average_trip_len
         if factor != 0.0:
+            # Divide by (blank average trip length * 2)
             triplen_n = -np.tanh(trip_length / (average_trip_len * 2.0))
+            # Reward
             reward += factor * triplen_n
             formula["tripLength"] = (trip_length, float(triplen_n));
         else: formula["tripLength"] = (trip_length, 0.0);
-    # Trip wait time (average)
+    # Trip wait time [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.waitTime"]) != 0.0) or (params["reward.waitTime.monitor"]):
+        global waitTime_mean, waitTime_var
         wait_time = float(results.trip_data["waitTime"])
         #train_results["waitTime"][iteration] = float(0.0)
         if factor != 0.0:
-            waittime_n = wait_time
+            # EMA -> Z-score -> tanh
+            waitTime_mean, waitTime_var = ema_welford(wait_time, waitTime_mean, waitTime_var, alpha=EMA_ALPHA)
+            z = zscore(wait_time, waitTime_mean, math.sqrt(waitTime_var))
+            waittime_n = -np.tanh(z)
+            # Reward
             reward += factor * waittime_n
             formula["waitTime"] = (wait_time, float(waittime_n));
         else: formula["waitTime"] = (wait_time, 0.0);
-    # Stop time (average)
+    # Stop time [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.stopTime"]) != 0.0) or (params["reward.stopTime.monitor"]):
+        global stopTime_mean, stopTime_var
         stop_time = float(results.trip_data["stopTime"])
         #train_results["stopTime"][iteration] = float(results.trip_data["stopTime"])
         if factor != 0.0:
-            stoptime_n = stop_time
+            # EMA -> Z-score -> tanh
+            stopTime_mean, stopTime_var = ema_welford(stop_time, stopTime_mean, stopTime_var, alpha=EMA_ALPHA)
+            z = zscore(stop_time, stopTime_mean, math.sqrt(stopTime_var))
+            stoptime_n = -np.tanh(z)
+            # Reward
             reward += factor * stoptime_n
             formula["stopTime"] = (stop_time, float(stoptime_n));
         else: formula["stopTime"] = (stop_time, 0.0);
-    # Time lost (average)
+    # Time lost [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.timeLoss"]) != 0.0) or (params["reward.timeLoss.monitor"]):
+        global timeLoss_mean, timeLoss_var
         time_loss = float(results.trip_data["timeLoss"])
         #train_results["timeLoss"][iteration] = float(results.trip_data["timeLoss"])
         if factor != 0.0:
-            timeloss_n = time_loss
+            # EMA -> Z-score -> tanh
+            timeLoss_mean, timeLoss_var = ema_welford(time_loss, timeLoss_mean, timeLoss_var, alpha=EMA_ALPHA)
+            z = zscore(time_loss, timeLoss_mean, math.sqrt(timeLoss_var))
+            timeloss_n = -np.tanh(z)
+            # Reward
             reward += factor * timeloss_n
             formula["timeLoss"] = (time_loss, float(timeloss_n));
         else: formula["timeLoss"] = (time_loss, 0.0);
-    # Energy consumed (average)
+    # Energy consumed [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.energyConsumed"]) != 0.0) or (params["reward.energyConsumed.monitor"]):
+        global enCons_mean, enCons_var
         energy_consumed = float(results.trip_data["energyConsumed"])
         #train_results["energyConsumed"][iteration] = float(results.trip_data["energyConsumed"])
         if factor != 0.0:
-            enrgcons_n = energy_consumed
+            # EMA -> Z-score -> tanh
+            enCons_mean, enCons_var = ema_welford(energy_consumed, enCons_mean, enCons_var, alpha=EMA_ALPHA)
+            z = zscore(energy_consumed, enCons_mean, math.sqrt(enCons_var))
+            enrgcons_n = -np.tanh(z)
+            # Reward
             reward += factor * 0.0
             formula["energyConsumed"] = (energy_consumed, float(enrgcons_n));
         else: formula["energyConsumed"] = (energy_consumed, 0.0);
@@ -272,6 +312,7 @@ if __name__ == "__main__":
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
     ITERATIONS = params["training.iterations"]
+    EMA_ALPHA = params["training.emaAlpha"]
     MEASURE_TIME = params["training.measureTime"]
     PRINTS = params["training.progressDebugs"]
     PROGRESS_PRINT = params["training.printProgress"]
@@ -359,9 +400,17 @@ if __name__ == "__main__":
     model = EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64) #EdgeGNN
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    # Reward side variables
     run_reward = None;
     effect_on_run_reward = 0.1;
     entropy_coeff = 0.01;
+    global charge_mean, charge_var; charge_mean = 0.0; charge_var = 0.0;
+    global simDuration_mean, simDuration_var; simDuration_mean = None; simDuration_var = None;
+    global tripDuration_mean, tripDuration_var; tripDuration_mean = None; tripDuration_var = None;
+    global waitTime_mean, waitTime_var; waitTime_mean = None; waitTime_var = None;
+    global stopTime_mean, stopTime_var; stopTime_mean = None; stopTime_var = None;
+    global timeLoss_mean, timeLoss_var; timeLoss_mean = None; timeLoss_var = None;
+    global enCons_mean, enCons_var; enCons_mean = None; enCons_var = None;
     # Progress printing
     print_every = ITERATIONS / PRINTS
     if PROGRESS_WRITE:
