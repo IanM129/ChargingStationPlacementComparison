@@ -12,6 +12,10 @@
 		</param>
 	</group>
 	<group name="sim">
+		<!-- Don't use for current SUMO version -->
+		<param name="cpuThreads" type="int" default="1">
+			1
+		</param>
 		<param name="stepLength" type="float" default="0.1">
 			0.1
 		</param>
@@ -19,7 +23,7 @@
 			0
 		</param>
 		<param name="vehicleCount" type="int" default="100">
-			10
+			100
 		</param>
 		<!-- [-inf, -0.0]: percent of network radius; [0.0, inf] absolute value in meters -->
 		<param name="minDistance" type="float" default="-0.5">
@@ -43,8 +47,8 @@
 		</param>
 	</group>
 	<group name="electric">
-		<param name="penetration" type="float" default="1.0">
-			1.0
+		<param name="penetration" type="float" default="0.8">
+			0.8
 		</param>
 		<param name="needToChargeProb" type="float" default="1.0">
 			1.0
@@ -58,7 +62,7 @@
 	</group>
 	<group name="station">
 		<param name="k" type="int" default="5">
-			3
+			6
 		</param>
 		<param name="capacity" type="int" default="10">
 			10
@@ -83,6 +87,9 @@
 		<param name="iterations" type="int" default="1000">
 			1000
 		</param>
+		<param name="batchSize" type="int" default="1">
+			4
+		</param>
 		<param name="emaAlpha" type="float" default="0.05">
 			0.05
 		</param>
@@ -103,14 +110,14 @@
 		</param>
 	</group>
 	<group name="reward">
-		<!-- [0, 1] -->
+		<!-- [0, network diameter] -->
 		<param name="coverage" type="float" default="2.0">
 			2.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
-		<!-- [0, 1] -->
+		<!-- [0, inf] -->
 		<param name="charge" type="float" default="1.5">
 			1.5
 			<param name="monitor" type="bool" default="True">
@@ -126,42 +133,42 @@
 		</param>
 		<!-- [?, ?] -->
 		<param name="tripDuration" type="float" default="0.0">
-			0.0
+			0.5
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [0, inf] (/ (average_trip_length * 2)) -->
 		<param name="tripLength" type="float" default="0.0">
-			0.0
+			0.5
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
 		<param name="waitTime" type="float" default="0.0">
-			0.0
+			1.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
 		<param name="stopTime" type="float" default="0.0">
-			0.0
+			0.25
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
 		<param name="timeLoss" type="float" default="0.0">
-			0.0
+			1.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
 		<param name="energyConsumed" type="float" default="0.0">
-			0.0
+			0.1
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
