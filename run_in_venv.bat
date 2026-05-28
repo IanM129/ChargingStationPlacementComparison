@@ -8,7 +8,12 @@ exit /b
 )
 
 :: Ask user for Python file
-set /p pyfile=Enter Python file name (example: gnn.py):
+set /p pyfile=Enter Python file name:
+
+:: Add .py if missing
+if /i not "%pyfile:~-3%"==".py" (
+set pyfile=%pyfile%.py
+)
 
 :: Check if file exists
 if not exist "%pyfile%" (

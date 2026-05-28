@@ -4,8 +4,14 @@
 # Ignore virtual environment
 /_venv
 
-# Output folders
+# Outputs
 output
+networks/**/output
+networks/**/net.net.xml
+networks/**/routes.xml
+networks/**/vTypes.add.xml
+networks/**/output.add.xml
+networks/**/stations.add.xml
 
 # Big networks
 networks/Zagreb

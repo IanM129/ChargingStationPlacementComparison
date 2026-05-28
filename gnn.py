@@ -410,7 +410,6 @@ if __name__ == "__main__":
         try:
             results = runSimulation(base_G, stations, graph, base_trips, params, translator, iteration,
                                     debug=False)
-            results.printEdgeData()
             sim_tries = 0
         except Exception as e:
             # Very rarely crashes when setting stop for charging
