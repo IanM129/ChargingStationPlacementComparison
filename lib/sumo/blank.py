@@ -8,7 +8,6 @@ import random
 import math
 import numpy as np
 import sumolib
-import traci
 import traci.constants as tc
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
@@ -19,6 +18,10 @@ import re
 sumoBinary = sumolib.checkBinary('sumo')
 #import randomTrips
 jtrrouterBinary = sumolib.checkBinary('jtrrouter')
+
+#global libsumo_m, traci_m
+#libsumo_m = import libsumo
+#traci_m = import traci_m
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import preprocess as prep
@@ -84,6 +87,10 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     if not params: params = Parameters.default();
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
+    VISUALIZE = params["visualize"]
+    # Traci switch
+    traciutil.initialize(not VISUALIZE)
+    traci = traciutil.traci
 #### PREPROCESS
     #output_path = data_path + "/" + output_folder
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
@@ -106,7 +113,7 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     ## Command
     if params["saveLog"]: log_filepath = output_path_full + "/log.txt"
     else: log_filepath = None;
-    cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
+    cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], VISUALIZE,
                                    threads=params["sim.cpuThreads"],
                                    log_filepath=log_filepath)
     if debug: print("-> SUMO command:\n'" + ' '.join(cmnd) + "'");
@@ -165,6 +172,6 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     results.setVehicleData(vehicle_count=total_veh_count,
                            EV_count=0, EV_set_charge=0,
                            EV_arrived=0, EV_charged=0)
-    results.setStationData([], None, None, 0.0)
+    results.setStationData([], None, None, 0.0, 0.0)
     return results
         

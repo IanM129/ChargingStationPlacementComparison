@@ -36,14 +36,18 @@
 		<param name="saveLog" type="bool" default="True">
 			False
 		</param>
+		<!-- Inactive during training -->
 		<param name="visualize" type="bool" default="False">
-			False
+			True
 		</param>
 		<param name="frameDur" type="float" default="0.01">
 			0.01
 		</param>
 		<param name="printResults" type="bool" default="False">
 			False
+		</param>
+		<param name="printErrors" type="bool" default="False">
+			True
 		</param>
 	</group>
 	<group name="electric">
@@ -76,7 +80,7 @@
 		<param name="moneyPerKWH" type="float" default="0.25"> <!-- euro -->
 			0.25
 			<param name="red" type="float" default="0.35">
-				0.35
+				0.25
 			</param>
 			<param name="blue" type="float" default="0.25">
 				0.25
@@ -85,16 +89,29 @@
 	</group>
 	<group name="training">
 		<param name="iterations" type="int" default="1000">
-			1000
+			5000
 		</param>
+		<!-- Not useed -->
 		<param name="batchSize" type="int" default="1">
-			4
+			1
 		</param>
 		<param name="emaAlpha" type="float" default="0.05">
 			0.05
 		</param>
+		<param name="temperature" type="float" default="1.0">
+			1.5
+		</param>
+		<param name="momentum" type="float" default="0.05">
+			0.1
+		</param>
+		<param name="entropyCoeff" type="float" default="0.02">
+			0.05
+		</param>
+		<param name="gradClip" type="float" default="1.0">
+			1.0
+		</param>
 		<param name="progressDebugs" type="int" default="10">
-			10
+			0
 		</param>
 		<param name="printProgress" type="bool" default="True">
 			False
@@ -109,7 +126,74 @@
 			False
 		</param>
 	</group>
+	<!-- Reward based on the global environment state -->
 	<group name="reward">
+		<!-- [0, network diameter] -->
+		<param name="totalCoverage" type="float" default="2.0">
+			1.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [0, inf] -->
+		<param name="totalCharge" type="float" default="1.5">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [-1, 0] | -1.5 if not completed -->
+		<param name="simDuration" type="float" default="1.0">
+			0.2
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [?, ?] -->
+		<param name="tripDuration" type="float" default="0.0">
+			0.1
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [0, inf] (/ (average_trip_length * 2)) -->
+		<param name="tripLength" type="float" default="0.0">
+			0.1
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [?, ?] -->
+		<param name="waitTime" type="float" default="0.0">
+			0.125
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [?, ?] -->
+		<param name="stopTime" type="float" default="0.0">
+			0.05
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [?, ?] -->
+		<param name="timeLoss" type="float" default="0.0">
+			0.125
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		<!-- [?, ?] -->
+		<param name="energyConsumed" type="float" default="0.0">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+	</group>
+	<!-- Reward based agent performance (unique per agent) -->
+	<group name="compReward">
 		<!-- [0, network diameter] -->
 		<param name="coverage" type="float" default="2.0">
 			2.0
@@ -119,56 +203,14 @@
 		</param>
 		<!-- [0, inf] -->
 		<param name="charge" type="float" default="1.5">
-			1.5
+			2.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
-		<!-- [-1, 0] | -1.5 if not completed -->
-		<param name="simDuration" type="float" default="1.0">
-			1.0
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [?, ?] -->
-		<param name="tripDuration" type="float" default="0.0">
-			0.5
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [0, inf] (/ (average_trip_length * 2)) -->
-		<param name="tripLength" type="float" default="0.0">
-			0.5
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [?, ?] -->
-		<param name="waitTime" type="float" default="0.0">
-			1.0
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [?, ?] -->
-		<param name="stopTime" type="float" default="0.0">
-			0.25
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [?, ?] -->
-		<param name="timeLoss" type="float" default="0.0">
-			1.0
-			<param name="monitor" type="bool" default="True">
-				True
-			</param>
-		</param>
-		<!-- [?, ?] -->
-		<param name="energyConsumed" type="float" default="0.0">
-			0.1
+		<!-- [0, inf] -->
+		<param name="moneyEarned" type="float" default="2.0">
+			0.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>

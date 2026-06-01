@@ -1,4 +1,6 @@
 import sys
+import xml.etree.ElementTree as ET
+
 
 ## Hardcoded defaults
 """
@@ -60,6 +62,7 @@ class Parameters:
     #names
     #groups
     #parents
+    #xml_tree
 
     def __init__(self):
         self.values = []
@@ -67,6 +70,7 @@ class Parameters:
         self.names = {}
         self.groups = {}
         self.parents = {}
+        self.xml_tree = None
     @classmethod
     def default(cls):
         if Parameters.default_params == None:
@@ -81,7 +85,9 @@ class Parameters:
     def parse(cls, xml_tree, use_default=False):
         params = cls()
         if isinstance(xml_tree, str):
-            xml_tree = ET.parse(xml_tree)
+            #parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+            xml_tree = ET.parse(xml_tree)#, parser=parser)
+        params.xml_tree = xml_tree
         root = xml_tree.getroot()
         # Nested in groups
         params.parse_recursive(root, "", use_default)
@@ -98,6 +104,8 @@ class Parameters:
             path = path + node.get("name") + "."
         for child in node:
             self.parse_recursive(child, path, use_default)
+    def write(self, filepath):
+        self.xml_tree.write(filepath)
     def getGroup(self, group):
         return self.groups[group];
     def __getitem__(self, item, default=None):

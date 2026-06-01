@@ -22,6 +22,7 @@ jtrrouterBinary = sumolib.checkBinary('jtrrouter')
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import preprocess as prep
+import lib.utility as util
 
 import lib.sumo.utility as sumoutil
 import lib.traci_utility as traciutil
@@ -100,13 +101,13 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     avg_trip_charge = prep.calcApproxChargeNeeded(avg_trip_len);
     # libsumo
     #global LIBSUMO
-    #LIBSUMO = params["sim.visualize"]
-    #if LIBSUMO: import libsumo as traci;
-    #else: import traci;
+    #LIBSUMO = not VISUALIZE
+    #if LIBSUMO: import libsumo as traci
+    #else: import traci
 
 
 ####
-def removeFromSimulationVars(vehicles : set, stations, params):
+def removeFromSimulationVars(vehicles : set, params):
     global sim_EVs
     sim_EVs -= vehicles;
     if MANUAL_CHARGE_DECIDE: #params["electric.manualChargeDecide"]:
@@ -116,10 +117,11 @@ def removeFromSimulationVars(vehicles : set, stations, params):
             going_to_charge.pop(vehID, None);
             if vehID in charging:
                 si_index, park_side = charging[vehID][0]
+                global stations
                 stations[si_index].releaseSpot(park_side)
                 charging.pop(vehID, None);
 #### Sumo
-def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, results, stations,
+def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, results, stations_r, stations_b,
                 output_path, output_subfolder="solo", params=None, debug=False):
     if not params: params = Parameters.default();
     global MANUAL_CHARGE_DECIDE
@@ -128,12 +130,19 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     DURATION_SET = MAX_DURATION > 0
     MANUAL_CHARGE_DECIDE = params["electric.manualChargeDecide"]
     VISUALIZE = params["sim.visualize"]
+    PRINT_RESULTS = params["sim.printResults"]
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
+    MONEY_PER_KWH_RED = params["station.moneyPerKWH.red"]
+    MONEY_PER_KWH_BLUE = params["station.moneyPerKWH.blue"]
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
 #### PREPROCESS
-    k = len(stations)
+    # TEMP
+    print("\r- Comp run:\n    Red:", stations_r, "\n    Blue:", stations_b)
+    # TEMP
+    k = len(stations_r)
+    K = len(stations_r) + len(stations_b)
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["prep.preprocess"]:
@@ -148,11 +157,26 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     
 #### PRE STATION WRITE
     ## Write stations to XML
-    parkingNetGen.addStationsToNetwork(base_net, stations,
-                                       data_path, write=True, output_path=cache_data_path,
-                                       network_filepath=cache_data_path + "/base_net.net.xml",
-                                       vehicle_length=EV_len, min_gap=min_gap, wait_queue_size=WAIT_QUEUE_SIZE)
-    #print("-- stations written to network XML. (at '" + (output_path + "/net.net.xml") + "')")
+    basenet_tree = ET.parse(cache_data_path + "/base_net.net.xml")
+    nodes_tree, edges_tree, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations_r,
+                                                    cache_data_path, write=False, output_path=cache_data_path,
+                                                    network_tree=basenet_tree,
+                                                    #network_filepath=cache_data_path + "/base_net.net.xml",
+                                                    vehicle_length=EV_len, min_gap=min_gap,
+                                                    wait_queue_size=params["station.waitQueue"],
+                                                    suffix="_red")
+    parkingNetGen.appendStationsToNetwork(base_net, stations_b,
+                                            nodes_tree, edges_tree, stations_tree,
+                                            write=True, output_path=cache_data_path,
+                                            vehicle_length=EV_len, min_gap=min_gap,
+                                            wait_queue_size=WAIT_QUEUE_SIZE,
+                                            suffix="_blue", reverse_angle=True);
+    # DEBUG -> Show POIs for stations
+    if VISUALIZE:
+        parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
+                                     stations_r.listEdges(), suffix="_red")
+        parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
+                                     stations_b.listEdges(), suffix="_blue")
     # Load modified net
     net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
 #### POST STATION WRITE
@@ -163,7 +187,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     xmlOut.config_createEdgeOutputFile(xml_filepath=cache_data_path + "/output.add.xml",
                                        relative_out_filepath=cache_output_path + "/edgeData.out.xml", overwrite=False)
     ## Fix stops
-    trips = prep.fixTripEdges(base_net, net, stations.listEdges(),
+    trips = prep.fixTripEdges(base_net, net, stations_r.listEdges() + stations_b.listEdges(),
                               routes_filepath=output_path + "/trips.xml",
                               write=True, output_filepath=cache_data_path + "/routes.xml",
                               trips=trips)
@@ -174,7 +198,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     ## Command
     if params["saveLog"]: log_filepath = output_path_full + "/log.txt"
     else: log_filepath = None;
-    cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], params["visualize"],
+    cmnd = sumoutil.genSumoCommand(sumo_filepath, params["stepLength"], VISUALIZE,
                                    threads=CPU_THREADS,
                                    log_filepath=log_filepath,
                                    trip_stats_folder=cache_output_path)
@@ -187,6 +211,8 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     EVs_count = 0; total_veh_count = 0;
     set_need_to_charge_cnt = 0;
     sttn_util_rate = {}
+    global stations
+    stations = StationInfoDataset(stations_r.arr + stations_b.arr)
     if MANUAL_CHARGE_DECIDE:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
@@ -194,12 +220,12 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         charging = {}
         ev_ntc_charge = {}
         remaining_range = {}
-    if params["visualize"]:
+    if VISUALIZE:
         veh_colors = {}
     for sttn_edge_id, _ in stations.listIDss():
         sttn_util_rate[sttn_edge_id] = [0, 0];
     ## Run simulation
-    if params["printResults"]: sim_stime = time.perf_counter();
+    if PRINT_RESULTS: sim_stime = time.perf_counter();
     traci.start(cmnd);
     ## Subscriptions
     traci.simulation.subscribe([
@@ -225,7 +251,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         ## Arrived
         # -> remove arrived EVs
         arrived = set(data_sim.get(tc.VAR_ARRIVED_VEHICLES_IDS, []))
-        removeFromSimulationVars(arrived, stations, params)
+        removeFromSimulationVars(arrived, params)
 
         ## STEP
         if MANUAL_CHARGE_DECIDE:
@@ -258,7 +284,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                             target_si = stations.getByID(target_station)
                             traci.vehicle.setRoute(vehID, new_route)
                             #try:
-                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, WAIT_QUEUE_SIZE));
+                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
                             #except Exception as e:
                             #    print("Failed to stop.")
                             #    raise Exception(e);
@@ -270,10 +296,11 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                 #if VISUALIZE:
                     # Color by charge
                     #traciutil.colorByCharge(vehID, charge, veh_colors, max_charge)
+                    
             # Update sets and dicts
             will_need_to_charge -= go_charge_this_step.keys()
             going_to_charge.update(go_charge_this_step)
-            removeFromSimulationVars(vaporized, stations, params) #sim_EVs -= vaporized
+            removeFromSimulationVars(vaporized, params) #sim_EVs -= vaporized
             #if len(vaporized) > 0: print("> Vaporized:", vaporized);
 
         ## Vehicles driving to charge stations
@@ -371,7 +398,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     sim_time = traci.simulation.getTime()
     traci.close()
     steps_processed = int(sim_time / params["stepLength"])
-    if params["printResults"]:
+    if PRINT_RESULTS:
         sim_etime = time.perf_counter()
         print("\n")
         print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
@@ -390,7 +417,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                  float(sttn_util_rate[st_id][1] / (steps_processed * st_cap)));
 
     ## Total charge from station
-    if params["printResults"]:
+    if PRINT_RESULTS:
         print("Total charge used per station | utlization rate:")
     stations_charges_data = xmlOut.getAllStationCharges(cache_data_path)
     station_charges = {}
@@ -410,18 +437,43 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                         total += float(charge["totalEnergy"])
                     if vehID not in veh_charges: veh_charges[vehID] = set();
                     veh_charges[vehID].add(si.getID())
-        if params["printResults"]:
-            print(f"  {si.edge_id:12s}: {round(total, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
-                  f"(util: {round(sttn_util_rate[si.getID()][0]*100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1]*100.0,2):5.2f} %)")
         station_charges[si.getID()] = total
         EVs_charged = len(veh_charges.keys()); EVs_charged_ratio = EVs_charged / set_need_to_charge_cnt;
         total_charge += total
-    money_earned = (total_charge * float(params["station.moneyPerKWH"])) / 1000.0
-    if params["printResults"]:
-        print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
-        print(f"  > money earned: {round(money_earned, 2)}€ ({round(params['station.moneyPerKWH'],2)}€ per KWh)")
+    #money_earned = (total_charge * float(params["station.moneyPerKWH"])) / 1000.0
+
+    ## Color specific stats
+    if PRINT_RESULTS:
+        print("---- Station stats:")
+        print("     <station edge ID>: <energy recharged> | <utilization per step>, <utilization normalized by total parking capacity>")
+        print("-- Red:")
+    total_charge_r = 0;
+    for si in stations_r:
+        val = station_charges[si.getID()]
+        if PRINT_RESULTS:
+            print(f"  {si.edge_id:10s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                  f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
+        total_charge_r += val
+    money_earned_r = (total_charge_r * float(MONEY_PER_KWH_RED)) / 1000.0
+    if PRINT_RESULTS:
+        print(f"  > total charge: {round(total_charge_r / 1000.0, 2)} KWh")
+        print(f"  > money earned: {round(money_earned_r, 2)}€ ({round(MONEY_PER_KWH_RED,2)}€ per KWh)")
+        print("-- Blue:")
+    total_charge_b = 0
+    for si in stations_b:
+        val = station_charges[si.getID()]
+        if PRINT_RESULTS:
+            print(f"  {si.edge_id:12s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                  f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
+        total_charge_b += val
+    money_earned_b = (total_charge_b * float(MONEY_PER_KWH_BLUE)) / 1000.0
+    if PRINT_RESULTS:
+        print(f"  > total charge: {round(total_charge_b / 1000.0, 2)} KWh")
+        print(f"  > money earned: {round(money_earned_b, 2)}€ ({round(MONEY_PER_KWH_BLUE,2)}€ per KWh)")
         print()
-    results.setStationData(stations, sttn_util_rate, station_charges, total_charge, money_earned)
+    money_earned = money_earned_r + money_earned_b
+    results.setStationDataComp(stations, sttn_util_rate, station_charges, total_charge, money_earned,
+                                   total_charge_r, total_charge_b, money_earned_r, money_earned_b)
 
     ## Trip stats/info
     trip_stats = xmlOut.getTripStats(cache_output_path)
@@ -440,7 +492,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         if vap > 0: vaporized_count += vap
     arrived_EVs_cnt = EVs_count - vaporized_count
     arrived_EVs_ratio = float(arrived_EVs_cnt) / float(EVs_count)
-    if params["printResults"]:
+    if PRINT_RESULTS:
         print(f"Total vaporized: {vaporized_count}")
         print(f"--> Arrived EVs ratio: {round(arrived_EVs_ratio*100, 2):5.2f} % ({arrived_EVs_cnt} / {EVs_count}) [total: {total_veh_count}]")
         print(f"--> EVs charged ratio: {round(EVs_charged_ratio*100, 2):5.2f} % ({EVs_charged} / {set_need_to_charge_cnt})")

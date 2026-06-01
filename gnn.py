@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 import math
 from datetime import datetime
 import time
@@ -22,8 +23,17 @@ from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx as torch_from_networkx
 
 #import libsumo as traci
+global libsumo_m, traci_m
+import libsumo as libsumo_m
+import traci as traci_m
+
+import preprocess as prep
 
 from lib.utility import clamp, welford, ema, ema_welford, zscore
+
+import lib.graphing as graphing  #= lib/graphing/__init__.py
+import lib.graphing.utility as graphutil
+import lib.graphing.draw as graphdraw
 
 from lib.gnn.model1 import EdgeGNN
 from lib.gnn.model2 import EdgePosGNN
@@ -31,11 +41,6 @@ import lib.gnn.utility as gnnutil
 
 import lib.traci_utility as traciutil
 import lib.visual_utility as visutil
-
-import lib.graphing as graphing  #= lib/graphing/__init__.py
-import lib.graphing.utility as graphutil
-import lib.graphing.draw as graphdraw
-import preprocess as prep
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip
@@ -51,116 +56,35 @@ import lib.algorithms.coverage as coverAlg
 from lib.sumo.blank import sumoBlankRun
 from lib.sumo.solo import sumoSoloRun
 
-SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
-os.chdir(SCRIPT_DIR)
+MAIN_DIR = pathlib.Path(__file__).resolve().parent
+os.chdir(MAIN_DIR)
 
 
 ###### FUNCTIONS
-#### Utility
-## Edge attributes
-def createEdgeAttrUpdateList(attr_update, attr_list):
-    return [(a if (a in attr_update) else None) for a in attr_list]
-def applyBaseGraphEdgeAttributes(graph, G, translator, attrs):
-    global edge_attr_list, edge_attr_map
-    num_features = len(edge_attr_list)
-    new_edge_attrs = np.zeros((graph.edge_index.shape[1], num_features))
-    edges = translator.getEdges()
-    # Apply
-    for attr in attrs:
-        if attr in edge_attr_map:
-            attr_i = edge_attr_map[attr]
-            match (attr):
-                case "travelTime":
-                    travelTime = nx.get_edge_attributes(G, "travelTime")
-                    travelTime = [(travelTime[e]) for e in edges]
-                    new_edge_attrs[:, attr_i] = travelTime;
-        else:
-            raise Exception(f"Unknown attribute '{attr}'")
-    graph.edge_attr = torch.as_tensor(new_edge_attrs, dtype=torch.float32, device=device)
-    return graph
-# From results
-def applyResultsToGraph(graph, translator, attrs, results):
-    global edge_attr_list, edge_attr_map
-    num_features = len(edge_attr_list)
-    #new_edge_attrs = np.zeros((graph.edge_index.shape[1], num_features))
-    edges = translator.getEdges()
-    # Apply
-    for attr in attrs:
-        if attr in edge_attr_map:
-            attr_i = edge_attr_map[attr]
-            match (attr):
-                # Edges
-                case "vehicles":
-                    vehicles = translator.dictToEdgeAttributes(results.edge_data["vehicles"], dtype=float)
-                    #print("vehicles:", vehicles.shape, "\n", vehicles)
-                    vehicles = torch.from_numpy(vehicles).to(graph.edge_attr.device)
-                    graph.edge_attr[:, attr_i] = vehicles;
-                case "flow":
-                    flow = translator.dictToEdgeAttributes(results.edge_data["flow"], dtype=float)
-                    #print("flow:", flow.shape, "\n", flow)
-                    flow = torch.from_numpy(flow).to(graph.edge_attr.device)
-                    graph.edge_attr[:, attr_i] = flow;
-                case "vaporized":
-                    vaporized = translator.dictToEdgeAttributes(results.edge_data["vaporized"], dtype=float)
-                    #print("vaporized:", vaporized.shape, "\n", vaporized)
-                    vaporized = torch.from_numpy(vaporized).to(graph.edge_attr.device)
-                    graph.edge_attr[:, attr_i] = vaporized;
-                # Stations
-                case "charged":
-                    charged = np.zeros(len(edges), dtype=float)
-                    for edge in results.station_data["charged"]:
-                        edge_ind = translator.edgeToIndex(edge)
-                        charged[edge_ind] = results.station_data["charged"][edge]
-                    #print("charged:", charged.shape, "\n", charged)
-                    charged = torch.from_numpy(charged).to(graph.edge_attr.device)
-                    graph.edge_attr[:, attr_i] = charged;
-                # Other
-                case _:
-                    raise Exception(f"Undefined attribute '{attr}'")
-        else:
-            raise Exception(f"Unknown attribute '{attr}'")
-    return graph
-
-
-def calculate_log_probs(logits, selected_indices):
-    log_probs = []
-    mask = torch.ones_like(logits, dtype=torch.bool)
-    for idx in selected_indices:
-        # Numerator: log(exp(logit)) -> just the logit
-        # Denominator: log(sum(exp(logits_remaining)))
-        # We use log_sum_exp for numerical stability
-        # Zero out the ones we already picked using a mask
-        current_logits = logits.masked_fill(~mask, float('-inf'))
-        # Log-softmax equivalent for the specific index
-        log_p = logits[idx] - torch.logsumexp(current_logits, dim=0)
-        log_probs.append(log_p)
-        mask[idx] = False
-    return torch.stack(log_probs)
 #### Training environment
 def getReward_flow(selected_edges, graph, iteration):
     global edge_attr_map
     flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
     return flow_sum
 def rewardFunction(stations, results, params, formula):
+    global running_dict
     reward = 0.0
     # Coverage penalty (bounded with target; minimize)
-    if ((factor := params["reward.coverage"]) != 0.0) or (params["reward.coverage.monitor"]):
+    if ((factor := params["reward.totalCoverage"]) != 0.0) or (params["reward.totalCoverage.monitor"]):
         global coverage_radius_target
         coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d, stations.listDNodes(base_net),
                                                                     epsilon=50,
                                                                     max_radius=network_diameter))
-        #train_results["coverage"][iteration] = float(coverage_radius);
         if factor != 0.0:
             radius_n = -np.tanh(coverage_radius / coverage_radius_target)
             reward += factor * radius_n;
-            formula["coverage"] = (coverage_radius, float(radius_n));
-        else: formula["coverage"] = (coverage_radius, 0.0);
+            formula["totalCoverage"] = (coverage_radius, float(radius_n));
+        else: formula["totalCoverage"] = (coverage_radius, 0.0);
     # Charge (EMA -> Z-score -> tanh; maximize)
-    if ((factor := params["reward.charge"]) != 0.0) or (params["reward.charge.monitor"]):
-        global charge_mean, charge_var
+    if ((factor := params["reward.totalCharge"]) != 0.0) or (params["reward.totalCharge.monitor"]):
         charge_val = float(results.station_data["totalCharge"])
-        #train_results["charge"][iteration] = float(charge_val);
         if factor != 0.0:
+            charge_mean, charge_var = running_dict["totalCharge"]
             # EMA -> Z-score -> tanh
             charge_mean, charge_var = ema_welford(charge_val, charge_mean, charge_var, alpha=EMA_ALPHA)
             z = zscore(charge_val, charge_mean, math.sqrt(charge_var))
@@ -173,15 +97,15 @@ def rewardFunction(stations, results, params, formula):
             #    sess_charge_scale = (sess_charge_scale * 0.95) + (charge_val * 0.05)
             # Reward
             reward += factor * charge_n
-            formula["charge"] = (float(charge_val), float(charge_n));
-        else: formula["charge"] = (float(charge_val), 0.0);
+            formula["totalCharge"] = (float(charge_val), float(charge_n));
+            running_dict["totalCharge"] = (charge_mean, charge_var)
+        else: formula["totalCharge"] = (float(charge_val), 0.0);
     # Duration (EMA -> Z-score -> tanh; minimize) and completeness
     if ((factor := params["reward.simDuration"]) != 0.0) or (params["reward.simDuration.monitor"]):
-        global simDuration_mean, simDuration_var
         fully_complete = results.fullyCompleted
         sim_time = float(results.simulationTime)
-        #train_results["simDuration"][iteration] = float(sim_time);
         if factor != 0.0:
+            simDuration_mean, simDuration_var = running_dict["simDuration"]
             # EMA -> Z-score -> tanh
             simDuration_mean, simDuration_var = ema_welford(sim_time, simDuration_mean, simDuration_var, alpha=EMA_ALPHA)
             z = zscore(sim_time, simDuration_mean, math.sqrt(simDuration_var))
@@ -194,13 +118,13 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * time_n
             formula["simDuration"] = (sim_time, float(time_n));
+            running_dict["simDuration"] = (simDuration_mean, simDuration_var)
         else: formula["simDuration"] = (sim_time, 0.0);
     # Trip duration [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.tripDuration"]) != 0.0) or (params["reward.tripDuration.monitor"]):
-        global tripDuration_mean, tripDuration_var
         trip_duration = float(results.trip_data["tripDuration"])
-        #train_results["tripDuration"][iteration] = float(results.trip_data["tripDuration"])
         if factor != 0.0:
+            tripDuration_mean, tripDuration_var = running_dict["tripDuration"]
             # EMA -> Z-score -> tanh
             tripDuration_mean, tripDuration_var = ema_welford(trip_duration, tripDuration_mean, tripDuration_var, alpha=EMA_ALPHA)
             z = zscore(trip_duration, tripDuration_mean, math.sqrt(tripDuration_var))
@@ -208,11 +132,11 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * tripdur_n
             formula["tripDuration"] = (trip_duration, tripdur_n);
+            running_dict["tripDuration"] = (tripDuration_mean, tripDuration_var)
         else: formula["tripDuration"] = (trip_duration, 0.0);
     # Trip length [average] (using calculated average trip length from blank simulation; minimize)
     if ((factor := params["reward.tripLength"]) != 0.0) or (params["reward.tripLength.monitor"]):
         trip_length = float(results.trip_data["tripLength"])
-        #train_results["tripLength"][iteration] = float(results.trip_data["tripLength"])
         global average_trip_len
         if factor != 0.0:
             # Divide by (blank average trip length * 2)
@@ -223,10 +147,9 @@ def rewardFunction(stations, results, params, formula):
         else: formula["tripLength"] = (trip_length, 0.0);
     # Trip wait time [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.waitTime"]) != 0.0) or (params["reward.waitTime.monitor"]):
-        global waitTime_mean, waitTime_var
         wait_time = float(results.trip_data["waitTime"])
-        #train_results["waitTime"][iteration] = float(0.0)
         if factor != 0.0:
+            waitTime_mean, waitTime_var = running_dict["waitTime"]
             # EMA -> Z-score -> tanh
             waitTime_mean, waitTime_var = ema_welford(wait_time, waitTime_mean, waitTime_var, alpha=EMA_ALPHA)
             z = zscore(wait_time, waitTime_mean, math.sqrt(waitTime_var))
@@ -234,13 +157,14 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * waittime_n
             formula["waitTime"] = (wait_time, float(waittime_n));
+            running_dict["waitTime"] = waitTime_mean, waitTime_var
         else: formula["waitTime"] = (wait_time, 0.0);
     # Stop time [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.stopTime"]) != 0.0) or (params["reward.stopTime.monitor"]):
         global stopTime_mean, stopTime_var
         stop_time = float(results.trip_data["stopTime"])
-        #train_results["stopTime"][iteration] = float(results.trip_data["stopTime"])
         if factor != 0.0:
+            stopTime_mean, stopTime_var = running_dict["stopTime"]
             # EMA -> Z-score -> tanh
             stopTime_mean, stopTime_var = ema_welford(stop_time, stopTime_mean, stopTime_var, alpha=EMA_ALPHA)
             z = zscore(stop_time, stopTime_mean, math.sqrt(stopTime_var))
@@ -248,13 +172,14 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * stoptime_n
             formula["stopTime"] = (stop_time, float(stoptime_n));
+            running_dict["stopTime"] = stopTime_mean, stopTime_var
         else: formula["stopTime"] = (stop_time, 0.0);
     # Time lost [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.timeLoss"]) != 0.0) or (params["reward.timeLoss.monitor"]):
         global timeLoss_mean, timeLoss_var
         time_loss = float(results.trip_data["timeLoss"])
-        #train_results["timeLoss"][iteration] = float(results.trip_data["timeLoss"])
         if factor != 0.0:
+            timeLoss_mean, timeLoss_var = running_dict["timeLoss"]
             # EMA -> Z-score -> tanh
             timeLoss_mean, timeLoss_var = ema_welford(time_loss, timeLoss_mean, timeLoss_var, alpha=EMA_ALPHA)
             z = zscore(time_loss, timeLoss_mean, math.sqrt(timeLoss_var))
@@ -262,13 +187,14 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * timeloss_n
             formula["timeLoss"] = (time_loss, float(timeloss_n));
+            running_dict["timeLoss"] = timeLoss_mean, timeLoss_var
         else: formula["timeLoss"] = (time_loss, 0.0);
     # Energy consumed [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.energyConsumed"]) != 0.0) or (params["reward.energyConsumed.monitor"]):
         global enCons_mean, enCons_var
         energy_consumed = float(results.trip_data["energyConsumed"])
-        #train_results["energyConsumed"][iteration] = float(results.trip_data["energyConsumed"])
         if factor != 0.0:
+            enCons_mean, enCons_var = running_dict["energyConsumed"]
             # EMA -> Z-score -> tanh
             enCons_mean, enCons_var = ema_welford(energy_consumed, enCons_mean, enCons_var, alpha=EMA_ALPHA)
             z = zscore(energy_consumed, enCons_mean, math.sqrt(enCons_var))
@@ -276,15 +202,16 @@ def rewardFunction(stations, results, params, formula):
             # Reward
             reward += factor * 0.0
             formula["energyConsumed"] = (energy_consumed, float(enrgcons_n));
+            running_dict["energyConsumed"] = enCons_mean, enCons_var
         else: formula["energyConsumed"] = (energy_consumed, 0.0);
-    #train_results["reward"][iteration] = reward
     formula["reward"] = (float(reward), 0.0)
     return reward
-def runSimulation(network_name, G, stations, graph, base_trips, params, translator, iteration=None, debug=False):
+def runSimulation(network_name, G, stations, base_trips, params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
-    results = Evaluation(translator)
+    output_subfolder = "solo";
+    if iteration != None: output_subfolder += "_" + str(iteration);
     results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations, params=params,
-                          output_path=output_path, output_subfolder="solo_" + str(iteration),
+                          output_path=output_path, output_subfolder=output_subfolder,
                           debug=debug)
     return results
         
@@ -295,6 +222,12 @@ def runSimulation(network_name, G, stations, graph, base_trips, params, translat
 edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
 
+###### INITIALIZATION
+# Torch init
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# GNN utility
+gnnutil.initialize(edge_attr_list, edge_attr_map, device)
+
 
 if __name__ == "__main__":
     # Parse arguments
@@ -302,14 +235,17 @@ if __name__ == "__main__":
     else: network_name = str(sys.argv[1]);
     # Adjust params
     params = Parameters.config()
-    print(params.groupPrint())
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
-    VISUALIZE = params["sim.visualize"]
+    if params["sim.visualize"]:
+        print("INFO: 'visualize' ignored when training.")
+        params["sim.visualize"] = False
+    VISUALIZE = False
+    PRINT_ERRORS = params["sim.printErrors"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
@@ -320,18 +256,18 @@ if __name__ == "__main__":
     PROGRESS_PRINT = params["training.printProgress"]
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
+    print(params.groupPrint())
     # Traci switch
-    traciutil.initialize(not VISUALIZE)
-    from lib.traci_utility import traci as traci
+    #traciutil.initialize(True)
+    global libsumo_m, traci_m
+    traci = libsumo_m
     
-####### LOADING
+###### LOADING
     # Folder paths (file organization)
     data_path = "networks/" + network_name + "/";
     in_data_path = data_path + network_name;
     output_path = "output/"
     print("Using network '" + network_name + "' under '" + data_path + "'")
-    # Torch init
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     ## Graph
     base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
     base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
@@ -362,7 +298,7 @@ if __name__ == "__main__":
         graph.x = torch.ones(num_nodes, 1, dtype=torch.float32)
     # Edge attributes
     edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
-    applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
+    gnnutil.applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
     ## Other
     global network_diameter, coverage_radius_target, charge_max_eval
     network_diameter = float(nx.diameter(base_G, weight="length"))
@@ -378,7 +314,7 @@ if __name__ == "__main__":
 ###### PRE-RUN
     # Datetime now (file organization)
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = network_name + "_" + start_datetime_str
+    output_folder = network_name + "_gnn_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
@@ -401,7 +337,7 @@ if __name__ == "__main__":
     results = sumoBlankRun(base_net, data_path, network_name, base_trips, results, params=params,
                            output_path=output_path, output_subfolder="blank")
     ## Update graph (Data)
-    graph = applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
+    graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
 
 
 ###### TRAINING
@@ -412,17 +348,15 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     # Reward side variables
     run_reward = None;
-    effect_on_run_reward = 0.1;
-    entropy_coeff = 0.01;
-    global charge_mean, charge_var; charge_mean = 0.0; charge_var = 0.0;
-    global simDuration_mean, simDuration_var; simDuration_mean = None; simDuration_var = None;
-    global tripDuration_mean, tripDuration_var; tripDuration_mean = None; tripDuration_var = None;
-    global waitTime_mean, waitTime_var; waitTime_mean = None; waitTime_var = None;
-    global stopTime_mean, stopTime_var; stopTime_mean = None; stopTime_var = None;
-    global timeLoss_mean, timeLoss_var; timeLoss_mean = None; timeLoss_var = None;
-    global enCons_mean, enCons_var; enCons_mean = None; enCons_var = None;
+    temperature = float(params["training.temperature"])
+    effect_on_run_reward = float(params["training.momentum"]);
+    entropy_coeff = float(params["training.entropyCoeff"]);
+    grad_clip = float(params["training.gradClip"]);
+    global running_dict
+    running_dict = gnnutil.initializeRunningDict();
     # Progress printing
-    print_every = ITERATIONS / PRINTS
+    if PRINTS > 0: print_every = int(ITERATIONS / PRINTS);
+    else: print_every = 0;
     if PROGRESS_WRITE:
         f = open(output_path + "/training/progress.txt", "w"); f.close();
         #f = open(output_path + "/training/best.xml", "w"); f.close()
@@ -443,14 +377,18 @@ if __name__ == "__main__":
         optimizer.zero_grad()
 
         #### 1. Get edge scores and probability
-        # x: [intersections, features], edge_index: [2, roads], edge_attr: [roads, features]
+        # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
         logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
+        if temperature > 0.0:
+            logits = logits / temperature
         probs = torch.softmax(logits, dim=0)
+        log_probs = torch.log(probs + 1e-10)
+        entropy = -(probs * log_probs).sum(dim=-1).mean()
 
         #### 2. Select k edges
         # Sampling (multinomial)
         selected_indices_t = torch.multinomial(probs, num_samples=K, replacement=False)
-        log_probs = calculate_log_probs(logits, selected_indices_t)
+        sel_log_probs = gnnutil.calculate_log_probs(logits, selected_indices_t)
         selected_edge_indices = selected_indices_t.tolist()
         selected_edges = [translator.indexToEdge(sei) for sei in selected_edge_indices]
         selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
@@ -462,21 +400,23 @@ if __name__ == "__main__":
         if len(selected_edge_indices) != len(set(selected_edge_indices)):
             print("ERROR: One edge selected twice:", selected_edge_indices, "->", stations.listEdges())
 
+        #### 3. Run evaluation
         if sim_tries > 10:
             raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {stations.listEdges()}.")
-
-        #### 3. Run evaluation
         last_results = results
         if (iteration == 1): params["prep.preprocess"] = False;
         if MEASURE_TIME: sim_stime = time.perf_counter();
+        results = Evaluation(translator)
         try:
-            results = runSimulation(network_name, base_G, stations, graph, base_trips,
-                                    params, translator, iteration,
-                                    debug=False)
+            results = runSimulation(network_name, base_G, stations, base_trips,
+                                    params, results, iteration, debug=False)
             sim_tries = 0
         except Exception as e:
             # Very rarely crashes when setting stop for charging - WIP
-            print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}:\n", e, "\nretrying...")
+            if PRINT_ERRORS:
+                print(f"WARNING: Simulation failed at iteration {iteration+1} for stations {stations.listEdges()}:")
+                traceback.print_tb(e.__traceback__)
+                print(e)
             sim_tries += 1
             traci.close()
             continue
@@ -491,28 +431,38 @@ if __name__ == "__main__":
         gnnutil.updateResultsDict(train_results, formula, iteration)
         best_modified = gnnutil.updateBestDict(best, stations.listEdges(), formula, modified=best_modified)
         # Running reward/advantage
-        if run_reward == None:
-            run_reward = reward;
-        else:
+        if effect_on_run_reward > 0.0:
+            if run_reward == None: run_reward = reward;
+            advantage = float(reward - run_reward)
             run_reward = ((1 - effect_on_run_reward) * run_reward) +\
                          (effect_on_run_reward * reward)
-        advantage = float(reward - run_reward)
+        else:
+            advantage = reward
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             rewardcalc_time += sim_etime - sim_stime;
             
 
         # 5. Policy Gradient Update
-        # Entropy bonus
-        #entropy_bonus = -entropy_coeff * entropy.mean()
+        # Entropy loss for exploration
+        entropy_loss = -entropy_coeff * entropy
         # Loss; minimize negative to maximize reward
-        loss = (-log_probs.sum() * advantage)# + entropy_bonus;
+        #  Mean
+        #loss = (-sel_log_probs * advantage).mean();
+        #  Normalized by sqrt
+        loss = (-sel_log_probs.sum() * advantage) / np.sqrt(K)
+        loss += entropy_loss;
+        # Backprop
         loss.backward()
+        # Gradient clipping
+        if grad_clip > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        # Step
         optimizer.step()
 
         # 6. Update environment
         if MEASURE_TIME: sim_stime = time.perf_counter();
-        graph = applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged"], results)
+        graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged"], results)
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             envupdate_time += sim_etime - sim_stime;
@@ -521,7 +471,7 @@ if __name__ == "__main__":
         pbar.update(1)
         
         # Debug
-        if (iteration + 1) % print_every == 0:
+        if print_every > 0 and (iteration + 1) % print_every == 0:
             s = f"> {(iteration + 1):5d} / {ITERATIONS}:\n"
             s += "  chosen: " + str(selected_edge_indices) + "\n"
             #s += f"  flow:   {flow:10.4f}  | {max_flow}\n";
@@ -572,9 +522,14 @@ if __name__ == "__main__":
 
     #### Finish and save
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
-    # Save model
+    ## Save model
     torch.save(model.state_dict(), output_path + "/results/model.pt")
-    # Save training results
+    ## Save training results
+    # Write best
+    gnnutil.updateBestTree(best_tree, best, best_modified)
+    ET.indent(best_tree, space="    ")
+    best_tree.write(output_path + "/training/best.xml");
+    # Write plot figures
     figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS)
     for stat in figs:
         fig, ax = figs[stat]

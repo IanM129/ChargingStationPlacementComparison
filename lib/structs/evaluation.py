@@ -75,7 +75,7 @@ class Evaluation:
             self.edge_data["vehicles"][edge] = int(data["entered"]);
             self.edge_data["flow"][edge] = float(stats["flow"]);
             self.edge_data["vaporized"][edge] = int(data["vaporized"]);
-    def setStationData(self, stations, sttn_util_rate, station_charges, total_charge):
+    def setStationData(self, stations, sttn_util_rate, station_charges, total_charge, money_earned):
         self.station_data["charged"] = {};
         self.station_data["occupancyRate"] = {};
         self.station_data["utilization"] = {};
@@ -86,6 +86,28 @@ class Evaluation:
             self.station_data["occupancyRate"][seid] = float(sttn_util_rate[sid][0]);
             self.station_data["utilization"][seid] = float(sttn_util_rate[sid][1]);
         self.station_data["totalCharge"] = float(total_charge)
+        self.station_data["totalMoneyEarned"] = float(money_earned)
+    def setStationDataComp(self, stations, sttn_util_rate, station_charges, total_charge, money_earned,
+                           total_charge_r, total_charge_b, money_earned_r, money_earned_b):
+        for k in ["charged", "occupancyRate", "utilization"]:
+            self.station_data[k] = {};
+            self.station_data[k]["_red"] = {};
+            self.station_data[k]["_blue"] = {};
+        for si in stations:
+            sid = si.getID()
+            seid = self.translator.IDToEdge(si.edge_id)
+            suff = si.suffix
+            self.station_data["charged"][suff][seid] = float(station_charges[sid]);
+            self.station_data["occupancyRate"][suff][seid] = float(sttn_util_rate[sid][0]);
+            self.station_data["utilization"][suff][seid] = float(sttn_util_rate[sid][1]);
+        self.station_data["totalCharge"] = float(total_charge)
+        self.station_data["charge"] = {}
+        self.station_data["charge"]["_red"] = float(total_charge_r)
+        self.station_data["charge"]["_blue"] = float(total_charge_b)
+        self.station_data["totalMoneyEarned"] = float(money_earned)
+        self.station_data["moneyEarned"] = {}
+        self.station_data["moneyEarned"]["_red"] = float(money_earned_r)
+        self.station_data["moneyEarned"]["_blue"] = float(money_earned_b)
     # Get
     # /
     # Base overrides

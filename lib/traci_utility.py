@@ -5,18 +5,16 @@ import traci.constants as tc
 #from lib.structs.stationinfo import StationInfo, StationInfoDataset
 from lib.structs.trip import Trip
 
+import traci as traci_m
+import libsumo as libsumo_m
 global traci
 traci = None
 
 #### Initialize -> must be called for traci to libsumo switch
 def initialize(libsumo_on):
     global traci
-    if libsumo_on:
-        import libsumo as traci_m
-        traci = traci_m
-    else:
-        import traci as traci_m
-        traci = traci_m
+    if libsumo_on: traci = libsumo_m;
+    else: traci = traci_m;
 
 #### Subscriptions and steps
 def subscribeParkingVehicleCount(park_id):
@@ -157,6 +155,15 @@ def colorByCharge(vehID, cur_charge, veh_colors, max_charge, gradient=True):
             color = (255, 165, 0, 255)
         else:
             color = (255, 0, 0, 255)
+    if vehID not in veh_colors or veh_colors[vehID] != color:
+        traci.vehicle.setColor(vehID, color)
+        veh_colors[vehID] = color
+## Set color based on if the vehicle is going to a station or not
+def colorByGoingToStation(vehID, going_to_station, veh_colors):
+    if going_to_station:
+        color = (255, 0, 0)
+    else:
+        color = (0, 255, 0)
     if vehID not in veh_colors or veh_colors[vehID] != color:
         traci.vehicle.setColor(vehID, color)
         veh_colors[vehID] = color

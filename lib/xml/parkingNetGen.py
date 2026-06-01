@@ -292,7 +292,8 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")
-        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml")
+        writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
+                   temp_folder=output_path)
     else:
         return (nodes_tree, edges_tree, stations_tree)
 

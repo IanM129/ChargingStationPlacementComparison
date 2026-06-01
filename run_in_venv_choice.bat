@@ -11,31 +11,46 @@ exit /b
 echo.
 echo ==========================
 echo Choose an option to run:
-echo blank			-
-echo solo			- 
+echo blank			- run a blank example (no charging stations)
+echo solo			- run an algorithmic solo simulation
+echo comp			- run a algorithmic competitive simulation
 echo gnn			- trains a solo network (default)
 echo marl			- trains two competing networks
 echo ==========================
 set /p choice=Enter your choice:
 :: Choice to file
 if /i "%choice%" == "" (
-	set pyfile=gnn.py
-	goto pass_type
+:: default
+	goto comp
 )
 if /i "%choice%"=="blank" (
+:blank
 	set pyfile=blank.py
+	set title=Blank simulation
 	goto pass_type
 )
 if /i "%choice%"=="solo" (
+:solo
 	set pyfile=solo.py
+	set title=Solo algorithm
+	goto pass_type
+)
+if /i "%choice%"=="comp" (
+:comp
+	set pyfile=comp.py
+	set title=Competitive algorithm
 	goto pass_type
 )
 if /i "%choice%"=="gnn" (
+:gnn
 	set pyfile=gnn.py
+	set title=Graph NN RL
 	goto pass_type
 )
 if /i "%choice%"=="marl" (
+:marl
 	set pyfile=marl.py
+	set title=Multi-Agent RL
 	goto pass_type
 )
 echo.
@@ -74,6 +89,7 @@ exit /b
 	
 :run
 :: Run Python file through venv
-start "Runner" cmd /k "_venv\Scripts\python.exe %pyfile% %network_name%"
+set title="Runner %title%"
+start %title% cmd /k "_venv\Scripts\python.exe %pyfile% %network_name%"
 
 exit /b
