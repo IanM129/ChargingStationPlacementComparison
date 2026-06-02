@@ -17,7 +17,7 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Multinomial, Beta
+from torch.distributions import Multinomial
 from torch_geometric.nn import GCNConv
 from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx as torch_from_networkx
@@ -29,9 +29,8 @@ import traci as traci_m
 
 from lib.utility import clamp, welford, ema, ema_welford, zscore
 
-#from lib.gnn.model1 import EdgeGNN
-#from lib.gnn.model2 import EdgePosGNN
-from lib.gnn.model3 import EdgePosAndPriceGNN
+from lib.gnn.model1 import EdgeGNN
+from lib.gnn.model2 import EdgePosGNN
 import lib.gnn.utility as gnnutil
 
 import lib.traci_utility as traciutil
@@ -241,7 +240,6 @@ def rewardFunction_unique(stations_u, results, params, formula, suffix):
     # Money earned (EMA -> Z-score -> tanh; maximize)
     if ((factor := params["compReward.moneyEarned"]) != 0.0) or (params["compReward.moneyEarned.monitor"]):
         money_val = float(results.agent_data["moneyEarned"][suffix])
-        #print(f"{suffix[1:].capitalize()} earned money: ", money_val)
         if factor != 0.0:
             money_mean, money_var = running_dict["moneyEarned"][suffix]
             # EMA -> Z-score -> tanh
@@ -253,19 +251,16 @@ def rewardFunction_unique(stations_u, results, params, formula, suffix):
             formula["moneyEarned"] = (float(money_val), float(money_n));
             running_dict["moneyEarned"][suffix] = (money_mean, money_var)
         else: formula["moneyEarned"] = (float(money_val), 0.0);
-    # (Price; modify reward directly through price?)
     formula["reward"] = (float(reward), 0.0)
     return reward
 
-def runSimulation(network_name, G, stations, all_stations, prices, base_trips, params, results, iteration=None, debug=False, agent_colors=None):
+def runSimulation(network_name, G, stations, all_stations, base_trips, params, results, iteration=None, debug=False, agent_colors=None):
     trips = copy.deepcopy(base_trips)
     output_subfolder = "comp";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(base_net, G, data_path, network_name, trips, results,
-                          stations, all_stations,
-                          output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
-                          params=params, debug=debug)
+    results = sumoCompRun(base_net, G, data_path, network_name, trips, results, stations, all_stations,
+                          output_path=output_path, output_subfolder=output_subfolder,
+                          params=params, debug=debug, agent_colors=agent_colors)
     return results
         
 
@@ -273,7 +268,7 @@ def runSimulation(network_name, G, stations, all_stations, prices, base_trips, p
 ###### SETTINGS
 agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
 ## Training
-edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged", "price"]
+edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
 
 ###### INITIALIZATION
@@ -305,9 +300,6 @@ if __name__ == "__main__":
     K = params["station.k"]
     ITERATIONS = params["training.iterations"]
     AGENT_COUNT = params["training.agents"]
-    MIN_PRICE = params["training.minPrice"]
-    MAX_PRICE = params["training.maxPrice"]
-    PRICE_LAMBDA = params["training.priceLambda"]
     EMA_ALPHA = params["training.emaAlpha"]
     MEASURE_TIME = params["training.measureTime"]
     PRINTS = params["training.progressDebugs"]
@@ -405,7 +397,7 @@ if __name__ == "__main__":
     graph = graph.to(device)
     models = []; optimizers = [];
     for a in range(AGENT_COUNT):
-        models.append(EdgePosAndPriceGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64)) #EdgePosAndPriceGNN
+        models.append(EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64)) #EdgeGNN
         models[a].to(device);
         optimizers.append(torch.optim.Adam(models[a].parameters(), lr=1e-3))
     suffixes = [("_" + n) for n in agent_colors]
@@ -429,7 +421,7 @@ if __name__ == "__main__":
         eval_time = 0.0; rewardcalc_time = 0.0; envupdate_time = 0.0;
     # Monitor training results
     global train_results
-    train_results = gnnutil.initializeResultsDict(params, ITERATIONS, K, agent_count=AGENT_COUNT)
+    train_results = gnnutil.initializeResultsDict(params, ITERATIONS, agent_count=AGENT_COUNT)
     best = {}; best["General"] = gnnutil.initializeBestDict(params, competitive=False);
     best_modified = {"General" : {}};
     for a in range(AGENT_COUNT):
@@ -440,63 +432,47 @@ if __name__ == "__main__":
     pbar = tqdm(total=ITERATIONS)
     iteration = 0
     sim_tries = 0
-    stations = []; prices = np.zeros(AGENT_COUNT);
-    sel_log_probs = [] #torch.zeros(AGENT_COUNT, K);
-    price_log_probs = [] #torch.zeros(AGENT_COUNT);
-    sel_entropy = [] #torch.zeros(AGENT_COUNT);
-    price_entropy = [] #torch.zeros(AGENT_COUNT);
+    stations = [];
+    sel_log_probs = []; entropy = [];
     formula_general = {}; formulas = [];
     reward_general = None; rewards = np.zeros(AGENT_COUNT);
     advantage_general = 0.0; advantages = np.zeros(AGENT_COUNT);
     for a in range(AGENT_COUNT):
         stations.append(None);
-        sel_log_probs.append(None); price_log_probs.append(None);
-        sel_entropy.append(None); price_entropy.append(None);
+        sel_log_probs.append(None); entropy.append(None);
         formulas.append({});
     while iteration < ITERATIONS:
         all_stations = [];
-        for a in range(AGENT_COUNT):
-            model = models[a]
-            model.train(); optimizers[a].zero_grad();
+        for i in range(AGENT_COUNT):
+            model = models[i]
+            model.train(); optimizers[i].zero_grad();
             #### 1. Get edge scores and probability
             # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
-            logits, price_alpha, price_beta = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
-            # Process
+            logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
             if temperature > 0.0:
                 logits = logits / temperature
-                price_alpha = price_alpha / temperature
-                price_beta = price_beta / temperature
-            # Edge selection probabilitites
-            sel_probs = torch.softmax(logits, dim=0)
-            sel_log_probs_cur = torch.log(sel_probs + 1e-10)
-            entropy_cur = -(sel_probs * sel_log_probs_cur).sum(dim=-1).mean()
-            # Price decision distribution
-            price_dist = Beta(price_alpha, price_beta)
-            #### 2. Select k edges and price
-            # Edge sampling (multinomial)
-            selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
+            probs = torch.softmax(logits, dim=0)
+            log_probs = torch.log(probs + 1e-10)
+            entropy_cur = -(probs * log_probs).sum(dim=-1).mean()
+            #### 2. Select k edges
+            # Sampling (multinomial)
+            selected_indices_t = torch.multinomial(probs, num_samples=K, replacement=False)
             sel_log_probs_cur = gnnutil.calculate_log_probs(logits, selected_indices_t)
             selected_edge_indices = selected_indices_t.tolist()
             selected_edges = [translator.indexToEdge(sei) for sei in selected_edge_indices]
             selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
-            # Price sampling
-            unit_price = price_dist.rsample()
-            price = (MIN_PRICE + (unit_price * (MAX_PRICE - MIN_PRICE)))
-            price_log_probs_cur = price_dist.log_prob(unit_price)
-            price_entropy_cur = price_dist.entropy()
             # Transform to stations
             chosen_stations = []
-            for edge in selected_edge_ids: chosen_stations.append(StationInfo(edge, STATION_CAPACITY, price, suffix=suffixes[a]));
+            for edge in selected_edge_ids: chosen_stations.append(StationInfo(edge, STATION_CAPACITY, suffix=suffixes[i]));
             chosen_stations = StationInfoDataset(chosen_stations)
             # Check if double
             if len(selected_edge_indices) != len(set(selected_edge_indices)):
                 print("ERROR: One edge selected twice:", selected_edge_indices, "->", chosen_stations.listEdges())
             # Save for outside of loop
-            stations[a] = chosen_stations; all_stations.extend(chosen_stations.arr);
-            prices[a] = price.detach().item()
-            sel_log_probs[a] = sel_log_probs_cur;
-            price_log_probs[a] = price_log_probs_cur;
-            sel_entropy[a] = entropy_cur; price_entropy[a] = price_entropy_cur;
+            stations[i] = chosen_stations
+            all_stations.extend(chosen_stations.arr)
+            sel_log_probs[i] = sel_log_probs_cur
+            entropy[i] = entropy_cur
         all_stations = StationInfoDataset(all_stations)
         
         #### 3. Run evaluation
@@ -507,8 +483,9 @@ if __name__ == "__main__":
         if MEASURE_TIME: sim_stime = time.perf_counter();
         results = Evaluation(translator)
         try:
-            results = runSimulation(network_name, base_G, stations, all_stations, prices, base_trips,
-                                    params, results, iteration, agent_colors=agent_colors, debug=False)
+            results = runSimulation(network_name, base_G, stations, all_stations, base_trips,
+                                    params, results, iteration, agent_colors=agent_colors,
+                                    debug=False)
             sim_tries = 0
         except Exception as e:
             # Very rarely crashes when setting stop for charging - WIP
@@ -529,11 +506,8 @@ if __name__ == "__main__":
         for a in range(AGENT_COUNT):
             rewards[a] = rewardFunction_unique(stations[a], results, params, formulas[a], suffixes[a])
             formulas[a]["reward"] = (formulas[a]["reward"][0] + formula_general["reward"][0], 0.0);
-            formulas[a]["price"] = (prices[a], 0.0)
             rewards[a] += reward_general
-        # Update results dictionary 
-        gnnutil.updateResultsDict_comp(train_results, stations, formula_general, formulas, iteration)
-        # Update best
+        gnnutil.updateResultsDict_comp(train_results, formula_general, formulas, iteration)
         best_modified["General"] = gnnutil.updateBestDict(best["General"], all_stations.listEdges(), formula_general, modified=best_modified["General"])
         for a in range(AGENT_COUNT):
             best_key = agent_colors[a].capitalize()
@@ -547,8 +521,8 @@ if __name__ == "__main__":
             run_reward_general = ((1 - effect_on_run_reward) * run_reward_general) +\
                                  (effect_on_run_reward * reward_general)
             for a in range(AGENT_COUNT):
-                advantages[a] = float(rewards[a] - run_rewards[a])
-                run_rewards[a] = ((1 - effect_on_run_reward) * run_rewards[a]) +\
+                advantages[i] = float(rewards[a] - run_rewards[a])
+                run_rewards[i] = ((1 - effect_on_run_reward) * run_rewards[a]) +\
                                  (effect_on_run_reward * rewards[a])
         else:
             advantage_general = reward_general
@@ -556,18 +530,16 @@ if __name__ == "__main__":
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             rewardcalc_time += sim_etime - sim_stime;
-
-        #### 5. Policy Gradient Update
+            
         for a in range(AGENT_COUNT):
-            # Policy loss
-            # (Edge selection normalized by sqrt instead of mean)
-            sel_edge_loss = ((sel_log_probs[a].sum() / np.sqrt(K)))
-            price_loss = price_log_probs[a] * PRICE_LAMBDA
+            # 5. Policy Gradient Update
             # Entropy loss for exploration
-            entropy_bonus = (sel_entropy[a] + (0.1 * price_entropy[a]))
-            entropy_loss = -entropy_coeff * entropy_bonus
-            ## Loss; minimize negative to maximize reward
-            loss = -(sel_edge_loss + price_loss) * advantages[a]
+            entropy_loss = -entropy_coeff * entropy[a]
+            # Loss; minimize negative to maximize reward
+            #  Mean
+            #loss = (-sel_log_probs * advantage).mean();
+            #  Normalized by sqrt
+            loss = (-sel_log_probs[a].sum() * advantages[a]) / np.sqrt(K)
             loss += entropy_loss;
             # Backprop
             loss.backward()
@@ -577,9 +549,9 @@ if __name__ == "__main__":
             # Step
             optimizers[a].step();
 
-        #### 6. Update environment
+        # 6. Update environment
         if MEASURE_TIME: sim_stime = time.perf_counter();
-        graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged", "price"], results)
+        graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged"], results)
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             envupdate_time += sim_etime - sim_stime;
@@ -644,10 +616,8 @@ if __name__ == "__main__":
     ## Save training results
     # Write best
     gnnutil.updateBestTree_comp(best_tree, best, best_modified)
-    ET.indent(best_tree, space=' ' * 4)
+    ET.indent(best_tree, space="    ")
     best_tree.write(output_path + "/training/best.xml");
-    # Save result data
-    xmlOut.saveTrainResults(train_results, output_path + "/results/data.xml")
     # Write plot figures
     figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS, agent_colors=agent_colors)
     # Combine similar

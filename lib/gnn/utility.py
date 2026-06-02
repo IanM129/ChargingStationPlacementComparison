@@ -102,8 +102,13 @@ def applyResultsToGraph(graph, translator, attrs, results):
                     graph.edge_attr[:, attr_i] = vaporized;
                 # Stations
                 case "charged":
-                    if "_red" in results.station_data["charged"]:
-                        data = results.station_data["charged"]["_red"] | results.station_data["charged"]["_blue"];
+                    rand_key = next(iter(results.station_data["charged"].keys()))
+                    #if "_red" in results.station_data["charged"]:
+                    if rand_key[0] == '_':
+                        data = {}
+                        for suffix in results.station_data["charged"]:
+                            data = data | results.station_data["charged"][suffix]
+                        #data = results.station_data["charged"]["_red"] | results.station_data["charged"]["_blue"];
                     else:
                         data = results.station_data["charged"];
                     charged = np.zeros(len(edges), dtype=float)
@@ -113,6 +118,23 @@ def applyResultsToGraph(graph, translator, attrs, results):
                     #print("charged:", charged.shape, "\n", charged)
                     charged = torch.from_numpy(charged).to(graph.edge_attr.device)
                     graph.edge_attr[:, attr_i] = charged;
+                case "price":
+                    data = {}
+                    rand_key = next(iter(results.station_data["price"].keys()))
+                    if rand_key[0] == '_':
+                        for suffix in results.station_data["price"]:
+                            for edge in results.station_data["charged"][suffix]:
+                                data[edge] = results.station_data["price"][suffix]
+                    else:
+                        for edge in results.station_data["charged"]:
+                            data[edge] = results.station_data["price"];
+                    price = np.zeros(len(edges), dtype=float)
+                    for edge in data:
+                        edge_ind = translator.edgeToIndex(edge)
+                        price[edge_ind] = data[edge]
+                    #print("price:", price.shape, "\n", price)
+                    price = torch.from_numpy(price).to(graph.edge_attr.device)
+                    graph.edge_attr[:, attr_i] = price;
                 # Other
                 case _:
                     raise Exception(f"Undefined attribute '{attr}'")
@@ -124,23 +146,28 @@ def applyResultsToGraph(graph, translator, attrs, results):
 
 #### Training dictionaries
 ## Init
-def initializeResultsDict(params, iteration_count, competitive=False):
+def initializeResultsDict(params, iteration_count, K, agent_count=1):
     train_results = {}
     for p in params.groups["reward"]:
         if params["reward." + p + ".monitor"] == True:
             train_results[p] = np.zeros(iteration_count)
-    if competitive:
+    if agent_count > 1:
         for p in params.groups["compReward"]:
             if params["compReward." + p + ".monitor"] == True:
-                train_results[p] = {}
-                train_results[p]["_red"] = np.zeros(iteration_count)
-                train_results[p]["_blue"] = np.zeros(iteration_count)
-        train_results["reward"] = {}
-        train_results["reward"]["_general"] = np.zeros(iteration_count)
-        train_results["reward"]["_red"] = np.zeros(iteration_count)
-        train_results["reward"]["_blue"] = np.zeros(iteration_count)
+                train_results[p] = np.zeros((agent_count, iteration_count))
+                #train_results[p]["_red"] = np.zeros(iteration_count)
+                #train_results[p]["_blue"] = np.zeros(iteration_count)
+        train_results["generalReward"] = np.zeros(iteration_count)
+        train_results["reward"] = np.zeros((agent_count, iteration_count))
+        #train_results["reward"]["_general"] = np.zeros(iteration_count)
+        #train_results["reward"]["_red"] = np.zeros(iteration_count)
+        #train_results["reward"]["_blue"] = np.zeros(iteration_count)
+        train_results["price"] = np.zeros((agent_count, iteration_count))
+        train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=str)
     else:
         train_results["reward"] = np.zeros(iteration_count)
+        #train_results["price"] = np.zeros(iteration_count)
+        train_results["stations"] = np.empty(iteration_count, dtype=str)
     return train_results
 def initializeBestDict(params, competitive=False):
     if competitive: group_name = "compReward";
@@ -154,35 +181,48 @@ def initializeBestDict(params, competitive=False):
                 case 1: best[p] = (-np.inf, None);
                 case _: best[p] = (0.0, None);
     return best
-def initializeRunningDict(competitive=False):
+def initializeRunningDict(suffixes=[]):
     d = {}
     general = {"totalCharge", "simDuration", "tripDuration", "waitTime",
                "stopTime", "timeLoss", "energyConsumed"}
     for n in general:
         d[n] = (None, None);
-    if competitive:
+    if len(suffixes) > 0:
         comp_list = {"coverage", "charge", "moneyEarned"}
         for n in comp_list:
             d[n] = {}
-            d[n]["_red"] = (None, None); d[n]["_blue"] = (None, None);
+            for suffix in suffixes:
+                d[n][suffix] = (None, None);
+            #d[n]["_red"] = (None, None); d[n]["_blue"] = (None, None);
     return d
     
 ## Update
 # Dictionary
-def updateResultsDict(train_results, formula, iteration):
+def updateResultsDict(train_results, stations, formula, iteration):
     for p in train_results:
-        train_results[p][iteration] = formula[p][0];
-def updateResultsDict_comp(train_results, formula, formula_r, formula_b, iteration):
-    for p in train_results:
-        if p == "reward":
-              train_results[p]["_general"][iteration] = formula[p][0]
-              train_results[p]["_red"][iteration] = formula_r[p][0]
-              train_results[p]["_blue"][iteration] = formula_b[p][0]
-        elif isinstance(train_results[p], dict):
-            train_results[p]["_red"][iteration] = formula_r[p][0];
-            train_results[p]["_blue"][iteration] = formula_b[p][0];
+        if p == "stations":
+            train_results[p][iteration] = stations.listEdges();
         else:
             train_results[p][iteration] = formula[p][0];
+def updateResultsDict_comp(train_results, stations, formula_general, formulas, iteration):
+    for p in train_results:
+        #if p == "reward":
+        #      train_results[p]["_general"][iteration] = formula[p][0]
+        #      train_results[p]["_red"][iteration] = formula_r[p][0]
+        #      train_results[p]["_blue"][iteration] = formula_b[p][0]
+        #elif isinstance(train_resulst[p], dict):
+        #    train_results[p]["_red"][iteration] = formula_r[p][0];
+        #    train_results[p]["_blue"][iteration] = formula_b[p][0];
+        if p == "stations":
+            for a in range(len(train_results[p])):
+                train_results[p][a][iteration] = stations[a].listEdges()
+        elif p == "generalReward":
+            train_results[p][iteration] = formula_general["reward"][0]
+        elif len(train_results[p].shape) > 1:
+            for a in range(len(train_results[p])):
+                train_results[p][a][iteration] = formulas[a][p][0];
+        else:
+            train_results[p][iteration] = formula_general[p][0];
     return
 def updateBestDict(best, station_edges, formula, modified=None):
     if not modified: modified = set();
@@ -211,10 +251,9 @@ def updateBestTree(best_tree, best : dict, modified : set = None):
         xmlout.dictToElement(best[p][1], root=el)
     return
 def updateBestTree_comp(best_tree, best : dict, modified : set = None):
-    util.prettyPrintDict(best)
+    #util.prettyPrintDict(best)
     if not modified: modified = best.keys();
     root = best_tree.getroot()
-    #root_names = ["_general", "_red", "_blue"]
     for r in modified:
         parent = root.find(r)
         if parent == None: parent = ET.SubElement(root, r);
@@ -262,7 +301,10 @@ def getPlotMetadata(stat):
             data["title"] = "Money earned"
             if stat == "totalMoneyEarned": data["title"] += " (Total)";
             data["unit"] = "Euro (€)"
-        case "reward":
+        case "price":
+            data["title"] = "Charge price"
+            data["unit"] = "Euro (€) per kWh"
+        case "reward" | "generalReward":
             data["title"] = "Reward"
             data["unit"] = ""
     return data
@@ -284,38 +326,41 @@ def combineFigures(axes, metadata):
             x = og_line.get_xdata(); y = og_line.get_ydata();
             label=og_line.get_label();
             match (label):
-                case "Total": color = "g";
-                case "Red agent": color = "r";
-                case "Blue agent": color = "b";
+                case "Total": color = "black";
+                case _:
+                    color = label.split(' ', 1)[0].lower();
             line = ax.plot(x, y, color=color, label=label)
             if isinstance(line, list): lines.extend(line);
             else: lines.append(line);
     ax.legend(handles=lines)
     return (fig, ax)
-def plotTrainingResults_figs(train_results, iterations):
+def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
     figs = {}
     x = np.arange(0, iterations)
     for stat in train_results:
+        if stat == "stations": continue;
         metadata = getPlotMetadata(stat)
         data = train_results[stat]
-        if "_red" in data:
+        if len(data.shape) > 1:
             fig, ax = createPlotFigure(metadata)
             handles = []
-            for color in data:
+            for a in range(len(data)):
+                line, = ax.plot(x, data[a], agent_colors[a], label=agent_colors[a].capitalize() + " agent")
+                handles.append(line)
                 #metadata_c = metadata.copy()
-                match (color):
-                    case "_general":
-                        line, = ax.plot(x, data[color], "g", label="Total")
-                        handles.append(line)
-                        #clr_title = "Total";
-                    case "_red":
-                        line, = ax.plot(x, data[color], "r", label="Red agent")
-                        handles.append(line)
-                        #clr_title = r"\textcolor{red}{Red}";
-                    case "_blue":
-                        line, = ax.plot(x, data[color], "b", label="Blue agent")
-                        handles.append(line)
-                        #clr_title = r"\textcolor{red}{Blue}";
+                #match (color):
+                #    case "_general":
+                #        line, = ax.plot(x, data[color], "g", label="Total")
+                #        handles.append(line)
+                #        #clr_title = "Total";
+                #    case "_red":
+                #        line, = ax.plot(x, data[color], "r", label="Red agent")
+                #        handles.append(line)
+                #        #clr_title = r"\textcolor{red}{Red}";
+                #    case "_blue":
+                #        line, = ax.plot(x, data[color], "b", label="Blue agent")
+                #        handles.append(line)
+                #        #clr_title = r"\textcolor{red}{Blue}";
                 #metadata_c["title"] += " (" + clr_title + ")";
             ax.legend(handles=handles)
             figs[stat] = (fig, ax)
@@ -324,14 +369,3 @@ def plotTrainingResults_figs(train_results, iterations):
             ax.plot(x, data, label="Total")
             figs[stat] = (fig, ax)
     return figs
-def plotTrainingResults_axes(train_results, iterations):
-    fig, axs = plt.subplots(len(train_results.keys()))
-    fig.suptitle("Iterations: " + str(iterations))
-    x = np.arange(0, iterations)
-    i = 0
-    for stat in train_results:
-        metadata = getPlotMetadata(stat)
-        axs[i].set_title(metadata["title"])
-        axs[i].plot(x, train_results[stat])
-        i += 1
-    return fig, axs

@@ -122,7 +122,7 @@ def findClosestChargingStation(vehID, charge, stations, cost_function, route=Non
         detour_time_diff = detour_time - route_info.travelTime
         detour_distance_diff = detour_distance - route_info.length
         # Calculate cost (maybe use the exact price for charging instead of per KWh)
-        station_costs[sttn_id] = cost_function(detour_time_diff, detour_distance_diff)
+        station_costs[sttn_id] = cost_function(detour_time_diff, detour_distance_diff, sttn_info.price)
         # Save routes
         station_routes[sttn_id] = (route_info_before, route_info_after)
     #print(cur_edge, "->", next_dest_edge)

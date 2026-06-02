@@ -394,7 +394,7 @@ if __name__ == "__main__":
         selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
         # Transform to stations
         stations = []
-        for edge in selected_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY));
+        for edge in selected_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY, MONEY_PER_KWH));
         stations = StationInfoDataset(stations)
         # Check if double
         if len(selected_edge_indices) != len(set(selected_edge_indices)):

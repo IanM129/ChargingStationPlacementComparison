@@ -19,7 +19,7 @@ class StationInfo:
     # occupied          (tuple) occupied spot count
     # suffix            id suffix
     
-    def __init__(self, edge_id, total_capacity : float, dedge_id=None, redge_id=None, suffix=""):
+    def __init__(self, edge_id, total_capacity : float, price : float, dedge_id=None, redge_id=None, suffix=""):
         self.edge_id = edge_id
         self.name_id = parkingNetGen.getStationID(edge_id, suffix=suffix, with_index=False)
         #self.ids =(parkingNetGen.getStationID(edge_id, suffix=suffix), parkingNetGen.getStationID(edge_id, suffix=suffix, reverse=True))
@@ -29,6 +29,8 @@ class StationInfo:
         first_capacity = math.floor(total_capacity / 2.0)
         self.capacity = (first_capacity, total_capacity - first_capacity)
         self.occupied = [0, 0]
+        self.price = price
+        # Utility
         #if dedge_id == None:
         #    dedge_id = graphutil.translateNetEdgeToDetailedEdgeID(edge_id);
         self.dedge_id = dedge_id
@@ -44,9 +46,9 @@ class StationInfo:
         else:
             self.dnode_id = graphutil.getRoadIDFromNodes(node_t, node_f)
     @staticmethod
-    def fromDetailedEdge(dedge_id, total_capacity, suffix=""):
+    def fromDetailedEdge(dedge_id, total_capacity, price, suffix=""):
         edge_id = graphutil.translateDetailedRoad(dedge_id, as_tuple=False)
-        s = StationInfo(edge_id, total_capacity, dedge_id=dedge_id, suffix=suffix);
+        s = StationInfo(edge_id, total_capacity, price, dedge_id=dedge_id, suffix=suffix);
         return s
     def getID(self, reverse=False, with_index=True):
         return self.name_id + ("_1" if reverse else "_0"); #self.ids[1 if reverse else 0];

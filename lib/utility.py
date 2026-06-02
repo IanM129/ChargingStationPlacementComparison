@@ -34,6 +34,22 @@ def ema_welford(x, mean, var, alpha=0.01):
     return mean, var
 
 
+## Other
+#["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
+def colorNameToRGB(color_name):
+    match (color_name.lower()):
+        case "red": return (1, 0, 0);
+        case "green": return (0, 1, 0);
+        case "blue": return (0, 0, 1);
+        case "orange": return (1.0, 0.65, 0.0);
+        case "purple": return (0.5, 0.0, 0.5);
+        case "olive": return (0.5, 0.5, 0.0);
+        case "brown": return (0.6, 0.3, 0.0);
+        case "cyan": return (0.0, 1.0, 1.0);
+        case "pink": return (1.0, 0.75, 0.8);
+        case "gray": return (0.5, 0.5, 0.5);
+    return None;
+
 ## Debugging
 def prettyPrintDict(d, indent=0):
    for key, value in d.items():

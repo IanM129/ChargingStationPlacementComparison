@@ -9,13 +9,27 @@ import lib.graphing.utility as graphutil
 def dictToElement(d, root=None):
     if root == None: root = ET.Element("dictionary");
     for key, value in d.items():
-        child = root.find(key)
-        if child == None: child = ET.SubElement(root, key)
-        else: child.clear()
+        child = root.find(str(key))
+        if child == None: child = ET.SubElement(root, str(key))
+        else: child.clear();
         if isinstance(value, list):
             for el in value:
                 el_child = ET.SubElement(child, "element")
-                el_child.text = el
+                el_child.text = str(el)
+        else: child.text = str(value);
+    return root
+def dictToElement_recursive(d, root=None):
+    if root == None: root = ET.Element("dictionary");
+    for key, value in d.items():
+        child = root.find(str(key))
+        if child == None: child = ET.SubElement(root, str(key))
+        else: child.clear()
+        if isinstance(value, dict):
+            el = dictToElement_recursive(value, child)
+        elif isinstance(value, list):
+            for el in value:
+                el_child = ET.SubElement(child, "element")
+                el_child.text = str(el)
         else: child.text = str(value);
     return root
 
@@ -285,6 +299,12 @@ def getEdgeDataStats(filepath):
     return result
     
 
+# Finalization
+def saveTrainResults(train_results, filepath):
+    tree = ET.ElementTree(ET.fromstring("<results></results>"))
+    dictToElement_recursive(train_results, tree.getroot())
+    ET.indent(tree, space=' ' * 4)
+    tree.write(filepath)
 
 def clean(data_path):
     files_to_delete = [

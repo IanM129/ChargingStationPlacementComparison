@@ -9,7 +9,6 @@ import sumolib
 import networkx as nx
 import copy
 import numpy as np
-import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 
 global libsumo_m, traci_m
@@ -69,19 +68,14 @@ def stationDistribution(G, G_d, k, debug=False):
     #print("Edges selected for stations:", stations_edges)
     return stations_d, radius
 
-def runSimulation(network_name, G, stations, all_stations, base_trips, prices, params, results, iteration=None, debug=False):
+def runSimulation(network_name, G, stations_r, stations_b, base_trips, params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
     output_subfolder = "comp";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(base_net, G, data_path, network_name, trips, results, stations, all_stations,
+    results = sumoCompRun(base_net, G, data_path, network_name, trips, results, stations_r, stations_b,
                           output_path=output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
                           params=params, debug=debug)
     return results
-
-
-###### SETTINGS
-agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
 
 if __name__ == "__main__":
     # Parse arguments
@@ -97,38 +91,16 @@ if __name__ == "__main__":
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
     VISUALIZE = params["sim.visualize"]
-    PRINT_ERRORS = params["sim.printErrors"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
     ITERATIONS = params["training.iterations"]
-    AGENT_COUNT = params["training.agents"]
     EMA_ALPHA = params["training.emaAlpha"]
     MEASURE_TIME = params["training.measureTime"]
     PRINTS = params["training.progressDebugs"]
     PROGRESS_PRINT = params["training.printProgress"]
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
-    print(params.groupPrint())
-    # Divide K
-    if K % AGENT_COUNT == 0:
-        K = int(K / AGENT_COUNT); params["station.k"] = K;
-        print(f"INFO: Every agent chooses {K} stations.")
-    else:
-        print(f"WARNING: k ({K}) is not divisible by {AGENT_COUNT}, using it unchanged.")
-    # Get prices
-    prices = []
-    base_price = params["station.moneyPerKWh"]
-    for a in range(AGENT_COUNT):
-        if a < len(agent_colors):
-            param_name = "station.moneyPerKWh." + agent_colors[a]
-            if param_name in params:
-                prices.append(params[param_name])
-                continue
-        if PRINT_ERRORS:
-            print(f"WARNING: Failed to fetch price for agent #{a} ('{agent_colors[a]}').")
-        prices.append(base_price)
-    print(f"INFO: Using prices: {prices}.")
     # Traci switch
     global libsumo_m, traci_m
     traci = libsumo_m
@@ -150,7 +122,6 @@ if __name__ == "__main__":
     ## Other
     global network_diameter
     network_diameter = float(nx.diameter(base_G, weight="length"))
-    suffixes = [("_" + n) for n in agent_colors]
 ###### PRE-RUN
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
     output_folder = network_name + "_comp_" + start_datetime_str
@@ -166,30 +137,17 @@ if __name__ == "__main__":
                             max_distance=network_diameter*2.0,
                             ev_pen=EV_PEN)
     # Station distribution
-    stations = []; dist_radius = []; all_stations = [];
-    for a in range(AGENT_COUNT):
-        st, dr = stationDistribution(base_G, base_G_d, K)
-        # Station info from detailed edges
-        st = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, prices[a], suffix=suffixes[a]) for s in st])
-        stations.append(st); dist_radius.append(dr);
-        all_stations.extend(st.arr)
-        print("-- " + str(agent_colors[a].capitalize()) + " stations:", stations[a].printEdges())
-    all_stations = StationInfoDataset(all_stations)
+    stations_r_d, dist_radius_r = stationDistribution(base_G, base_G_d, K)
+    stations_b_d, dist_radius_b = stationDistribution(base_G, base_G_d, K)
+    # Station info from detailed edges
+    stations_r = StationInfoDataset(
+        [StationInfo.fromDetailedEdge(s, STATION_CAPACITY, suffix="_red") for s in stations_r_d])
+    stations_b = StationInfoDataset(
+        [StationInfo.fromDetailedEdge(s, STATION_CAPACITY, suffix="_blue") for s in stations_b_d])
+    print("-- Red stations: ", stations_r.printEdges())
+    print("-- Blue stations:", stations_b.printEdges())
     # Prepare results
     results = Evaluation(translator)
-###### RUN
-    results = runSimulation(network_name, base_G, stations, all_stations, trips, prices,
+##### RUN
+    results = runSimulation(network_name, base_G, stations_r, stations_b, trips,
                   params, results, iteration=None, debug=False)
-
-###### POSTPROCESS
-    # Write results
-    res_dict = results.getFullDict(include_edge_data=True)
-    Evaluation.suffixesToNames(res_dict)
-    res_tree = ET.ElementTree(ET.fromstring('<results></results>'))
-    xmlOut.dictToElement_recursive(res_dict, res_tree.getroot())
-    ET.indent(res_tree, space="    ")
-    res_tree.write(output_path + "/results.xml");
-    full_save_path = pathlib.Path(output_path + "/results.xml").resolve()
-    print(f"Simulation finished, saved results under\n'{str(full_save_path)}'")
-
-    

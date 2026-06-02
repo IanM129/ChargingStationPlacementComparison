@@ -172,6 +172,6 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     results.setVehicleData(vehicle_count=total_veh_count,
                            EV_count=0, EV_set_charge=0,
                            EV_arrived=0, EV_charged=0)
-    results.setStationData([], None, None, 0.0, 0.0)
+    results.setStationData([], 0.0, None, None, 0.0, 0.0)
     return results
         

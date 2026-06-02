@@ -7,6 +7,7 @@ import sumolib
 netconvertBinary = sumolib.checkBinary('netconvert')
 
 from lib.globalVars import *
+from lib.utility import colorNameToRGB
 
 from lib.structs.stationinfo import StationInfoDataset
 
@@ -233,9 +234,8 @@ def addStationPOIs(net_filepath, add_filepath, station_edges, suffix=""):
         deadend_id = getDeadEndID(edge_id) + suffix
         deadend_el = net_tree.find("junction[@id='" + deadend_id + "']")
         x = deadend_el.get("x"); y = deadend_el.get("y");
-        if suffix == "_red": poi_clr = (1, 0, 0);
-        elif suffix == "_blue": poi_clr = (0, 0, 1);
-        else: poi_clr = (0, 0, 0);
+        poi_clr = colorNameToRGB(suffix[1:])
+        #if poi_clr == None: poi_clr = (0, 0, 0);
         addPOI(add_tree, "station_" + edge_id + suffix, x, y, poi_clr, "chargingStation")
     add_tree.write(add_filepath)
 
@@ -281,9 +281,20 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                             output_path="", write=True,
                             vehicle_length=5, min_gap=2.5, wait_queue_size=2,
                             suffix="", reverse_angle=False):
+    ## Get already added stations
+    added_stations = set()
+    for c in stations_tree.getroot():
+        if c.tag == "chargingStation":
+            stid = c.get("id")
+            stid = stid.split('_')[1]
+            added_stations.add(stid)
+    reverse_angle_global = reverse_angle
     # Main
     for stinfo in stations_dataset:
         edge = net.getEdge(stinfo.edge_id)
+        if reverse_angle_global:
+            edge_id = edge.getID()
+            reverse_angle = (edge_id in added_stations);
         nodes_tree, edges_tree, stations_tree = createParkingNet(nodes_tree, edges_tree, stations_tree,
                                                                  stinfo.edge_id, (edge.getFromNode().getID(), edge.getToNode().getID()),
                                                                  vehicle_length=vehicle_length,

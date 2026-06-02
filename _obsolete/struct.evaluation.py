@@ -22,16 +22,10 @@ class Evaluation:
         # . flow
         # . vaporized
     #station_data           data for each station
-    station_comp_stats = ["charged", "occupancyRate", "utilization"]
         # . charged
         # . occupancyRate
         # . utilization
-        # a price
         # * totalCharge
-        # * totalMoneyEarned
-    #agent_data
-        # * totalCharge
-        # * moneyEarned
 
 
     ## Initialization
@@ -57,7 +51,6 @@ class Evaluation:
             "utilization" : None,
             "totalCharge" : 0.0
             }
-        self.agent_data = {}
     ## Set
     def setSimulationData(self, fully_completed, simulationTime):
         self.fullyCompleted = fully_completed
@@ -82,11 +75,10 @@ class Evaluation:
             self.edge_data["vehicles"][edge] = int(data["entered"]);
             self.edge_data["flow"][edge] = float(stats["flow"]);
             self.edge_data["vaporized"][edge] = int(data["vaporized"]);
-    def setStationData(self, stations, price, sttn_util_rate, station_charges, total_charge, money_earned):
+    def setStationData(self, stations, sttn_util_rate, station_charges, total_charge, money_earned):
         self.station_data["charged"] = {};
         self.station_data["occupancyRate"] = {};
         self.station_data["utilization"] = {};
-        self.station_data["price"] = float(price);
         for si in stations:
             sid = si.getID()
             seid = self.translator.IDToEdge(si.edge_id)
@@ -95,43 +87,29 @@ class Evaluation:
             self.station_data["utilization"][seid] = float(sttn_util_rate[sid][1]);
         self.station_data["totalCharge"] = float(total_charge)
         self.station_data["totalMoneyEarned"] = float(money_earned)
-    def setStationDataComp(self, stations, prices, sttn_util_rate, station_charges,
-                           total_charge, total_money_earned, charge, money_earned,
-                           suffixes):
-        agent_count = len(stations)
-        for k in Evaluation.station_comp_stats:
+    def setStationDataComp(self, stations, sttn_util_rate, station_charges, total_charge, money_earned,
+                           total_charge_r, total_charge_b, money_earned_r, money_earned_b):
+        for k in ["charged", "occupancyRate", "utilization"]:
             self.station_data[k] = {};
-            for a in range(agent_count):
-                self.station_data[k][suffixes[a]] = {};
-        self.station_data["price"] = {}
-        for a in range(agent_count):
-            suff = suffixes[a]
-            self.station_data["price"][suff] = float(prices[a]);
-            for si in stations[a]:
-                sid = si.getID()
-                seid = self.translator.IDToEdge(si.edge_id)
-                #suff = si.suffix
-                self.station_data["charged"][suff][seid] = float(station_charges[sid]);
-                self.station_data["occupancyRate"][suff][seid] = float(sttn_util_rate[sid][0]);
-                self.station_data["utilization"][suff][seid] = float(sttn_util_rate[sid][1]);
+            self.station_data[k]["_red"] = {};
+            self.station_data[k]["_blue"] = {};
+        for si in stations:
+            sid = si.getID()
+            seid = self.translator.IDToEdge(si.edge_id)
+            suff = si.suffix
+            self.station_data["charged"][suff][seid] = float(station_charges[sid]);
+            self.station_data["occupancyRate"][suff][seid] = float(sttn_util_rate[sid][0]);
+            self.station_data["utilization"][suff][seid] = float(sttn_util_rate[sid][1]);
         self.station_data["totalCharge"] = float(total_charge)
-        self.station_data["totalMoneyEarned"] = float(total_money_earned)
-        self.agent_data["totalCharge"] = {}
-        self.agent_data["moneyEarned"] = {}
-        for a in range(agent_count):
-            self.agent_data["totalCharge"][suffixes[a]] = float(charge[a])
-            self.agent_data["moneyEarned"][suffixes[a]] = float(money_earned[a])
+        self.station_data["charge"] = {}
+        self.station_data["charge"]["_red"] = float(total_charge_r)
+        self.station_data["charge"]["_blue"] = float(total_charge_b)
+        self.station_data["totalMoneyEarned"] = float(money_earned)
+        self.station_data["moneyEarned"] = {}
+        self.station_data["moneyEarned"]["_red"] = float(money_earned_r)
+        self.station_data["moneyEarned"]["_blue"] = float(money_earned_b)
     # Get
-    def getFullDict(self, include_edge_data=True):
-        d = {}
-        d["fullyCompleted"] = self.fullyCompleted
-        d["simulationTime"] = self.simulationTime
-        d["vehicle_data"] = self.vehicle_data
-        d["trip_data"] = self.trip_data
-        if include_edge_data: d["edge_data"] = self.edge_data;
-        d["station_data"] = self.station_data
-        d["agent_data"] = self.agent_data
-        return d
+    # /
     # Base overrides
     def __repr__(self):
         s = "Evaluation:\n"
@@ -140,8 +118,7 @@ class Evaluation:
         s += "- vehicles:\n    " + str(self.vehicle_data) + "\n"
         s += "- trips:\n    " + str(self.trip_data) + "\n"
         #s += "- edge_data:\n    " + str(self.edge_data) + "\n"
-        s += "- stations:\n    " + str(self.station_data) + "\n"
-        s += "- agents:\n    " + str(self.agent_data) + "\n"
+        s += "- stations:\n    " + str( self.station_data) + "\n"
         return s
     # Other
     def printEdgeData(self):
@@ -160,28 +137,3 @@ class Evaluation:
             s += "  {0:{prec}s}: {1}\n".format(str(key), value, prec=max_e_len)
         print(s)
         return ""
-    # Static
-    @staticmethod
-    def suffixesToNames(d):
-        for stat in Evaluation.station_comp_stats:
-            data = d["station_data"][stat].copy()
-            for suffix, value in data.items():
-                name = suffix[1:].capitalize()
-                d["station_data"][stat][name] = value;
-                del d["station_data"][stat][suffix]
-        for stat in ["totalCharge", "moneyEarned"]:
-            data = d["agent_data"][stat].copy()
-            for suffix, value in data.items():
-                name = suffix[1:].capitalize()
-                d["agent_data"][stat][name] = value;
-                del d["agent_data"][stat][suffix]
-        return d
-
-
-
-
-
-
-
-
-    

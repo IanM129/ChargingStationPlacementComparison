@@ -157,6 +157,8 @@ class Parameters:
                 raise Exception("ERROR: Trying to add another parameter to already dirty name.")
             else:
                 raise Exception(f"ERROR: No parameter name '{item}'.")
+    def __contains__(self, item):
+        return item in self.names;
     def __repr__(self):
         s = f"Parameters [{self.size}]:\n";
         f_max_len = len(max([n for n in self.names if ('.' not in n)], key=len))

@@ -46,8 +46,8 @@ os.chdir(MAIN_DIR)
 
 
 ## Recharge cost function
-def stationCostFunction(detour_time, detour_distance):
-    return detour_time + detour_distance
+def stationCostFunction(detour_time, detour_distance, price):
+    return detour_time + detour_distance + (100.0 * price)
 
 def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
@@ -121,8 +121,11 @@ def removeFromSimulationVars(vehicles : set, params):
                 stations[si_index].releaseSpot(park_side)
                 charging.pop(vehID, None);
 #### Sumo
-def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, results, stations_r, stations_b,
-                output_path, output_subfolder="solo", params=None, debug=False):
+def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, results,
+                agent_stations, all_stations,
+                output_path, output_subfolder="solo",
+                prices=None, agent_colors=[],
+                params=None, debug=False):
     if not params: params = Parameters.default();
     global MANUAL_CHARGE_DECIDE
     CPU_THREADS = params["sim.cpuThreads"]
@@ -132,17 +135,26 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     VISUALIZE = params["sim.visualize"]
     PRINT_RESULTS = params["sim.printResults"]
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
-    MONEY_PER_KWH_RED = params["station.moneyPerKWH.red"]
-    MONEY_PER_KWH_BLUE = params["station.moneyPerKWH.blue"]
+    MONEY_PER_KWH = params["station.moneyPerKWh"]
+    AGENT_COUNT = len(agent_stations)
+    # Prices check
+    if prices is None:
+        prices = [MONEY_PER_KWH] * AGENT_COUNT;
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
 #### PREPROCESS
     # TEMP
-    print("\r- Comp run:\n    Red:", stations_r, "\n    Blue:", stations_b)
+    if PRINT_RESULTS:
+        print("\r- Comp run:")
+        for a in range(AGENT_COUNT):
+            if agent_colors != None:
+                print(f"    {agent_colors[a].capitalize():10s}:", agent_stations[a]);
+            else: print(f"    {a:2d}:", agent_stations[a]);
+    suffixes = [("_" + n) for n in agent_colors]
     # TEMP
-    k = len(stations_r)
-    K = len(stations_r) + len(stations_b)
+    k = len(agent_stations[0])
+    K = len(all_stations)
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["prep.preprocess"]:
@@ -158,25 +170,25 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
 #### PRE STATION WRITE
     ## Write stations to XML
     basenet_tree = ET.parse(cache_data_path + "/base_net.net.xml")
-    nodes_tree, edges_tree, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations_r,
+    nodes_tree, edges_tree, stations_tree = parkingNetGen.addStationsToNetwork(base_net, agent_stations[0],
                                                     cache_data_path, write=False, output_path=cache_data_path,
                                                     network_tree=basenet_tree,
                                                     #network_filepath=cache_data_path + "/base_net.net.xml",
                                                     vehicle_length=EV_len, min_gap=min_gap,
                                                     wait_queue_size=params["station.waitQueue"],
-                                                    suffix="_red")
-    parkingNetGen.appendStationsToNetwork(base_net, stations_b,
-                                            nodes_tree, edges_tree, stations_tree,
-                                            write=True, output_path=cache_data_path,
-                                            vehicle_length=EV_len, min_gap=min_gap,
-                                            wait_queue_size=WAIT_QUEUE_SIZE,
-                                            suffix="_blue", reverse_angle=True);
+                                                    suffix=suffixes[0])
+    for a in range(1, AGENT_COUNT):
+        parkingNetGen.appendStationsToNetwork(base_net, agent_stations[a],
+                                                nodes_tree, edges_tree, stations_tree,
+                                                write=True, output_path=cache_data_path,
+                                                vehicle_length=EV_len, min_gap=min_gap,
+                                                wait_queue_size=WAIT_QUEUE_SIZE,
+                                                suffix=suffixes[a], reverse_angle=True);
     # DEBUG -> Show POIs for stations
     if VISUALIZE:
-        parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
-                                     stations_r.listEdges(), suffix="_red")
-        parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
-                                     stations_b.listEdges(), suffix="_blue")
+        for a in range(AGENT_COUNT):
+            parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
+                                         agent_stations[a].listEdges(), suffix=suffixes[a])
     # Load modified net
     net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
 #### POST STATION WRITE
@@ -187,7 +199,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     xmlOut.config_createEdgeOutputFile(xml_filepath=cache_data_path + "/output.add.xml",
                                        relative_out_filepath=cache_output_path + "/edgeData.out.xml", overwrite=False)
     ## Fix stops
-    trips = prep.fixTripEdges(base_net, net, stations_r.listEdges() + stations_b.listEdges(),
+    trips = prep.fixTripEdges(base_net, net, all_stations.listEdges(),
                               routes_filepath=output_path + "/trips.xml",
                               write=True, output_filepath=cache_data_path + "/routes.xml",
                               trips=trips)
@@ -212,7 +224,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     set_need_to_charge_cnt = 0;
     sttn_util_rate = {}
     global stations
-    stations = StationInfoDataset(stations_r.arr + stations_b.arr)
+    stations = all_stations
     if MANUAL_CHARGE_DECIDE:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
@@ -411,7 +423,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     results.setSimulationData(fully_completed, sim_time)
     ## Process step data
     # Utilization rate
-    for si in stations:
+    for si in all_stations:
         st_id = si.getID(); st_cap = si.total_capacity;
         sttn_util_rate[st_id] = (float(sttn_util_rate[st_id][0] / steps_processed),
                                  float(sttn_util_rate[st_id][1] / (steps_processed * st_cap)));
@@ -424,7 +436,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     veh_charges = {}
     sttn_vehicle_count = {}
     total_charge = 0
-    for si in stations:
+    for si in all_stations:
         station_ids = si.getIDs()
         total = 0.0;
         sttn_vehicle_count[si.getID()] = 0
@@ -446,34 +458,27 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     if PRINT_RESULTS:
         print("---- Station stats:")
         print("     <station edge ID>: <energy recharged> | <utilization per step>, <utilization normalized by total parking capacity>")
-        print("-- Red:")
-    total_charge_r = 0;
-    for si in stations_r:
-        val = station_charges[si.getID()]
+    charge = []; money_earned = [];
+    total_money_earned = 0.0;
+    for a in range(AGENT_COUNT):
+        clr_name = agent_colors[a].capitalize()
+        charge.append(0.0); money_earned.append(0.0);
+        if PRINT_RESULTS: print(f"-- {clr_name}:");
+        for si in agent_stations[a]:
+            val = station_charges[si.getID()]
+            if PRINT_RESULTS:
+                print(f"  {si.edge_id:10s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                      f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
+            charge[a] += val
+        money_earned[a] = (charge[a] * prices[a]) / 1000.0
+        total_money_earned += money_earned[a]
         if PRINT_RESULTS:
-            print(f"  {si.edge_id:10s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
-                  f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
-        total_charge_r += val
-    money_earned_r = (total_charge_r * float(MONEY_PER_KWH_RED)) / 1000.0
-    if PRINT_RESULTS:
-        print(f"  > total charge: {round(total_charge_r / 1000.0, 2)} KWh")
-        print(f"  > money earned: {round(money_earned_r, 2)}€ ({round(MONEY_PER_KWH_RED,2)}€ per KWh)")
-        print("-- Blue:")
-    total_charge_b = 0
-    for si in stations_b:
-        val = station_charges[si.getID()]
-        if PRINT_RESULTS:
-            print(f"  {si.edge_id:12s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
-                  f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
-        total_charge_b += val
-    money_earned_b = (total_charge_b * float(MONEY_PER_KWH_BLUE)) / 1000.0
-    if PRINT_RESULTS:
-        print(f"  > total charge: {round(total_charge_b / 1000.0, 2)} KWh")
-        print(f"  > money earned: {round(money_earned_b, 2)}€ ({round(MONEY_PER_KWH_BLUE,2)}€ per KWh)")
-        print()
-    money_earned = money_earned_r + money_earned_b
-    results.setStationDataComp(stations, sttn_util_rate, station_charges, total_charge, money_earned,
-                                   total_charge_r, total_charge_b, money_earned_r, money_earned_b)
+            print(f"  > total charge: {round(total_charge[a] / 1000.0, 2)} KWh")
+            print(f"  > money earned: {round(money_earned[a], 2)}€ ({round(prices[a],2)}€ per KWh)")
+    if PRINT_RESULTS: print();
+    results.setStationDataComp(agent_stations, prices, sttn_util_rate, station_charges,
+                               total_charge, total_money_earned, charge, money_earned,
+                               suffixes)
 
     ## Trip stats/info
     trip_stats = xmlOut.getTripStats(cache_output_path)
