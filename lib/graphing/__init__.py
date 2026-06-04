@@ -25,11 +25,11 @@ import lib.graphing.draw as graphdraw
 
 
 #### Network to networkx graph
-def netToGraph(net_xml_filepath,
+def netToGraph(net_xml_filepath, net=None,
                lengths=True, travel_time=False,             # edge attributes
                internal_lengths=True, node_position=True    # node attributes
                ):
-    net = sumolib.net.readNet(net_xml_filepath)
+    if net is None: net = sumolib.net.readNet(net_xml_filepath);
     net_internal = sumolib.net.readNet(net_xml_filepath, withInternal=True)
     G = nx.DiGraph()
     if (node_position or internal_lengths):
@@ -144,6 +144,19 @@ def discretizeGraph(G, max_distance, add_min=0, add_max=-1, roads_only=False):
         elif node_count > 1:
             util.insertNodes(G, edge[0], edge[1], node_count, length=length)
     return
+
+#### Global utility
+def _setNet(net):
+    global global_net
+    global_net = net;
+    print("set global net:", global_net)
+def _getNode(node_id):
+    global global_net
+    return global_net.getNode(node_id)
+def _getEdge(edge_id):
+    global global_net
+    print("get global net:", global_net)
+    return global_net.getEdge(edge_id)
 
 
 

@@ -9,6 +9,8 @@ netconvertBinary = sumolib.checkBinary('netconvert')
 from lib.globalVars import *
 from lib.utility import colorNameToRGB
 
+import lib.graphing as graphing
+
 from lib.structs.stationinfo import StationInfoDataset
 
 
@@ -61,6 +63,28 @@ def getVehicleLength(add_tree, electric=True):
 def calcVehicleQueueLength(vehicle_length, min_gap, n):
     if n == 1: return vehicle_length;
     return (n * vehicle_length) + ((n - 1) * min_gap);
+def calcStationOffset(capacity, wait_queue_size, vehicle_length, min_gap, queue_parking : bool, approach_padding=None, wait_charge_padding=None):
+    if approach_padding is None:
+        global approach_padding_g; approach_padding = approach_padding_g;
+    if wait_charge_padding is None:
+        global wait_charge_padding_g; wait_charge_padding = wait_charge_padding_g;
+    half_cap_ceil = math.ceil(capacity / 2.0)
+    offset = (vehicle_length * half_cap_ceil) + approach_padding + wait_charge_padding;
+    if wait_queue_size > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, wait_queue_size)
+    return offset
+def calcStationStopDistance(wait_queue_size, vehicle_length, min_gap, queue_parking : bool, approach_padding=None):
+    if approach_padding is None:
+        global approach_padding_g; approach_padding = approach_padding_g;
+    offset = approach_padding;
+    if wait_queue_size > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, wait_queue_size)
+    return offset
+
+def getReverseEdge(edge_id):
+    if '+' in edge_id:
+        splt = edge_id.rsplit('+', 1)
+        return splt[1] + '+' + splt[0]
+    return None
+    
 
 
 def addNode(root, n_id, x, y, ntype="priority"):
@@ -89,16 +113,28 @@ def addLane(root, edge_id, index=0, speed=0, length=0):
             if length > 0: item.set("length", str(length));
             return item
     return None
-def addParking(add_tree, edge_id, lane_id, name_id, start_pos, end_pos, capacity=1, reverse=False, suffix=""):
+def addParking(add_tree, edge_id, lane_id, name_id, start_pos, end_pos, capacity=1, fill_reverse=False, suffix=""):
     add_main = add_tree.getroot();
     parking = ET.SubElement(add_main, "parkingArea")
     parking.set("id", name_id); parking.set("lane", str(lane_id));
     parking.set("startPos", str(start_pos)); parking.set("endPos", str(end_pos));
     parking.set("roadsideCapacity", str(capacity));
+    if fill_reverse:
+        edge = graphing._getEdge(edge_id)
+        pos_a = edge.getFromNode().getCoord();
+        pos_b = edge.getToNode().getCoord();
+        v = (float(pos_b[0]) - float(pos_a[0]), float(pos_b[1]) - float(pos_a[1]))
+        delta = (v[0] / capacity, v[1] / capacity)
+        delta_half = (delta[0] / 2, delta[1] / 2)
+        x = pos_b[0] - delta_half[0]; y = pos_b[1] - delta_half[1];
+        for i in range(capacity):
+            spot = ET.SubElement(parking, "space")
+            spot.set("x", str(x)); spot.set("y", str(y));
+            x -= delta_half[0]; y -= delta_half[1];
     return add_tree
 def addParkingStation(add_tree, edge_id, lane_id, start_pos, end_pos, capacity=1, power=50000, reverse=False, suffix=""):
     parkingArea_id = getParkingID(edge_id, reverse=reverse, suffix=suffix)
-    addParking(add_tree, edge_id, lane_id, parkingArea_id, start_pos, end_pos, capacity=capacity, reverse=reverse, suffix=suffix)
+    addParking(add_tree, edge_id, lane_id, parkingArea_id, start_pos, end_pos, capacity=capacity, suffix=suffix)
     station_id = getStationID(edge_id, reverse=reverse, suffix=suffix)
     add_main = add_tree.getroot();
     station = ET.SubElement(add_main, "chargingStation")
@@ -135,20 +171,24 @@ def extractNetworkFeatures(network_tree=None, network_filepath=None):
     ## Copy all edges
     for junction in net_root.findall("junction"):
         if junction.get("id")[0] != ":":
-            ET.SubElement(nodes_root, "node", {
-                    "id" : junction.get("id"),
-                    "type" : junction.get("type"),
-                    "x" : junction.get("x"),
-                    "y" : junction.get("y")
-                })
+            el = ET.SubElement(nodes_root, "node", {
+                        "id" : junction.get("id"),
+                        "type" : junction.get("type"),
+                        "x" : junction.get("x"),
+                        "y" : junction.get("y")
+                    })
+            if (name := junction.get("name")) is not None:
+                el.set("name", name)
     for edge in net_root.findall("edge"):
         if edge.get("id")[0] != ":":
-            ET.SubElement(edges_root, "edge", {
-                    "id" : edge.get("id"),
-                    "from" : edge.get("from"),
-                    "to" : edge.get("to"),
-                    "numLanes": str(len(edge.findall("lane")))
-                })
+            el = ET.SubElement(edges_root, "edge", {
+                        "id" : edge.get("id"),
+                        "from" : edge.get("from"),
+                        "to" : edge.get("to"),
+                        "numLanes" : str(len(edge.findall("lane")))
+                    })
+            if (name := edge.get("name")) is not None:
+                el.set("name", name)
     return (nodes_tree, edges_tree)
 ## Write network
 def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=False):
@@ -158,28 +198,35 @@ def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=F
         nodes_filepath = temp_folder + "/" + nodes_filepath;
         edges_filepath = temp_folder + "/" + edges_filepath;
     nodes_tree.write(nodes_filepath); edges_tree.write(edges_filepath);
-    call([netconvertBinary,
+    cmnd = [netconvertBinary,
           '--no-turnarounds.except-deadend', 'true',
           #'-s', output_filepath,
           '-n', nodes_filepath,
           '-e', edges_filepath,
-          '-o', output_filepath],
-          stdout=DEVNULL,
-          stderr=DEVNULL)
+          '-o', output_filepath]
+    result = call(cmnd,
+          stdout=DEVNULL, stderr=DEVNULL)
+    print(' '.join(cmnd))
     if delete:
         os.remove(nodes_filepath);
         os.remove(edges_filepath);
+    return (result == 0)
 
 # Maybe make it use sumolib instead of xml
 def createParkingNet(nodes_tree, edges_tree, add_tree, edge_id, edge_tuple, offset=0, vehicle_length=5,
-                     capacity=1, approach_queue=0, wait_queue_park_size=20, min_gap=2.5, suffix="", reverse_angle=False):
+                     capacity=1, wait_queue_size=0, wait_queue_park_size=20, approach_padding=5.0, wait_charge_padding=5.0,
+                     min_gap=2.5, suffix="", reverse_angle=False):
+    global approach_padding_g, wait_charge_padding_g
+    approach_padding_g = approach_padding; wait_charge_padding_g = wait_charge_padding;
     ## Caluclate offset
     #vehicle_length = getVehicleLength(add_tree)    # <- Calculate length (optional)
     half_cap_ceil = math.ceil(capacity / 2)
     if offset > 0: offset += 7.2;  # netconvert shortens it
     else:
-        offset = (vehicle_length * half_cap_ceil) + 7.2 + 1.0;
-        if approach_queue > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, approach_queue)
+        offset = calcStationOffset(capacity, wait_queue_size, vehicle_length, min_gap, wait_queue_park_size > 0)
+        offset += 7.2
+        #offset = (vehicle_length * half_cap_ceil) + 7.2 + 1.0 + approach_padding;
+        #if wait_queue_size > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, wait_queue_size)
     
     #edge = edges_tree.getroot().find("edge[@id='" + str(edge_id) + "']")
     #from_n_id = edge.get("from"); to_n_id = edge.get("to");
@@ -223,14 +270,15 @@ def createParkingNet(nodes_tree, edges_tree, add_tree, edge_id, edge_tuple, offs
 
     first_park_len = vehicle_length * half_cap_ceil;
     second_park_len = vehicle_length * (capacity - half_cap_ceil);
-    end_pos = (offset-7.2) - 1; start_pos = max(1, round(end_pos - first_park_len, 2));
+    end_pos = (offset-7.2) - 1; start_pos = max(approach_padding, round(end_pos - first_park_len, 2));
     end_pos_second = min(end_pos, round(second_park_len, 2))
     ## Add parkings and charging stations
     addParkingStation(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix), start_pos, round(end_pos, 2), capacity=half_cap_ceil, suffix=suffix)
     addParkingStation(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix, reverse=True), 1, end_pos_second, capacity=capacity-half_cap_ceil, reverse=True, suffix=suffix)
     # Add wait queue parking
-    wait_park_id = getWaitParkingID(edge_id, suffix=suffix)
-    addParking(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix), wait_park_id, 0, start_pos, capacity=wait_queue_park_size, suffix=suffix)
+    if wait_queue_park_size > 0:
+        wait_park_id = getWaitParkingID(edge_id, suffix=suffix)
+        addParking(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix), wait_park_id, approach_padding, start_pos - approach_padding, capacity=wait_queue_park_size, fill_reverse=False, suffix=suffix)
     
     return (nodes_tree, edges_tree, add_tree)
 
@@ -253,12 +301,19 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                          data_path, output_path="", write=True,
                          network_tree=None, network_filepath=None,
                          stations_tree=None,stations_filepath=None,
-                         vehicle_length=-1, min_gap=2.5, wait_queue_size=2,
+                         vehicle_length=-1, min_gap=2.5,
+                         wait_queue_size=2, wait_queue_parking=False,
                          suffix="", reverse_angle=False):
     if write and output_path == "": output_path = data_path;
     if vehicle_length <= 0:
         vTypes_tree = ET.parse(data_path + "/vTypes.add.xml");
         veh_len = getVehicleLength(vTypes_tree);
+    # Wait queue and approach size
+    if wait_queue_parking:
+        wait_queue_park_size = wait_queue_size;
+        wait_queue_size = min(4, wait_queue_size);
+    else:
+        wait_queue_park_size = 0;
     # Load network net.xml
     if network_tree != None:
         nodes_tree, edges_tree = extractNetworkFeatures(network_tree=network_tree)
@@ -276,8 +331,9 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  stinfo.edge_id, (edge.getFromNode().getID(), edge.getToNode().getID()),
                                                                  vehicle_length=vehicle_length,
                                                                  capacity=stinfo.total_capacity,
-                                                                 approach_queue=wait_queue_size, min_gap=min_gap,
-                                                                 suffix=suffix, reverse_angle=reverse_angle)
+                                                                 wait_queue_size=wait_queue_size, wait_queue_park_size=wait_queue_park_size,
+                                                                 min_gap=min_gap, reverse_angle=reverse_angle,
+                                                                 suffix=suffix)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")
         writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
@@ -287,7 +343,8 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
 def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                             nodes_tree, edges_tree, stations_tree,
                             output_path="", write=True,
-                            vehicle_length=5, min_gap=2.5, wait_queue_size=2,
+                            vehicle_length=5, min_gap=2.5,
+                            wait_queue_size=2, wait_queue_parking=False,
                             suffix="", reverse_angle=False):
     ## Get already added stations
     added_stations = set()
@@ -297,6 +354,12 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
             stid = stid.split('_')[1]
             added_stations.add(stid)
     reverse_angle_global = reverse_angle
+    # Wait queue and approach size
+    if wait_queue_parking:
+        wait_queue_park_size = wait_queue_size;
+        wait_queue_size = min(4, wait_queue_size);
+    else:
+        wait_queue_park_size = 0;
     # Main
     for stinfo in stations_dataset:
         edge = net.getEdge(stinfo.edge_id)
@@ -307,8 +370,9 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  stinfo.edge_id, (edge.getFromNode().getID(), edge.getToNode().getID()),
                                                                  vehicle_length=vehicle_length,
                                                                  capacity=stinfo.total_capacity,
-                                                                 approach_queue=wait_queue_size, min_gap=min_gap,
-                                                                 suffix=suffix, reverse_angle=reverse_angle)
+                                                                 wait_queue_size=wait_queue_size, wait_queue_park_size=wait_queue_park_size,
+                                                                 min_gap=min_gap, reverse_angle=reverse_angle,
+                                                                 suffix=suffix)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")
         writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
@@ -316,8 +380,35 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
     else:
         return (nodes_tree, edges_tree, stations_tree)
 
-
-
+def removeStationLeftTurns_netXML(xml_filepath, stations):
+    net_tree = ET.parse(xml_filepath)
+    root = net_tree.getroot()
+    for si in stations:
+        station_edge = getReverseEdge(si.redge_id)
+        for conn in root.findall(f"connection[@from='{station_edge}']"):
+            if conn.get("dir") == "l":
+                # Original connection
+                lane = conn.get("via")
+                root.remove(conn)
+                # Edge
+                edge = lane.rsplit('_', 1)[0]
+                edge_el = root.find(f"edge[@id='{edge}']")
+                root.remove(edge_el)
+                # Secondary connection
+                sec_conn = root.find(f"connection[@from='{edge}']")
+                root.remove(sec_conn)
+                # Inside via
+                junction = edge.rsplit('_', 1)[0][1:]
+                junc_el = root.find(f"junction[@id='{junction}']")
+                int_lanes = junc_el.get("intLanes").split(' ')
+                try:
+                    int_lanes.remove(lane)
+                except Exception as e:
+                    print("int lanes:", int_lanes)
+                    print("lane:", lane)
+                    raise
+                junc_el.set("intLanes", ' '.join(int_lanes))
+    net_tree.write(xml_filepath)
 
 
 

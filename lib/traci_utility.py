@@ -97,6 +97,18 @@ def calcNeededChargeLeft(vehID, trip):
 
 
 #### Stations
+def getWaitingByDistance(sttn_info):
+    waiting = list(sttn_info.wait_queue)
+    if len(waiting) == 0: return None;
+    return sorted(waiting, key=lambda vehID: traci.vehicle.getLanePosition(vehID), reverse=True)
+def getClosestWaitingToStation(sttn_info):
+    waiting = list(sttn_info.wait_queue)
+    if len(waiting) == 0: return None;
+    #for vehID in waiting:
+    #    print(f"{vehID}: {traci.vehicle.getLanePosition(vehID)}")
+    #print("->", max(waiting, key=lambda vehID: traci.vehicle.getLanePosition(vehID)))
+    #exit()
+    return max(waiting, key=lambda vehID: traci.vehicle.getLanePosition(vehID))
 def stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, approx_charge_needed=None):
     sttn_id = sttn_info.getID()
     #sttn_lane = traci.chargingstation.getLaneID(sttn_id)
@@ -118,6 +130,7 @@ def stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, appro
     # Calculate cost
     cost = cost_function(detour_time_diff, detour_distance_diff, sttn_info.price, approx_charge_needed)
     return cost, (route_info_before, route_info_after)
+## Find best
 def findClosestChargingStation(vehID, charge, stations, cost_function, approx_charge_needed=None,
                                route=None, cur_index=-1, next_dest_index=-1):
     if route == None: route = traci.vehicle.getRoute(vehID);
@@ -147,9 +160,10 @@ def findClosestChargingStation(vehID, charge, stations, cost_function, approx_ch
     station_route = station_routes[chosen_sttn_id][0].edges + station_routes[chosen_sttn_id][1].edges[1:]
     new_trip = Trip([cur_edge, sttn_info.redge_id, next_dest_edge], [route_info_before.length, route_info_after.length])
     return chosen_sttn_id, new_trip, station_route
-def waitQueueCost(cost, waiting, wait_coef=100.0): return cost + (wait_coef * waiting);
+def waitQueueCost(cost, waiting, wait_coef=100.0):
+    return cost + (wait_coef * waiting);
 def findClosestChargingStation_centralized(vehID, charge, stations, cost_function,
-                                           approx_charge_needed=None, search_reverse=False, wait_coef=100.0,
+                                           approx_charge_needed=None, wait_coef=100.0,
                                            route=None, cur_index=-1, next_dest_index=-1):
     if route == None: route = traci.vehicle.getRoute(vehID);
     if cur_index < 0: cur_index = traci.vehicle.getRouteIndex(vehID);
@@ -158,7 +172,7 @@ def findClosestChargingStation_centralized(vehID, charge, stations, cost_functio
         next_dest_index = getNextDestIndexInRoute(vehID, route, cur_index)
     next_dest_edge = route[next_dest_index]
     # Get stations with an open spot
-    found_spot = -1
+    chosen_sttn_id = None
     station_costs = {}; station_routes = {};
     free_stations = stations.getFree()
     if len(free_stations) > 0:
@@ -171,18 +185,19 @@ def findClosestChargingStation_centralized(vehID, charge, stations, cost_functio
         sorted_sttns = [stid for stid, val in sorted(station_costs.items(), key=lambda e: e[1])]
         for sttn_id in sorted_sttns:
             sttn_info = stations.getByID(sttn_id)
-            found_spot = sttn_info.requestSpot(auto_take=True, search_reverse=search_reverse)
-            if found_spot != -1:
+            has_spot = sttn_info.hasFreeSpot() #requestSpot(auto_take=False, search_reverse=search_reverse)
+            if has_spot != -1:
+                #sttn_info.addIncoming(vehID)
                 chosen_sttn_id = sttn_id
                 break
     # No free stations -> get best based on cost and current waiting queue size
-    if found_spot == -1:
+    if chosen_sttn_id is None:
         for sttn_info in stations:
             sttn_id = sttn_info.getID()
             if sttn_id not in station_costs:
                 cost, routes = stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, approx_charge_needed)
                 station_costs[sttn_id] = cost; station_routes[sttn_id] = routes;
-            station_costs[sttn_id] = waitQueueCost(station_costs[sttn_id], sttn_info.getWaitingCount(), wait_coef=wait_coef)
+            station_costs[sttn_id] = waitQueueCost(station_costs[sttn_id], sttn_info.getWaitingTotal(), wait_coef=wait_coef)
         chosen_sttn_id = min(station_costs, key=station_costs.get)
     # Create adjusted route
     sttn_info = stations.getByID(chosen_sttn_id)
@@ -190,7 +205,7 @@ def findClosestChargingStation_centralized(vehID, charge, stations, cost_functio
     route_info_after = station_routes[chosen_sttn_id][1]
     station_route = station_routes[chosen_sttn_id][0].edges + station_routes[chosen_sttn_id][1].edges[1:]
     new_trip = Trip([cur_edge, sttn_info.redge_id, next_dest_edge], [route_info_before.length, route_info_after.length])
-    return found_spot, chosen_sttn_id, (new_trip, station_route)
+    return chosen_sttn_id, new_trip, station_route
 
 #### Visuals
 ## Set color by charge

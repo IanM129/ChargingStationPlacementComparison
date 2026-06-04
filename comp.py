@@ -111,10 +111,10 @@ if __name__ == "__main__":
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
     # Charge routing info
-    if params["electric.useStationFinder"]:
+    if params["station.routing.useStationFinder"]:
         print("INFO: Using StationFinder for vehicle charging and station routing.")
     else:
-        charge_routing_str = "centralized" if (params["electric.centralizedStationRouting"]) else "selfish";
+        charge_routing_str = "centralized" if (params["station.routing.centralized"]) else "selfish";
         print("INFO: Using " + charge_routing_str + " policy for station routing.")
     # Divide K
     if K % AGENT_COUNT == 0:

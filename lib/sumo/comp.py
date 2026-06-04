@@ -53,7 +53,7 @@ def stationCostFunction(detour_time, detour_distance, price, charge_amount=None)
     if (charge_amount is not None) and (SCALE_PRICE_BY_CHARGE):
         return float(detour_time + detour_distance + (charge_amount * price))
     else:
-        return float(detour_time + detour_distance + (100.0 * price))
+        return float(detour_time + detour_distance + (PRICE_COSTFUNC_COEF * price))
 
 def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
@@ -143,13 +143,18 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     AGENT_COUNT = len(agent_stations)
     # Charge routing enum
     global CHARGE_ROUTING
-    if params["electric.useStationFinder"]: CHARGE_ROUTING = StationRouting.STATIONFINDER;
-    else: CHARGE_ROUTING = StationRouting.CENTRALIZED if (params["electric.centralizedStationRouting"]) else StationRouting.SELFISH;
+    if params["station.routing.useStationFinder"]: CHARGE_ROUTING = StationRouting.STATIONFINDER;
+    else:
+        if params["station.routing.centralized"]:
+            CHARGE_ROUTING = StationRouting.CENTRALIZED;
+        else:
+            CHARGE_ROUTING = StationRouting.SELFISH;
+    QUEUE_PARKING = params["station.routing.waitParking"]
     # Prices
     if prices is None:
         prices = [MONEY_PER_KWH] * AGENT_COUNT;
     global SCALE_PRICE_BY_CHARGE
-    SCALE_PRICE_BY_CHARGE = params["station.scalePriceByChargeNeeded"]
+    SCALE_PRICE_BY_CHARGE = params["station.routing.costFunction_priceCoefficient"]
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
@@ -178,6 +183,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     global avg_trip_len, avg_trip_charge
     
 #### PRE STATION WRITE
+    #graphing._setNet(base_net)
     ## Write stations to XML
     basenet_tree = ET.parse(cache_data_path + "/base_net.net.xml")
     nodes_tree, edges_tree, stations_tree = parkingNetGen.addStationsToNetwork(base_net, agent_stations[0],
@@ -186,6 +192,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                                     #network_filepath=cache_data_path + "/base_net.net.xml",
                                                     vehicle_length=EV_len, min_gap=min_gap,
                                                     wait_queue_size=params["station.waitQueue"],
+                                                    wait_queue_parking=QUEUE_PARKING,
                                                     suffix=suffixes[0])
     for a in range(1, AGENT_COUNT):
         parkingNetGen.appendStationsToNetwork(base_net, agent_stations[a],
@@ -193,7 +200,10 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                                 write=True, output_path=cache_data_path,
                                                 vehicle_length=EV_len, min_gap=min_gap,
                                                 wait_queue_size=WAIT_QUEUE_SIZE,
+                                                wait_queue_parking=QUEUE_PARKING,
                                                 suffix=suffixes[a], reverse_angle=True);
+    parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", all_stations);
+    STOP_DISTANCE = parkingNetGen.calcStationStopDistance(params["station.waitQueue"], EV_len, min_gap, QUEUE_PARKING)
     # DEBUG -> Show POIs for stations
     if VISUALIZE:
         for a in range(AGENT_COUNT):
@@ -201,6 +211,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                          agent_stations[a].listEdges(), suffix=suffixes[a])
     # Load modified net
     net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
+    #graphing._setNet(net)
 #### POST STATION WRITE
     # Induction loop
     xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=cache_data_path + "/output.add.xml",
@@ -239,6 +250,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
         going_to_charge = {}
+        #waiting = {}
         charging = {}
         ev_ntc_charge = {}
         remaining_range = {}
@@ -278,6 +290,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         ## STEP
         if CHARGE_ROUTING != StationRouting.STATIONFINDER:
             start_charging_this_step = {};
+            arrived_to_station_this_step = set();
         ## Check batteries and reroute to station if low
             vaporized = set()
             go_charge_this_step = {}
@@ -296,53 +309,56 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                         next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
                         approx_charge_needed = traciutil.calcNeededChargeLeft(vehID, trips[vehID]) - charge
                         # Find a charging station to charge at
-                        set_stop = False
                         if CHARGE_ROUTING == StationRouting.SELFISH:
                             # Get best charging station and station trip
                             target_sttn_id, station_trip, station_route = traciutil.findClosestChargingStation(vehID, charge, stations, stationCostFunction,
                                                                                     approx_charge_needed=approx_charge_needed,
                                                                                     route=route, cur_index=cur_index,
                                                                                     next_dest_index=next_dest_index_r)
-                            target_si = stations.getByID(target_sttn_id)
-                            set_stop = True
                         else:
-                            # Get the first best station with free spots open
-                            found_spot, target_sttn_id, choice_data = traciutil.findClosestChargingStation_centralized(vehID, charge, stations, stationCostFunction,
+                            # Get the first best station with free spots open; otherwise the one less filled up (linear function)
+                            target_sttn_id, station_trip, station_route = traciutil.findClosestChargingStation_centralized(vehID, charge, stations, stationCostFunction,
                                                                                 approx_charge_needed=approx_charge_needed,
-                                                                                search_reverse=params["station.fillReverse"],
-                                                                                wait_coef=params["metaCoefficients.centralizedRouting_waitQueue"],
+                                                                                wait_coef=params["station.routing.waitQueueCoefficient"],
                                                                                 route=route, cur_index=cur_index,
                                                                                 next_dest_index=next_dest_index_r)
-                            station_trip, station_route = choice_data;
-                            target_si = stations.getByID(target_sttn_id)
+                        target_si_index = stations.getIndexByID(target_sttn_id)
+                        target_si = stations[target_si_index] #stations.getByID(target_sttn_id)
                         # Update new route and trip
                         new_route = station_route + route[next_dest_index_r + 1:]
                         next_dest_index_t = traciutil.getNextDestIndexInTrip(vehID, trips[vehID], route, cur_index)
                         trips[vehID].insertToNextDestination(station_trip, next_dest_index_t)
                         traci.vehicle.setRoute(vehID, new_route)
-                        if set_stop:
-                            # Set stop
-                            #try:
-                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
-                            #except Exception as e:
-                            #    print("Failed to stop."); raise Exception(e);
-                        elif CHARGE_ROUTING == StationRouting.CENTRALIZED:
-                            target_si_index = stations.getIndexByID(target_sttn_id)
+                        # > Stop at the waiting queue parking
+                        if QUEUE_PARKING:
+                            traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
+                        # > Stop and wait in front of the charging spots; creates jam at the entrance if too many vehicles in queue
+                        else:
+                            #try: -> sometimes error happens because the vehicle is too close to the stop?
+                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=STOP_DISTANCE); #parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
+                            #except Exception as e: print("Failed to stop."); raise Exception(e);
+                        #target_si.addToWaiting(vehID); -> add when they reach the waiting spot
+                        target_si.addIncoming(vehID);
+                        # Update set
+                        go_charge_this_step[vehID] = target_sttn_id
+                        """
                             # No spot found, go wait at the chosen station
                             if found_spot == -1:
-                                # Go to waiting parking at the station
-                                traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
+                                # > Go to waiting queue parking at the station
+                                if QUEUE_PARKING:
+                                    traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
+                                else:
+                                    traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
                                 target_si.addToWaiting(vehID);
+                                go_charge_this_step[vehID] = target_sttn_id
                             # Free spot found and taken, go directly to the parking spot
                             else:
                                 # Go to charging spot right away
                                 parking_spot_side = found_spot
                                 target_parks = (target_si.park_id + "_0", target_si.park_id + "_1")
                                 traci.vehicle.setParkingAreaStop(vehID, target_parks[parking_spot_side])
-                                #traci.vehicle.resume(vehID)
                                 start_charging_this_step[vehID] = (target_si_index, parking_spot_side)
-                        # Update set
-                        go_charge_this_step[vehID] = target_sttn_id
+                        """
                         # Visualization
                         if VISUALIZE:
                             # Color by going to station or not
@@ -350,7 +366,6 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                 #if VISUALIZE:
                     # Color by charge
                     #traciutil.colorByCharge(vehID, charge, veh_colors, max_charge)
-                    
             # Update sets and dicts
             will_need_to_charge -= go_charge_this_step.keys()
             going_to_charge.update(go_charge_this_step)
@@ -359,22 +374,34 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
 
         ## Vehicles driving to charge stations
             for vehID in going_to_charge:
-                if traci.vehicle.isStopped(vehID):
-                    target_sttn_id = going_to_charge[vehID]
-                    target_si_index = stations.getIndexByID(target_sttn_id)
-                    target_si = stations[target_si_index]
+                target_sttn_id = going_to_charge[vehID]
+                target_si_index = stations.getIndexByID(target_sttn_id)
+                target_si = stations[target_si_index]
+                # Check if vehicle entered the station lane, otherwise ignore it
+                veh_edge_id = traci.vehicle.getRoadID(vehID)
+                if veh_edge_id == target_si.redge_id:
+                    target_si.removeIncoming(vehID);
                     target_parks = (target_si.park_id + "_0", target_si.park_id + "_1")
-                    if CHARGE_ROUTING == StationRouting.SELFISH:
-                        # Request a charging/parking spot
-                        parking_spot_side = target_si.requestSpot(auto_take=True, search_reverse=params["station.fillReverse"])
-                        found_spot = (parking_spot_side != -1)
-                        if found_spot:
-                            traci.vehicle.setParkingAreaStop(vehID, target_parks[parking_spot_side])
-                            traci.vehicle.resume(vehID)
-                            start_charging_this_step[vehID] = (target_si_index, parking_spot_side)
-                        # else keep waiting
+                    # Request a charging/parking spot
+                    parking_spot_side = target_si.requestSpot(auto_take=True, search_reverse=params["station.fillReverse"])
+                    found_spot = (parking_spot_side != -1)
+                    if found_spot:
+                        traciutil.clearStops(vehID);
+                        traci.vehicle.setParkingAreaStop(vehID, target_parks[parking_spot_side])
+                        start_charging_this_step[vehID] = (target_si_index, parking_spot_side)
+                        print(f"{vehID} -> received a spot ({target_si.edge_id}: {target_si.getOccupancy()} / {target_si.total_capacity})")
                     else:
-                        pass;
+                        # > Get in queue parking and be called automatically when next
+                        #if QUEUE_PARKING:
+                        #    target_si.addToWaiting(vehID);
+                        #    start_charging_this_step[vehID] = (target_si_index, -1)
+                        # > Keep waiting in front of the charging spots
+                        #else: pass;
+                        target_si.addToWaiting(vehID);
+                        arrived_to_station_this_step.add(vehID)
+            # Update sets and dicts
+            for vehID in arrived_to_station_this_step: going_to_charge.pop(vehID, None);
+            
         ## Vehicles charging
             done_charging_this_step = set()
             for vehID in charging:
@@ -385,6 +412,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                         si_index, park_side = charging[vehID][0]
                         target_si = stations[si_index]
                         target_si.releaseSpot(park_side)
+                        print(f"{vehID} <- released a spot ({target_si.edge_id}: {target_si.getOccupancy()} / {target_si.total_capacity})")
                         # Check if can make journey; if not keep monitoring it
                         approx_charge_needed = traciutil.calcNeededChargeLeft(vehID, trips[vehID])
                         route = traci.vehicle.getRoute(vehID)
@@ -396,30 +424,29 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                             will_need_to_charge.add(vehID)
                         traci.vehicle.resume(vehID)
                         done_charging_this_step.add(vehID)
-                        if CHARGE_ROUTING == StationRouting.CENTRALIZED:
+                        if QUEUE_PARKING:
                             # Get next in line to charge
-                            waiting_count = target_si.getWaitingCount()
-                            if waiting_count > 0:
-                                nextID = target_si.removeNextWaiting()
-                                if nextID is not None:
-                                    target_parks = (target_si.park_id + "_0", target_si.park_id + "_1")
-                                    # Get the charging/parking spot
-                                    parking_spot_side = target_si.requestSpot(auto_take=True, search_reverse=params["station.fillReverse"])
-                                    found_spot = (parking_spot_side != -1)
-                                    if found_spot != -1:
-                                        if traci.vehicle.isStopped(nextID):
-                                            traci.vehicle.setParkingAreaStop(nextID, target_parks[parking_spot_side])
-                                            traci.vehicle.resume(nextID);
-                                        else:
-                                            traciutil.clearStops(nextID)
-                                            try:
-                                                traci.vehicle.setParkingAreaStop(nextID, target_parks[parking_spot_side])
-                                            except Exception as e:
-                                                print(f"'{vehID}' route:", traci.vehicle.getRoute(vehID))
-                                                raise
-                                        start_charging_this_step[nextID] = (si_index, parking_spot_side)
-                                    else:
-                                        print("ERROR: Spot released but no spot found for the next vehicle.")
+                            nextID = target_si.removeNextWaiting()
+                        else:
+                            # Get closest to station to charge
+                            nextID = traciutil.getClosestWaitingToStation(target_si)
+                        if nextID is not None:
+                            target_parks = (target_si.park_id + "_0", target_si.park_id + "_1")
+                            # Get the charging/parking spot
+                            parking_spot_side = target_si.requestSpot(auto_take=True, search_reverse=params["station.fillReverse"])
+                            found_spot = (parking_spot_side != -1)
+                            if found_spot != -1:
+                                print(f"{nextID} -> received a spot ({target_si.edge_id}: {target_si.getOccupancy()} / {target_si.total_capacity})")
+                                if traci.vehicle.isStopped(nextID):
+                                    traci.vehicle.setParkingAreaStop(nextID, target_parks[parking_spot_side])
+                                    traci.vehicle.resume(nextID);
+                                else:
+                                    traciutil.clearStops(nextID)
+                                    traci.vehicle.setParkingAreaStop(nextID, target_parks[parking_spot_side])
+                                start_charging_this_step[nextID] = (si_index, parking_spot_side)
+                                if not QUEUE_PARKING: target_si.wait_queue.remove(nextID);
+                            else:
+                                print("ERROR: Spot released but no spot found for the next vehicle.")
                         if VISUALIZE:
                             # Color by going to station or not
                             traciutil.colorByGoingToStation(vehID, False, veh_colors)

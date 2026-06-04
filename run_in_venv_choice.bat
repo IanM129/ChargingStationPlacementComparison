@@ -13,8 +13,8 @@ echo ==========================
 echo Choose an option to run:
 echo blank			- run a blank example (no charging stations)
 echo solo			- run an algorithmic solo simulation
-echo comp			- run a algorithmic competitive simulation
-echo gnn			- trains a solo network (default)
+echo comp			- (default) run an algorithmic competitive simulation
+echo gnn			- trains a solo network
 echo marl			- trains two competing networks
 echo ==========================
 set /p choice=Enter your choice:
@@ -71,7 +71,7 @@ if not exist "%pyfile%" (
 echo.
 echo ==========================
 echo Predefined networks:
-echo manhattan		- small grid (default)
+echo manhattan		- (default) 8x8 grid
 echo Zagreb			- example of an OpenStreetMap cutout
 echo ==========================
 set /p network_name=Enter network name:

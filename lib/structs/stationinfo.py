@@ -19,8 +19,8 @@ class StationInfo:
     # total_capacity    summed capacity
     # occupied          (tuple) occupied spot count
     # wait_park_id      wait queue parking id
-    # waiting           (int) amount cars in wait queue [OBSOLETE]
     # wait_queue        (deque) cars in wait queue
+    # incoming          (set) cars going to the station
     # price             price per kWh for this station
     # suffix            id suffix
     
@@ -36,6 +36,7 @@ class StationInfo:
         self.occupied = [0, 0];
         self.wait_park_id = parkingNetGen.getWaitParkingIDOfStation(self.name_id)
         self.wait_queue = deque();
+        self.incoming = set();
         self.price = price;
         # Utility
         #if dedge_id == None:
@@ -70,6 +71,10 @@ class StationInfo:
         return None
     def getWaitingCount(self):
         return len(self.wait_queue)
+    # > returns the amount of waiting cars expected from the number of taken spots, already waiting and incoming
+    def getWaitingTotal(self):
+        free_spots = self.total_capacity - self.getOccupancy()
+        return self.getWaitingCount() + (self.getIncomingCount() - free_spots);
     # Spot management
     def requestSpot(self, auto_take=False, search_reverse=True):
         if search_reverse:
@@ -89,12 +94,20 @@ class StationInfo:
         return -1;
     def takeSpot(self, side_index):
         self.occupied[side_index] += 1;
-        #print(self.name_id, " taken spot on", "second" if side_index == 1 else "first", "side:", self.occupied)
     def releaseSpot(self, side_index):
         self.occupied[side_index] -= 1;
-        #print(self.name_id, " released spot on", "second" if side_index == 1 else "first", "side:", self.occupied)
-    def hasFreeSpot(self):
+    def hasFreeSpotNow(self):
         return ((self.occupied[0] < self.capacity[0]) or (self.occupied[1] < self.capacity[1]))
+    def hasFreeSpot(self):
+        return ((self.getOccupancy() + self.getWaitingCount() + self.getIncomingCount()) < self.total_capacity)
+    def getOccupancy(self):
+        return self.occupied[0] + self.occupied[1]
+    # Incoming set
+    def addIncoming(self, vehID):
+        self.incoming.add(vehID)
+    def removeIncoming(self, vehID):
+        self.incoming.remove(vehID)
+    def getIncomingCount(self): return len(self.incoming);
     # Print overload
     def __repr__(self):
         return f"PCS({self.edge_id},|{self.total_capacity}|)"
