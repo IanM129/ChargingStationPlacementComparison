@@ -1,3 +1,13 @@
+from enum import Enum
+
+class StationRouting(Enum):
+    STATIONFINDER = 0
+    SELFISH = 1
+    CENTRALIZED = 2
+
+
+
+
 def genSumoCommand(sumo_filepath, step_length, visualize,
                    trip_stats_folder=None, log_filepath=None,
                    threads=1, warnings=False):

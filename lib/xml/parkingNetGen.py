@@ -27,6 +27,9 @@ def getEdgeID(edge_id, reverse=False, suffix=""):
     else: return entry_id + ROAD_ID_SEPARATOR + park_id;
 def getLaneID(edge_id, lane_index, reverse=False, suffix=""):
     return getEdgeID(edge_id, reverse=reverse, suffix=suffix) + "_" + str(lane_index);
+
+def getWaitParkingID(edge_id, suffix=""):
+    return "pcsWait_" + str(edge_id) + suffix;
 def getParkingID(edge_id, reverse=False, suffix=""):
     return "pcsParking_" + str(edge_id) + suffix + "_" + ("1" if reverse else "0");
 def getStationID(edge_id, reverse=False, suffix="", with_index=True):
@@ -39,12 +42,14 @@ def getEdgeOfStationID(station_id):
     station_id_cut = station_id[:last_sep]
     penult_sep = station_id_cut.rindex("_")
     return station_id_cut[penult_sep+1:]
+def getWaitParkingIDOfStation(station_id):
+    if station_id[-2] == '_': station_id = station_id[:-2];
+    return "pcsWait_" + station_id.split('_', 1)[1];
 def getParkingIDOfStation(station_id):
-    if station_id[-2] == '_': station_id = station_id.rsplit('_', 1)[0];
-    parking_noind = "pcsParking_" + station_id.split('_', 1)[1];
-    return parking_noind
+    if station_id[-2] == '_': station_id = station_id[:-2];
+    return "pcsParking_" + station_id.split('_', 1)[1];
 def getParkingIDsOfStation(station_id):
-    if station_id[-2] == '_': station_id = station_id.rsplit('_', 1)[0];
+    if station_id[-2] == '_': station_id = station_id[:-2];
     parking_noind = "pcsParking_" + station_id.split('_', 1)[1];
     return (parking_noind + "_0", parking_noind + "_1")
 
@@ -84,17 +89,16 @@ def addLane(root, edge_id, index=0, speed=0, length=0):
             if length > 0: item.set("length", str(length));
             return item
     return None
-def addParking(add_tree, edge_id, lane_id, start_pos, end_pos, capacity=1, reverse=False, suffix=""):
-    parkingArea_id = getParkingID(edge_id, reverse=reverse, suffix=suffix)
+def addParking(add_tree, edge_id, lane_id, name_id, start_pos, end_pos, capacity=1, reverse=False, suffix=""):
     add_main = add_tree.getroot();
     parking = ET.SubElement(add_main, "parkingArea")
-    parking.set("id", parkingArea_id); parking.set("lane", str(lane_id));
+    parking.set("id", name_id); parking.set("lane", str(lane_id));
     parking.set("startPos", str(start_pos)); parking.set("endPos", str(end_pos));
     parking.set("roadsideCapacity", str(capacity));
     return add_tree
 def addParkingStation(add_tree, edge_id, lane_id, start_pos, end_pos, capacity=1, power=50000, reverse=False, suffix=""):
-    addParking(add_tree, edge_id, lane_id, start_pos, end_pos, capacity=capacity, reverse=reverse, suffix=suffix)
     parkingArea_id = getParkingID(edge_id, reverse=reverse, suffix=suffix)
+    addParking(add_tree, edge_id, lane_id, parkingArea_id, start_pos, end_pos, capacity=capacity, reverse=reverse, suffix=suffix)
     station_id = getStationID(edge_id, reverse=reverse, suffix=suffix)
     add_main = add_tree.getroot();
     station = ET.SubElement(add_main, "chargingStation")
@@ -168,14 +172,14 @@ def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=F
 
 # Maybe make it use sumolib instead of xml
 def createParkingNet(nodes_tree, edges_tree, add_tree, edge_id, edge_tuple, offset=0, vehicle_length=5,
-                     capacity=1, wait_queue=0, min_gap=2.5, suffix="", reverse_angle=False):
+                     capacity=1, approach_queue=0, wait_queue_park_size=20, min_gap=2.5, suffix="", reverse_angle=False):
     ## Caluclate offset
     #vehicle_length = getVehicleLength(add_tree)    # <- Calculate length (optional)
     half_cap_ceil = math.ceil(capacity / 2)
     if offset > 0: offset += 7.2;  # netconvert shortens it
     else:
         offset = (vehicle_length * half_cap_ceil) + 7.2 + 1.0;
-        if wait_queue > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, wait_queue)
+        if approach_queue > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, approach_queue)
     
     #edge = edges_tree.getroot().find("edge[@id='" + str(edge_id) + "']")
     #from_n_id = edge.get("from"); to_n_id = edge.get("to");
@@ -221,11 +225,17 @@ def createParkingNet(nodes_tree, edges_tree, add_tree, edge_id, edge_tuple, offs
     second_park_len = vehicle_length * (capacity - half_cap_ceil);
     end_pos = (offset-7.2) - 1; start_pos = max(1, round(end_pos - first_park_len, 2));
     end_pos_second = min(end_pos, round(second_park_len, 2))
-    # Add parkings and charging stations
+    ## Add parkings and charging stations
     addParkingStation(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix), start_pos, round(end_pos, 2), capacity=half_cap_ceil, suffix=suffix)
     addParkingStation(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix, reverse=True), 1, end_pos_second, capacity=capacity-half_cap_ceil, reverse=True, suffix=suffix)
+    # Add wait queue parking
+    wait_park_id = getWaitParkingID(edge_id, suffix=suffix)
+    addParking(add_tree, edge_id, getLaneID(edge_id, 0, suffix=suffix), wait_park_id, 0, start_pos, capacity=wait_queue_park_size, suffix=suffix)
     
     return (nodes_tree, edges_tree, add_tree)
+
+
+
 
 def addStationPOIs(net_filepath, add_filepath, station_edges, suffix=""):
     net_tree = ET.parse(net_filepath); net_root = net_tree.getroot();
@@ -238,8 +248,6 @@ def addStationPOIs(net_filepath, add_filepath, station_edges, suffix=""):
         #if poi_clr == None: poi_clr = (0, 0, 0);
         addPOI(add_tree, "station_" + edge_id + suffix, x, y, poi_clr, "chargingStation")
     add_tree.write(add_filepath)
-
-
 #### Write stations to XML
 def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                          data_path, output_path="", write=True,
@@ -268,7 +276,7 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  stinfo.edge_id, (edge.getFromNode().getID(), edge.getToNode().getID()),
                                                                  vehicle_length=vehicle_length,
                                                                  capacity=stinfo.total_capacity,
-                                                                 wait_queue=wait_queue_size, min_gap=min_gap,
+                                                                 approach_queue=wait_queue_size, min_gap=min_gap,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")
@@ -299,7 +307,7 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
                                                                  stinfo.edge_id, (edge.getFromNode().getID(), edge.getToNode().getID()),
                                                                  vehicle_length=vehicle_length,
                                                                  capacity=stinfo.total_capacity,
-                                                                 wait_queue=wait_queue_size, min_gap=min_gap,
+                                                                 approach_queue=wait_queue_size, min_gap=min_gap,
                                                                  suffix=suffix, reverse_angle=reverse_angle)
     if write:
         stations_tree.write(output_path + "/stations.add.xml")

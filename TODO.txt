@@ -1,8 +1,8 @@
-- centraliziran sustav za odabir stanice
+X centraliziran sustav za odabir stanice (POSSIBLE ERRORS)
 X vise agenata (vise od 2)
 X money model
 - zagreb network
 - coverage algoritam na "solo" i "comp"
-(- algoritmi)
+(- jos algoritama)
 [X comp saves results]
-~ load results to recreate graphs
+- load results to recreate graphs

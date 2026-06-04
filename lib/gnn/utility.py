@@ -16,7 +16,9 @@ def initialize(attr_list, attr_map, dvc):
     edge_attr_list = attr_list
     edge_attr_map = attr_map
     device = dvc
-    
+def setMaxCoverageRadius(value):
+    global max_coverage
+    max_coverage = value
 
 
 #### Utility
@@ -224,12 +226,14 @@ def updateResultsDict_comp(train_results, stations, formula_general, formulas, i
         else:
             train_results[p][iteration] = formula_general[p][0];
     return
-def updateBestDict(best, station_edges, formula, modified=None):
+def updateBestDict(best, station_edges, formula, prices=None, modified=None):
     if not modified: modified = set();
     result = {}
     for p in formula:
         result[p] = formula[p][0]
     result["stations"] = station_edges
+    if prices is not None:
+        result["prices"] = prices
     for p in best:
         value = formula[p][0]
         cur = best[p][0]
@@ -266,14 +270,20 @@ def updateBestTree_comp(best_tree, best : dict, modified : set = None):
 
 #### Plotting
 def getPlotMetadata(stat):
-    data = {}
+    data = {"title": "",
+            "unit" : "",
+            "label": "Total"}
     match (stat):
         case "totalCoverage" | "coverage":
             data["title"] = "Coverage radius"
             if stat == "totalCoverage": data["title"] += " (Total)";
             data["unit"] = "Meters (m)"
+            data["label"] = "Global"
+            global max_coverage
+            if max_coverage is not None:
+                data["title"] += f" [max {max_coverage:0.2f} m]";
         case "totalCharge" | "charge":
-            data["title"] = "Total charge"
+            data["title"] = "Charge"
             if stat == "totalCharge": data["title"] += " (Total)";
             data["unit"] = "Watt hours (Wh)"
         case "simDuration":
@@ -306,7 +316,7 @@ def getPlotMetadata(stat):
             data["unit"] = "Euro (€) per kWh"
         case "reward" | "generalReward":
             data["title"] = "Reward"
-            data["unit"] = ""
+            data["label"] = ""
     return data
 def createPlotFigure(metadata):
     fig = plt.figure()
@@ -325,10 +335,10 @@ def combineFigures(axes, metadata):
         for og_line in ax_og.lines:
             x = og_line.get_xdata(); y = og_line.get_ydata();
             label=og_line.get_label();
-            match (label):
-                case "Total": color = "black";
-                case _:
-                    color = label.split(' ', 1)[0].lower();
+            if "agent" not in label:
+                color = "black"
+            else:
+                color = label.split(' ', 1)[0].lower();
             line = ax.plot(x, y, color=color, label=label)
             if isinstance(line, list): lines.extend(line);
             else: lines.append(line);
@@ -366,6 +376,6 @@ def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
             figs[stat] = (fig, ax)
         else:
             fig, ax = createPlotFigure(metadata)
-            ax.plot(x, data, label="Total")
+            ax.plot(x, data, label=metadata["label"])
             figs[stat] = (fig, ax)
     return figs

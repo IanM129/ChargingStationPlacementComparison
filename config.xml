@@ -38,7 +38,7 @@
 		</param>
 		<!-- Inactive during training -->
 		<param name="visualize" type="bool" default="False">
-			False
+			True
 		</param>
 		<param name="frameDur" type="float" default="0.01">
 			0.01
@@ -47,7 +47,7 @@
 			False
 		</param>
 		<param name="printErrors" type="bool" default="False">
-			True
+			False
 		</param>
 	</group>
 	<group name="electric">
@@ -60,8 +60,13 @@
 		<param name="batteryEmptyThreshold" type="float" default="2.0">
 			2.0
 		</param>
-		<param name="manualChargeDecide" type="bool" default="True">
+		<param name="centralizedStationRouting" type="bool" default="False">
 			True
+		</param>
+		<!-- Use SUMO StationFinder device instead 
+			 > only considers spatial and temporal values, hence only usable in solo runs -->
+		<param name="useStationFinder" type="bool" default="False">
+			False
 		</param>
 	</group>
 	<group name="station">
@@ -93,10 +98,14 @@
 				0.3
 			</param>
 		</param>
+		<!-- Increase the effect of the station price relative to how much charge needs to be recharged -->
+		<param name="scalePriceByChargeNeeded" type="bool" default="False">
+			False
+		</param>
 	</group>
 	<group name="training">
 		<param name="iterations" type="int" default="1000">
-			2
+			5000
 		</param>
 		<!-- Max 10 -->
 		<param name="agents" type="int" default="2">
@@ -108,27 +117,29 @@
 		<param name ="maxPrice" type="float" default="1.0">
 			1.0
 		</param>
-		<!-- How strongly does price affect the loss? -->
-		<param name="priceLambda" type="float" default="2.0">
-			2.0
-		</param>
-		<param name="emaAlpha" type="float" default="0.05">
-			0.05
-		</param>
-		<param name="temperature" type="float" default="1.0">
-			1.5
-		</param>
-		<param name="momentum" type="float" default="0.05">
-			0.1
-		</param>
-		<param name="entropyCoeff" type="float" default="0.02">
-			0.05
-		</param>
-		<param name="gradClip" type="float" default="1.0">
-			1.0
-		</param>
+		<group name="coefficients">
+			<!-- How strongly does price affect the loss? -->
+			<param name="priceLambda" type="float" default="2.0">
+				2.0
+			</param>
+			<param name="emaAlpha" type="float" default="0.05">
+				0.05
+			</param>
+			<param name="temperature" type="float" default="1.0">
+				1.5
+			</param>
+			<param name="momentum" type="float" default="0.05">
+				0.1
+			</param>
+			<param name="entropyCoeff" type="float" default="0.02">
+				0.05
+			</param>
+			<param name="gradClip" type="float" default="1.0">
+				1.0
+			</param>
+		</group>
 		<param name="progressDebugs" type="int" default="10">
-			0
+			10
 		</param>
 		<param name="printProgress" type="bool" default="True">
 			False
@@ -231,6 +242,14 @@
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
+		</param>
+	</group>
+	<group name="metaCoefficients">
+		<param name="costFunction_price" type="float" default="100.0">
+			100.0
+		</param>
+		<param name="centralizedRouting_waitQueue" type="float" default="100.0">
+			100.0
 		</param>
 	</group>
 </config>

@@ -77,11 +77,13 @@ def fixTripEdges(base_net, net, stations_edges, output_filepath, trips=None,
     ## Get replacements
     targets = {}
     for st_edge in stations_edges:
+        # edge -> station edge
         entry_id = parkingNetGen.getEntryID(st_edge)
         edge = base_net.getEdge(st_edge)
         from_id = edge.getFromNode().getID();
         to_node = edge.getToNode(); to_id = to_node.getID();
         first_id = graphutil.getRoadIDFromNodes(from_id, entry_id)
+        # Stats
         #first_len = float(net.getEdge(first_id).getLength())
         #second_id = graphutil.getRoadIDFromNodes(entry_id, to_id)
         #second_len = float(net.getEdge(second_id).getLength())

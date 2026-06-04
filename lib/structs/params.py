@@ -183,8 +183,12 @@ class Parameters:
                                                                      indent=2+(index*2), prec=g_max_len[index])
                 else:
                     item = parent + '.' + g
-                    s += "{0:{indent}}- {1:{prec}s} | {2}\n".format(" ", g, self.values[self.names[item]],
-                                                                     indent=2+(index*2), prec=f_max_len-((index-1)*2))
+                    if item in self.names:
+                        s += "{0:{indent}}- {1:{prec}s} | {2}\n".format(" ", g, self.values[self.names[item]],
+                                                                         indent=2+(index*2), prec=f_max_len-((index-1)*2))
+                    else:
+                        s += "{0:{indent}}- {1:{prec}s}[{2}]\n".format(" ", g, len(g_dict[g]),
+                                                                         indent=2+(index*2), prec=f_max_len-((index-1)*2))
                 s += self._groupPrintRecursive(g_dict[g], g_max_len, f_max_len, index=index+1,
                                                parent=(('' if parent=="" else (parent + '.')) + g))
             else:
@@ -201,15 +205,15 @@ class Parameters:
             level = 1
             if '.' in g:
                 group = g; cur_dict = g_dict;
-                while '.' in group:
-                    f_group = group.rsplit('.', 1)[1]
-                    p_group, group = group.split('.', 1)
+                while '.' in group:                         # outer.mi.dd.le.final -> {outer: {mi: {dd: {le: "final"}}}}
+                    f_group = group.rsplit('.', 1)[1]       # f_group = final
+                    p_group, group = group.split('.', 1)    # p_group = outer; group = mi.dd.le
                     if not isinstance(cur_dict[p_group], dict): cur_dict[p_group] = {};
                     cur_dict = cur_dict[p_group];
                     if len(g_max_len) <= level: g_max_len.append(0);
                     if g_max_len[level] < len(f_group): g_max_len[level] = len(f_group);
                     level += 1
-                if not isinstance(cur_dict[group], dict):
+                if (group not in cur_dict) or (not isinstance(cur_dict[group], dict)):
                     cur_dict[group] = {};
                 for n in self.groups[g]:
                     cur_dict[group][n] = None;
@@ -225,14 +229,13 @@ class Parameters:
         return s
 
 
-                    
-        for g in sorted(g_dict):
-            s += "  - {0:{prec}s}  [{1}]\n".format(g, len(g_dict[g]), prec=g_max_len)
-            for name in sorted(self.groups[g]):
-                s += "       {0:{prec1}s} | {1}\n".format(name, self.values[self.names[name]], prec1=f_max_len)
-        del g_dict
-        return s
-            
+if __name__ == "__main__":
+    params = Parameters.config()
+    print(params)
+    #print(params.groups)
+    #print(params.names)
+    #print(params.values)
+    print(params.groupPrint())
         
         
         

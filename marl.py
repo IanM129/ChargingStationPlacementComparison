@@ -307,14 +307,24 @@ if __name__ == "__main__":
     AGENT_COUNT = params["training.agents"]
     MIN_PRICE = params["training.minPrice"]
     MAX_PRICE = params["training.maxPrice"]
-    PRICE_LAMBDA = params["training.priceLambda"]
-    EMA_ALPHA = params["training.emaAlpha"]
+    PRICE_LAMBDA = params["training.coefficients.priceLambda"]
+    EMA_ALPHA = params["training.coefficients.emaAlpha"]
+    TEMPERATURE = float(params["training.coefficients.temperature"])
+    EFFECT_ON_RUN_REWARD = float(params["training.coefficients.momentum"]);
+    ENTROPY_COEFF = float(params["training.coefficients.entropyCoeff"]);
+    GRAD_CLIP = float(params["training.coefficients.gradClip"]);
     MEASURE_TIME = params["training.measureTime"]
     PRINTS = params["training.progressDebugs"]
     PROGRESS_PRINT = params["training.printProgress"]
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
+    # Charge routing info
+    if params["electric.useStationFinder"]:
+        print("INFO: Using StationFinder for vehicle charging and station routing.")
+    else:
+        charge_routing_str = "centralized" if (params["electric.centralizedStationRouting"]) else "selfish";
+        print("INFO: Using " + charge_routing_str + " policy for station routing.")
     # Divide K
     if K % AGENT_COUNT == 0:
         K = int(K / AGENT_COUNT); params["station.k"] = K;
@@ -364,6 +374,7 @@ if __name__ == "__main__":
     global network_diameter, coverage_radius_target, charge_max_eval
     network_diameter = float(nx.diameter(base_G, weight="length"))
     coverage_radius_target = network_diameter / np.sqrt(K)
+    gnnutil.setMaxCoverageRadius(network_diameter)
     #sess_charge_scale = None;
     #sess_duration_scale = MAX_DURATION if (DURATION_SET) else 1000.0;
     ## Globals
@@ -413,10 +424,6 @@ if __name__ == "__main__":
     comp_list = set({"charge", "coverage"})
     run_reward_general = None; run_rewards = [];
     for a in range(AGENT_COUNT): run_rewards.append(None);
-    temperature = float(params["training.temperature"])
-    effect_on_run_reward = float(params["training.momentum"]);
-    entropy_coeff = float(params["training.entropyCoeff"]);
-    grad_clip = float(params["training.gradClip"]);
     global running_dict
     running_dict = gnnutil.initializeRunningDict(suffixes=suffixes)
     # Progress printing
@@ -445,6 +452,7 @@ if __name__ == "__main__":
     price_log_probs = [] #torch.zeros(AGENT_COUNT);
     sel_entropy = [] #torch.zeros(AGENT_COUNT);
     price_entropy = [] #torch.zeros(AGENT_COUNT);
+    losses = np.zeros(AGENT_COUNT);
     formula_general = {}; formulas = [];
     reward_general = None; rewards = np.zeros(AGENT_COUNT);
     advantage_general = 0.0; advantages = np.zeros(AGENT_COUNT);
@@ -462,10 +470,10 @@ if __name__ == "__main__":
             # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
             logits, price_alpha, price_beta = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
             # Process
-            if temperature > 0.0:
-                logits = logits / temperature
-                price_alpha = price_alpha / temperature
-                price_beta = price_beta / temperature
+            if TEMPERATURE > 0.0:
+                logits = logits / TEMPERATURE
+                price_alpha = price_alpha / TEMPERATURE
+                price_beta = price_beta / TEMPERATURE
             # Edge selection probabilitites
             sel_probs = torch.softmax(logits, dim=0)
             sel_log_probs_cur = torch.log(sel_probs + 1e-10)
@@ -484,6 +492,7 @@ if __name__ == "__main__":
             price = (MIN_PRICE + (unit_price * (MAX_PRICE - MIN_PRICE)))
             price_log_probs_cur = price_dist.log_prob(unit_price)
             price_entropy_cur = price_dist.entropy()
+            price = price.detach().item()
             # Transform to stations
             chosen_stations = []
             for edge in selected_edge_ids: chosen_stations.append(StationInfo(edge, STATION_CAPACITY, price, suffix=suffixes[a]));
@@ -493,15 +502,13 @@ if __name__ == "__main__":
                 print("ERROR: One edge selected twice:", selected_edge_indices, "->", chosen_stations.listEdges())
             # Save for outside of loop
             stations[a] = chosen_stations; all_stations.extend(chosen_stations.arr);
-            prices[a] = price.detach().item()
+            prices[a] = price#.detach().item()
             sel_log_probs[a] = sel_log_probs_cur;
             price_log_probs[a] = price_log_probs_cur;
             sel_entropy[a] = entropy_cur; price_entropy[a] = price_entropy_cur;
         all_stations = StationInfoDataset(all_stations)
         
         #### 3. Run evaluation
-        if sim_tries > 10:
-            raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {all_stations.listEdges()}.")
         last_results = results
         if (iteration == 1): params["prep.preprocess"] = False;
         if MEASURE_TIME: sim_stime = time.perf_counter();
@@ -518,6 +525,11 @@ if __name__ == "__main__":
                 print(e)
             sim_tries += 1
             traci.close()
+            if sim_tries >= 10:
+                if not PRINT_ERRORS:
+                    traceback.print_tb(e.__traceback__)
+                    print(e)
+                raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {all_stations.listEdges()}.")
             continue
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
@@ -534,22 +546,22 @@ if __name__ == "__main__":
         # Update results dictionary 
         gnnutil.updateResultsDict_comp(train_results, stations, formula_general, formulas, iteration)
         # Update best
-        best_modified["General"] = gnnutil.updateBestDict(best["General"], all_stations.listEdges(), formula_general, modified=best_modified["General"])
+        best_modified["General"] = gnnutil.updateBestDict(best["General"], all_stations.listEdges(), formula_general, prices=prices, modified=best_modified["General"])
         for a in range(AGENT_COUNT):
             best_key = agent_colors[a].capitalize()
-            best_modified[best_key] = gnnutil.updateBestDict(best[best_key], stations[a].listEdges(), formulas[a], modified=best_modified[best_key])
+            best_modified[best_key] = gnnutil.updateBestDict(best[best_key], stations[a].listEdges(), formulas[a], prices=prices, modified=best_modified[best_key])
         # Running reward/advantage
-        if effect_on_run_reward > 0.0:
+        if EFFECT_ON_RUN_REWARD > 0.0:
             if run_reward_general == None:
                 run_reward_general = reward_general;
                 run_rewards = rewards;
             advantage_general = float(reward_general - run_reward_general);
-            run_reward_general = ((1 - effect_on_run_reward) * run_reward_general) +\
-                                 (effect_on_run_reward * reward_general)
+            run_reward_general = ((1 - EFFECT_ON_RUN_REWARD) * run_reward_general) +\
+                                 (EFFECT_ON_RUN_REWARD * reward_general)
             for a in range(AGENT_COUNT):
                 advantages[a] = float(rewards[a] - run_rewards[a])
-                run_rewards[a] = ((1 - effect_on_run_reward) * run_rewards[a]) +\
-                                 (effect_on_run_reward * rewards[a])
+                run_rewards[a] = ((1 - EFFECT_ON_RUN_REWARD) * run_rewards[a]) +\
+                                 (EFFECT_ON_RUN_REWARD * rewards[a])
         else:
             advantage_general = reward_general
             advantages = rewards
@@ -565,17 +577,19 @@ if __name__ == "__main__":
             price_loss = price_log_probs[a] * PRICE_LAMBDA
             # Entropy loss for exploration
             entropy_bonus = (sel_entropy[a] + (0.1 * price_entropy[a]))
-            entropy_loss = -entropy_coeff * entropy_bonus
+            entropy_loss = -ENTROPY_COEFF * entropy_bonus
             ## Loss; minimize negative to maximize reward
             loss = -(sel_edge_loss + price_loss) * advantages[a]
             loss += entropy_loss;
             # Backprop
             loss.backward()
             # Gradient clipping
-            if grad_clip > 0.0:
-                torch.nn.utils.clip_grad_norm_(models[a].parameters(), grad_clip)
+            if GRAD_CLIP > 0.0:
+                torch.nn.utils.clip_grad_norm_(models[a].parameters(), GRAD_CLIP)
             # Step
             optimizers[a].step();
+            # Save
+            losses[a] = loss.item();
 
         #### 6. Update environment
         if MEASURE_TIME: sim_stime = time.perf_counter();
@@ -588,23 +602,26 @@ if __name__ == "__main__":
         pbar.update(1)
         
         # Debug
-        if print_every > 0 and (iteration + 1) % print_every == 0:
-            s = f"> {(iteration + 1):5d} / {ITERATIONS}:\n"
-            s += "  chosen: " + str(selected_edge_indices) + "\n"
-            #s += f"  flow:   {flow:10.4f}  | {max_flow}\n";
-            s += f"  reward: {reward:7.2f}  | {run_reward:0.2f}\n";
-            s += "  loss: " + str(loss.item()) + "\n"
+        if print_every > 0 and (iteration) % print_every == 0:
+            s = f"> {(iteration):5d} / {ITERATIONS}:\n"
+            for a in range(AGENT_COUNT):
+                name = agent_colors[a].capitalize()
+                s += f"  {name:8s}:\n";
+                s += f"    stations: " + str(stations[a].listEdges())
+                #s += f"    flow:   {flow:10.4f}  | {max_flow}\n";
+                s += f"    reward: {rewards[a]:7.2f}  | {run_rewards[a]:0.2f}\n";
+                s += "    loss: " + str(losses[a].item()) + "\n"
             #s += " " + str(len(set(selected_edge_indices).intersection(set(max_inds)))) + "/" + str(K) + "\n"
             if MEASURE_TIME:
-                avg_eval_time = eval_time / (iteration + 1)
-                avg_reward_time = rewardcalc_time / (iteration + 1)
-                avg_envupdate_time = envupdate_time / (iteration + 1)
+                avg_eval_time = eval_time / (iteration)
+                avg_reward_time = rewardcalc_time / (iteration)
+                avg_envupdate_time = envupdate_time / (iteration)
                 s += f"  average part durations:\n"
                 s += f"    evaluation:          {round(avg_eval_time, 2)}\n"
                 s += f"    reward calculation:  {round(avg_reward_time, 2)}\n"
                 s += f"    env update:          {round(avg_envupdate_time, 2)}\n"
             s += "\n"
-            s += str(formula) + "\n"
+            s += str(formula_general) + "\n"
             if PROGRESS_PRINT: print(s);
             if PROGRESS_WRITE:
                 # Write in progress log
@@ -614,8 +631,9 @@ if __name__ == "__main__":
                     f.write("\n")
                 # Write best
                 gnnutil.updateBestTree_comp(best_tree, best, best_modified)
-                ET.indent(best_tree, space="    ")
+                ET.indent(best_tree, space=' ' * 4)
                 best_tree.write(output_path + "/training/best.xml");
+            """
             if PROGRESS_DRAW:
                 # Draw current evaluation
                 plt.close()
@@ -626,7 +644,7 @@ if __name__ == "__main__":
                 graphdraw.drawEdgeWeights(base_G, edge_weights, ax=ax, default_width=0.0)
                 station_weights = {si.edge_id: (results.station_data["charged"][translator.IDToEdge(si.edge_id)]) for si in stations}
                 graphdraw.drawCircleStations(base_G, base_net, stations.listEdges(), fig, ax, circle_size=50, font_size=8, station_weights=station_weights)
-                fig.savefig(output_path + f"/training/iteration_{(iteration + 1)}.jpg")
+                fig.savefig(output_path + f"/training/iteration_{(iteration)}.jpg")
                 plt.close(fig)
                 # Draw coverage
                 if "coverage" in formula:
@@ -634,7 +652,8 @@ if __name__ == "__main__":
                     graphdraw.drawCenters(coverage_G_d, stations.listDNodes(), formula["coverage"][0], ax=ax,
                                           node_size=150, node_labels=False, edge_labels=False)
                     ax.set_title(f"Radius: " + str(round(formula["coverage"][0], 2)))
-                    fig.savefig(output_path + f"/training/coverage_{(iteration + 1)}.jpg")
+                    fig.savefig(output_path + f"/training/coverage_{(iteration)}.jpg")
+            """
     pbar.close()
 
     #### Finish and save
@@ -646,6 +665,7 @@ if __name__ == "__main__":
     gnnutil.updateBestTree_comp(best_tree, best, best_modified)
     ET.indent(best_tree, space=' ' * 4)
     best_tree.write(output_path + "/training/best.xml");
+    best_tree.write(output_path + "/results/best.xml");
     # Save result data
     xmlOut.saveTrainResults(train_results, output_path + "/results/data.xml")
     # Write plot figures
@@ -657,7 +677,8 @@ if __name__ == "__main__":
     figs["rewardCombined"] = gnnutil.combineFigures([figs["generalReward"][1], figs["reward"][1]], metadata);
     # coverage
     metadata = gnnutil.getPlotMetadata("coverage");
-    metadata["title"] += " (Combined)";
+    temp_title = metadata["title"].split('[', 1)
+    metadata["title"] = temp_title[0] + " (Combined) [" + temp_title[1];
     figs["coverageCombined"] = gnnutil.combineFigures([figs["totalCoverage"][1], figs["coverage"][1]], metadata)
     #del figs["totalCoverage"]
     # charge

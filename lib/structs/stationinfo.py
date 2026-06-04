@@ -1,4 +1,5 @@
 import math
+from collections import deque
 
 import lib.graphing.utility as graphutil
 
@@ -17,6 +18,10 @@ class StationInfo:
     # capacity          capacity of each parking space
     # total_capacity    summed capacity
     # occupied          (tuple) occupied spot count
+    # wait_park_id      wait queue parking id
+    # waiting           (int) amount cars in wait queue [OBSOLETE]
+    # wait_queue        (deque) cars in wait queue
+    # price             price per kWh for this station
     # suffix            id suffix
     
     def __init__(self, edge_id, total_capacity : float, price : float, dedge_id=None, redge_id=None, suffix=""):
@@ -28,8 +33,10 @@ class StationInfo:
         self.total_capacity = total_capacity
         first_capacity = math.floor(total_capacity / 2.0)
         self.capacity = (first_capacity, total_capacity - first_capacity)
-        self.occupied = [0, 0]
-        self.price = price
+        self.occupied = [0, 0];
+        self.wait_park_id = parkingNetGen.getWaitParkingIDOfStation(self.name_id)
+        self.wait_queue = deque();
+        self.price = price;
         # Utility
         #if dedge_id == None:
         #    dedge_id = graphutil.translateNetEdgeToDetailedEdgeID(edge_id);
@@ -54,6 +61,16 @@ class StationInfo:
         return self.name_id + ("_1" if reverse else "_0"); #self.ids[1 if reverse else 0];
     #station ids (2 -> normal and reverse)
     def getIDs(self): return (self.name_id + "_0", self.name_id + "_1"); #self.ids;
+    # Waiting queue
+    def addToWaiting(self, vehID):
+        self.wait_queue.append(vehID)
+    def removeNextWaiting(self):
+        if len(self.wait_queue) > 0:
+            return self.wait_queue.popleft()
+        return None
+    def getWaitingCount(self):
+        return len(self.wait_queue)
+    # Spot management
     def requestSpot(self, auto_take=False, search_reverse=True):
         if search_reverse:
             if self.occupied[1] < self.capacity[1]:
@@ -76,6 +93,9 @@ class StationInfo:
     def releaseSpot(self, side_index):
         self.occupied[side_index] -= 1;
         #print(self.name_id, " released spot on", "second" if side_index == 1 else "first", "side:", self.occupied)
+    def hasFreeSpot(self):
+        return ((self.occupied[0] < self.capacity[0]) or (self.occupied[1] < self.capacity[1]))
+    # Print overload
     def __repr__(self):
         return f"PCS({self.edge_id},|{self.total_capacity}|)"
 class StationInfoDataset:
@@ -88,6 +108,7 @@ class StationInfoDataset:
         self.rev_dict = {}
         for i in range(len(arr)):
             self.rev_dict[arr[i].getID()] = i
+    # Lists
     def listEdges(self):
         if not self.nedges:
             self.nedges = [si.edge_id for si in self.arr]
@@ -125,13 +146,21 @@ class StationInfoDataset:
         if not self.parkIDss:
             self.parkIDss = [(si.park_id + "_0", si.park_id + "_1") for si in self.arr]
         return self.parkIDss
+    def getFree(self):
+        res = []
+        for si in self.arr:
+            if si.hasFreeSpot(): res.append(si);
+        return res
+    # Getters
     def __getitem__(self, idx): return self.arr[idx];
     def getByID(self, x): return self.arr[self.rev_dict[x]];
     def getIndexByID(self, x): return self.rev_dict[x];
+    # Overloads
     def __iter__(self):
         for el in self.arr:
             yield el
     def __len__(self): return len(self.arr);
+    # Printing
     def __repr__(self):
         s = f"StationInfoDataset [{len(self.arr)}]:\n[";
         first = True

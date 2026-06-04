@@ -6,15 +6,16 @@ import time
 from datetime import datetime
 import random
 import math
+import pathlib
+import re
+from enum import Enum
 import numpy as np
-import sumolib
-#import libsumo as traci
-import traci.constants as tc
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
-import pathlib
+
 import networkx as nx
-import re
+import traci.constants as tc
+import sumolib
 
 sumoBinary = sumolib.checkBinary('sumo')
 #import randomTrips
@@ -24,6 +25,7 @@ import lib.graphing as graphing  #= lib/graphing/__init__.py
 import preprocess as prep
 
 import lib.sumo.utility as sumoutil
+from lib.sumo.utility import StationRouting
 import lib.traci_utility as traciutil
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
@@ -45,8 +47,9 @@ os.chdir(MAIN_DIR)
 
 
 ## Recharge cost function
-def stationCostFunction(detour_time, detour_distance, price):
-    return detour_time + detour_distance + (100.0 * price)
+def stationCostFunction(detour_time, detour_distance, price, charge_amount=None):
+    # No price because only one agent
+    return detour_time + detour_distance
 
 def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
@@ -81,7 +84,7 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     vTypes_tree = ET.parse("networks/vTypes.add.xml", parser=parser)
     ## Update XML settings
     prep.enableBattery(vTypes_tree, True)
-    prep.enableStationFinder(vTypes_tree, not params["electric.manualChargeDecide"])
+    prep.enableStationFinder(vTypes_tree, CHARGE_ROUTING == 0)
     vTypes_tree.write(cache_data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
     ## Side vars
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
@@ -107,9 +110,9 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
 
 ####
 def removeFromSimulationVars(vehicles : set, stations, params):
-    global sim_EVs
+    global sim_EVs, CHARGE_ROUTING
     sim_EVs -= vehicles;
-    if MANUAL_CHARGE_DECIDE: #params["electric.manualChargeDecide"]:
+    if CHARGE_ROUTING != StationRoute.STATIONFINDER:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge -= vehicles;
         for vehID in vehicles:
@@ -122,14 +125,17 @@ def removeFromSimulationVars(vehicles : set, stations, params):
 def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, results, stations,
                 output_path, output_subfolder="solo", params=None, debug=False):
     if not params: params = Parameters.default();
-    global MANUAL_CHARGE_DECIDE
     CPU_THREADS = params["sim.cpuThreads"]
     MAX_DURATION = params["sim.maxDuration"]
     DURATION_SET = MAX_DURATION > 0
-    MANUAL_CHARGE_DECIDE = params["electric.manualChargeDecide"]
+    params["electric.manualChargeDecide"]
     VISUALIZE = params["sim.visualize"]
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     MONEY_PER_KWH = params["station.moneyPerKWh"]
+    # Charge routing enum
+    global CHARGE_ROUTING
+    if params["electric.useStationFinder"]: CHARGE_ROUTING = StationRouting.STATIONFINDER;
+    else: CHARGE_ROUTING = StationRouting.CENTRALIZED if (params["electric.centralizedStationRouting"]) else StationRouting.SELFISH;
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
@@ -188,7 +194,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     EVs_count = 0; total_veh_count = 0;
     set_need_to_charge_cnt = 0;
     sttn_util_rate = {}
-    if MANUAL_CHARGE_DECIDE:
+    if CHARGE_ROUTING != StationRouting.STATIONFINDER:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
         going_to_charge = {}
@@ -229,45 +235,46 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         removeFromSimulationVars(arrived, stations, params)
 
         ## STEP
-        if MANUAL_CHARGE_DECIDE:
+        if CHARGE_ROUTING != StationRouting.STATIONFINDER:
             vaporized = set()
             go_charge_this_step = {}
             for vehID in sim_EVs:
                 cur_edge = traci.vehicle.getRoadID(vehID);
                 if cur_edge and cur_edge[0] != ':':
                     charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
-                    if MANUAL_CHARGE_DECIDE:
-                        # Check if battery empty
-                        if charge <= params["electric.batteryEmptyThreshold"]:
-                            traci.vehicle.remove(vehID, reason=3)
-                            vaporized.add(vehID)
-                        # Check if needs to search for a charging station
-                        if (vehID in will_need_to_charge) and (charge < ev_ntc_charge[vehID]): # find charging station
-                            route = traci.vehicle.getRoute(vehID);
-                            cur_index = traci.vehicle.getRouteIndex(vehID);
-                            next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
-                            # Get charging station and station trip
+                    # Check if battery empty
+                    if charge <= params["electric.batteryEmptyThreshold"]:
+                        traci.vehicle.remove(vehID, reason=3)
+                        vaporized.add(vehID)
+                    # Check if needs to search for a charging station
+                    if (vehID in will_need_to_charge) and (charge < ev_ntc_charge[vehID]): # find charging station
+                        route = traci.vehicle.getRoute(vehID);
+                        cur_index = traci.vehicle.getRouteIndex(vehID);
+                        next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
+                        # Get charging station and station trip
+                        if CHARGE_ROUTING == StationRouting.SELFISH:
                             target_station, station_trip, station_route = traciutil.findClosestChargingStation(vehID, charge, stations, stationCostFunction,
                                                                                                                route=route, cur_index=cur_index,
                                                                                                                next_dest_index=next_dest_index_r)
-                            # Update new route and trip
-                            new_route = station_route + route[next_dest_index_r + 1:]
-                            #trips[vehID].update(station_trip, index=cur_index)
-                            next_dest_index_t = traciutil.getNextDestIndexInTrip(vehID, trips[vehID], route, cur_index)
-                            trips[vehID].insertToNextDestination(station_trip, next_dest_index_t)
-                            # Set stop
-                            target_si = stations.getByID(target_station)
-                            traci.vehicle.setRoute(vehID, new_route)
-                            #try:
-                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, WAIT_QUEUE_SIZE));
-                            #except Exception as e:
-                            #    print("Failed to stop.")
-                            #    raise Exception(e);
-                            # Update set
-                            go_charge_this_step[vehID] = target_station
-                            if VISUALIZE:
-                                # Color by going to station or not
-                                traciutil.colorByGoingToStation(vehID, True, veh_colors)
+                        else: pass;
+                        # Update new route and trip
+                        new_route = station_route + route[next_dest_index_r + 1:]
+                        #trips[vehID].update(station_trip, index=cur_index)
+                        next_dest_index_t = traciutil.getNextDestIndexInTrip(vehID, trips[vehID], route, cur_index)
+                        trips[vehID].insertToNextDestination(station_trip, next_dest_index_t)
+                        # Set stop
+                        target_si = stations.getByID(target_station)
+                        traci.vehicle.setRoute(vehID, new_route)
+                        #try:
+                        traci.vehicle.setStop(vehID, target_si.redge_id, pos=parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, WAIT_QUEUE_SIZE));
+                        #except Exception as e:
+                        #    print("Failed to stop.")
+                        #    raise Exception(e);
+                        # Update set
+                        go_charge_this_step[vehID] = target_station
+                        if VISUALIZE:
+                            # Color by going to station or not
+                            traciutil.colorByGoingToStation(vehID, True, veh_colors)
                 #if VISUALIZE:
                     # Color by charge
                     #traciutil.colorByCharge(vehID, charge, veh_colors, max_charge)
@@ -336,7 +343,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                 sim_EVs.add(vehID); EVs_count += 1;
                 # Set when vehicle needs to charge
                 need_to_charge_level = random.uniform(0.15, 0.4)
-                if MANUAL_CHARGE_DECIDE:
+                if CHARGE_ROUTING != StationRoute.STATIONFINDER:
                     ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
                 else:
                     traci.vehicle.setParameter(vehID, "device.stationfinder.needToChargeLevel", str(need_to_charge_level))
@@ -354,7 +361,8 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                 else:
                     set_charge = max_charge
                 traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(min(set_charge, max_charge)))
-                if MANUAL_CHARGE_DECIDE: will_need_to_charge.add(vehID);
+                if CHARGE_ROUTING != StationRoute.STATIONFINDER:
+                    will_need_to_charge.add(vehID);
 
 
         ## Keep tracking of station use per time
