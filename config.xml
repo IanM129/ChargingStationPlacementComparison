@@ -43,7 +43,7 @@
 		</param>
 		<!-- Inactive during training -->
 		<param name="visualize" type="bool" default="False">
-			False
+			True
 		</param>
 		<param name="frameDur" type="float" default="0.01">
 			0.01
@@ -71,7 +71,7 @@
 			6
 		</param>
 		<param name="capacity" type="int" default="10">
-			4
+			7
 		</param>
 		<param name="waitQueue" type="int" default="10">
 			10
