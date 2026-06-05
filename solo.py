@@ -33,7 +33,7 @@ import lib.algorithms.algorithms as alg
 import lib.xml.tripsGen as tripsGen
 import lib.xml.output as xmlOut
 
-from lib.sumo.comp import sumoCompRun
+from lib.sumo.solo import sumoSoloRun
 
 MAIN_DIR = pathlib.Path(__file__).resolve().parent
 os.chdir(MAIN_DIR)
@@ -69,20 +69,19 @@ def stationDistribution(G, G_d, k, debug=False):
     #print("Edges selected for stations:", stations_edges)
     return stations_d, radius
 
-def runSimulation(network_name, G, stations, all_stations, base_trips, prices, params, results, iteration=None, debug=False):
+def runSimulation(network_name, G, stations, base_trips, params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
-    output_subfolder = "comp";
+    output_subfolder = "solo";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(base_net, G, data_path, network_name, trips, results, stations, all_stations,
+    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
                           output_path=output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
                           params=params, debug=debug)
     return results
 
 
 ###### SETTINGS
-agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
 
+###### MAIN
 if __name__ == "__main__":
     # Parse arguments
     if len(sys.argv) < 2: network_name = "manhattan";
@@ -92,13 +91,14 @@ if __name__ == "__main__":
     print(params.groupPrint())
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
+    DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
     PRINT_ERRORS = params["sim.printErrors"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
-    AGENT_COUNT = params["training.agents"]
+    MONEY_PER_KWH = params["station.moneyPerKWh"]
     print(params.groupPrint())
     # Charge routing info
     if params["station.routing.useStationFinder"]:
@@ -106,25 +106,8 @@ if __name__ == "__main__":
     else:
         charge_routing_str = "centralized" if (params["station.routing.centralized"]) else "selfish";
         print("INFO: Using " + charge_routing_str + " policy for station routing.")
-    # Divide K
-    if K % AGENT_COUNT == 0:
-        K = int(K / AGENT_COUNT); params["station.k"] = K;
-        print(f"INFO: Every agent chooses {K} stations.")
-    else:
-        print(f"WARNING: k ({K}) is not divisible by {AGENT_COUNT}, using it unchanged.")
-    # Get prices
-    prices = []
-    base_price = params["station.moneyPerKWh"]
-    for a in range(AGENT_COUNT):
-        if a < len(agent_colors):
-            param_name = "station.moneyPerKWh." + agent_colors[a]
-            if param_name in params:
-                prices.append(params[param_name])
-                continue
-        if PRINT_ERRORS:
-            print(f"WARNING: Failed to fetch price for agent #{a} ('{agent_colors[a]}').")
-        prices.append(base_price)
-    print(f"INFO: Using prices: {prices} € per kWh.")
+    # Get price
+    print(f"INFO: Using price: {MONEY_PER_KWH} € per kWh.")
     # Traci switch
     global libsumo_m, traci_m
     traci = libsumo_m
@@ -146,45 +129,40 @@ if __name__ == "__main__":
     ## Other
     global network_diameter
     network_diameter = float(nx.diameter(base_G, weight="length"))
-    suffixes = [("_" + n) for n in agent_colors]
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
         MAX_DISTANCE = abs(MAX_DISTANCE * network_diameter)
 ###### PRE-RUN
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = network_name + "_comp_" + start_datetime_str
+    output_folder = network_name + "_solo_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Generate trips
     trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                             #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
-                            destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
+                            destination_count_probs=DESTINATION_COUNT_DIST,
                             #min_distance_per_des=(network_diameter / 4.0),
                             min_distance=MIN_DISTANCE, #network_diameter*0.5,
                             max_distance=MAX_DISTANCE, #network_diameter*2.0,
                             ev_pen=EV_PEN)
     # Station distribution
-    stations = []; dist_radius = []; all_stations = [];
-    for a in range(AGENT_COUNT):
-        st, dr = stationDistribution(base_G, base_G_d, K)
-        # Station info from detailed edges
-        st = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, prices[a], suffix=suffixes[a]) for s in st])
-        stations.append(st); dist_radius.append(dr);
-        all_stations.extend(st.arr)
-        print("-- " + str(agent_colors[a].capitalize()) + " stations:", stations[a].printEdges())
-    all_stations = StationInfoDataset(all_stations)
+    stations = []; dist_radius = 0.0;
+    stations, dist_radius = stationDistribution(base_G, base_G_d, K)
+    # Station info from detailed edges
+    stations = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
+    print("-- stations:", stations.printEdges())
     # Prepare results
     results = Evaluation(translator)
 ###### RUN
-    results = runSimulation(network_name, base_G, stations, all_stations, trips, prices,
+    results = runSimulation(network_name, base_G, stations, trips,
                   params, results, iteration=None, debug=False)
 
 ###### POSTPROCESS
     # Write results
     res_dict = results.getFullDict(include_edge_data=True)
-    Evaluation.suffixesToNames(res_dict)
+    #Evaluation.suffixesToNames(res_dict)
     res_tree = ET.ElementTree(ET.fromstring('<results></results>'))
     xmlOut.dictToElement_recursive(res_dict, res_tree.getroot())
     ET.indent(res_tree, space="    ")

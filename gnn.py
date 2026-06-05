@@ -161,7 +161,6 @@ def rewardFunction(stations, results, params, formula):
         else: formula["waitTime"] = (wait_time, 0.0);
     # Stop time [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.stopTime"]) != 0.0) or (params["reward.stopTime.monitor"]):
-        global stopTime_mean, stopTime_var
         stop_time = float(results.trip_data["stopTime"])
         if factor != 0.0:
             stopTime_mean, stopTime_var = running_dict["stopTime"]
@@ -176,7 +175,6 @@ def rewardFunction(stations, results, params, formula):
         else: formula["stopTime"] = (stop_time, 0.0);
     # Time lost [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.timeLoss"]) != 0.0) or (params["reward.timeLoss.monitor"]):
-        global timeLoss_mean, timeLoss_var
         time_loss = float(results.trip_data["timeLoss"])
         if factor != 0.0:
             timeLoss_mean, timeLoss_var = running_dict["timeLoss"]
@@ -191,7 +189,6 @@ def rewardFunction(stations, results, params, formula):
         else: formula["timeLoss"] = (time_loss, 0.0);
     # Energy consumed [average] (EMA -> Z-score -> tanh; minimize)
     if ((factor := params["reward.energyConsumed"]) != 0.0) or (params["reward.energyConsumed.monitor"]):
-        global enCons_mean, enCons_var
         energy_consumed = float(results.trip_data["energyConsumed"])
         if factor != 0.0:
             enCons_mean, enCons_var = running_dict["energyConsumed"]
@@ -210,9 +207,9 @@ def runSimulation(network_name, G, stations, base_trips, params, results, iterat
     trips = copy.deepcopy(base_trips)
     output_subfolder = "solo";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations, params=params,
+    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
                           output_path=output_path, output_subfolder=output_subfolder,
-                          debug=debug)
+                          params=params, debug=debug)
     return results
         
 
@@ -237,26 +234,40 @@ if __name__ == "__main__":
     params = Parameters.config()
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
-    MAX_DURATION = params["sim.maxDuration"]
-    DURATION_SET = MAX_DURATION > 0
+    #MAX_DURATION = params["sim.maxDuration"]
+    #DURATION_SET = MAX_DURATION > 0
+    DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
     if params["sim.visualize"]:
         print("INFO: 'visualize' ignored when training.")
         params["sim.visualize"] = False
-    VISUALIZE = False
+    if params["sim.printResults"]:
+        print("INFO: 'printResults' ignored when training.")
+        params["sim.printResults"] = False
     PRINT_ERRORS = params["sim.printErrors"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
+    MONEY_PER_KWH = params["station.moneyPerKWh"]
     ITERATIONS = params["training.iterations"]
-    EMA_ALPHA = params["training.emaAlpha"]
+    EMA_ALPHA = params["training.coefficients.emaAlpha"];
+    TEMPERATURE = float(params["training.coefficients.temperature"])
+    EFFECT_ON_RUN_REWARD = float(params["training.coefficients.momentum"]);
+    ENTROPY_COEFF = float(params["training.coefficients.entropyCoeff"]);
+    GRAD_CLIP = float(params["training.coefficients.gradClip"]);
     MEASURE_TIME = params["training.measureTime"]
     PRINTS = params["training.progressDebugs"]
     PROGRESS_PRINT = params["training.printProgress"]
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
+    # Charge routing info
+    if params["station.routing.useStationFinder"]:
+        print("INFO: Using StationFinder for vehicle charging and station routing.")
+    else:
+        charge_routing_str = "centralized" if (params["station.routing.centralized"]) else "selfish";
+        print("INFO: Using " + charge_routing_str + " policy for station routing.")
     # Traci switch
     #traciutil.initialize(True)
     global libsumo_m, traci_m
@@ -279,9 +290,6 @@ if __name__ == "__main__":
     # Detailed graph for coverage calculations
     global coverage_G_d
     coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
-    #graphing.discretizeGraph(coverage_G_d, 1, add_max=1, roads_only=True)
-    #graphdraw.drawGraph(coverage_G_d)
-    #plt.show()
     # Edge translator
     translator = GraphTranslator(base_G)
     ## PyG Data
@@ -303,9 +311,7 @@ if __name__ == "__main__":
     global network_diameter, coverage_radius_target, charge_max_eval
     network_diameter = float(nx.diameter(base_G, weight="length"))
     coverage_radius_target = network_diameter / np.sqrt(K)
-    sess_charge_scale = None; #1000.0;
-    sess_duration_scale = MAX_DURATION if (DURATION_SET) else 1000.0;
-    ## Globals
+    gnnutil.setMaxCoverageRadius(network_diameter)
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
@@ -320,11 +326,10 @@ if __name__ == "__main__":
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
-                               #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
-                               destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
+                               destination_count_probs=DESTINATION_COUNT_DIST,
                                #min_distance_per_des=(network_diameter / 4.0),
-                               min_distance=network_diameter*0.5,
-                               max_distance=network_diameter*2.0,
+                               min_distance=MIN_DISTANCE, #network_diameter*0.5,
+                               max_distance=MAX_DISTANCE, #network_diameter*2.0,
                                ev_pen=EV_PEN)
     average_trip_len = base_trips.averageTripLen()
     # Prepare results
@@ -348,10 +353,6 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     # Reward side variables
     run_reward = None;
-    temperature = float(params["training.temperature"])
-    effect_on_run_reward = float(params["training.momentum"]);
-    entropy_coeff = float(params["training.entropyCoeff"]);
-    grad_clip = float(params["training.gradClip"]);
     global running_dict
     running_dict = gnnutil.initializeRunningDict();
     # Progress printing
@@ -365,13 +366,14 @@ if __name__ == "__main__":
         eval_time = 0.0; rewardcalc_time = 0.0; envupdate_time = 0.0;
     # Monitor training results
     global train_results
-    train_results = gnnutil.initializeResultsDict(params, ITERATIONS)
+    train_results = gnnutil.initializeResultsDict(params, ITERATIONS, K)
     best = gnnutil.initializeBestDict(params)
     #### Loop
     pbar = tqdm(total=ITERATIONS)
     iteration = 0
     sim_tries = 0
     best_modified = {}
+    training_stime = time.perf_counter();
     while iteration < ITERATIONS:
         model.train()
         optimizer.zero_grad()
@@ -379,8 +381,8 @@ if __name__ == "__main__":
         #### 1. Get edge scores and probability
         # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
         logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
-        if temperature > 0.0:
-            logits = logits / temperature
+        if TEMPERATURE > 0.0:
+            logits = logits / TEMPERATURE
         probs = torch.softmax(logits, dim=0)
         log_probs = torch.log(probs + 1e-10)
         entropy = -(probs * log_probs).sum(dim=-1).mean()
@@ -428,14 +430,14 @@ if __name__ == "__main__":
         if MEASURE_TIME: sim_stime = time.perf_counter();
         formula = {}
         reward = rewardFunction(stations, results, params, formula)
-        gnnutil.updateResultsDict(train_results, formula, iteration)
+        gnnutil.updateResultsDict(train_results, stations, formula, iteration)
         best_modified = gnnutil.updateBestDict(best, stations.listEdges(), formula, modified=best_modified)
         # Running reward/advantage
-        if effect_on_run_reward > 0.0:
+        if EFFECT_ON_RUN_REWARD > 0.0:
             if run_reward == None: run_reward = reward;
             advantage = float(reward - run_reward)
-            run_reward = ((1 - effect_on_run_reward) * run_reward) +\
-                         (effect_on_run_reward * reward)
+            run_reward = ((1 - EFFECT_ON_RUN_REWARD) * run_reward) +\
+                         (EFFECT_ON_RUN_REWARD * reward)
         else:
             advantage = reward
         if MEASURE_TIME:
@@ -445,7 +447,7 @@ if __name__ == "__main__":
 
         # 5. Policy Gradient Update
         # Entropy loss for exploration
-        entropy_loss = -entropy_coeff * entropy
+        entropy_loss = -ENTROPY_COEFF * entropy
         # Loss; minimize negative to maximize reward
         #  Mean
         #loss = (-sel_log_probs * advantage).mean();
@@ -455,8 +457,8 @@ if __name__ == "__main__":
         # Backprop
         loss.backward()
         # Gradient clipping
-        if grad_clip > 0.0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        if GRAD_CLIP > 0.0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         # Step
         optimizer.step()
 
@@ -519,7 +521,7 @@ if __name__ == "__main__":
                     ax.set_title(f"Radius: " + str(round(formula["coverage"][0], 2)))
                     fig.savefig(output_path + f"/training/coverage_{(iteration + 1)}.jpg")
     pbar.close()
-
+    training_etime = time.perf_counter();
     #### Finish and save
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     ## Save model
@@ -529,6 +531,7 @@ if __name__ == "__main__":
     gnnutil.updateBestTree(best_tree, best, best_modified)
     ET.indent(best_tree, space="    ")
     best_tree.write(output_path + "/training/best.xml");
+    best_tree.write(output_path + "/results/best.xml");
     # Write plot figures
     figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS)
     for stat in figs:
@@ -536,9 +539,12 @@ if __name__ == "__main__":
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
     # Clean up files
     xmlOut.cleanCache(output_path + "/_cache", network_name)
+    # Print
+    full_path = pathlib.Path(output_path + "/results/").resolve()
+    time_diff = training_etime - training_stime
+    print(f"Training finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")
     # Show training results
     plt.show()
-
 
 
 

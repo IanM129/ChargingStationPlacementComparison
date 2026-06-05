@@ -51,6 +51,11 @@ def castByTypeName(val, typename):
         return True;
     if typename == "int": return int(val);
     if typename == "float": return float(val);
+    if typename == "list":
+        res = []
+        vals = val[1:-1].split(", ")
+        for v in vals: res.append(float(v))
+        return res
     return val;
 class Parameters:
     ## Static

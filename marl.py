@@ -291,14 +291,16 @@ if __name__ == "__main__":
     params = Parameters.config()
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
-    MAX_DURATION = params["sim.maxDuration"]
-    DURATION_SET = MAX_DURATION > 0
+    DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
+    print("dest cnt dist:", DESTINATION_COUNT_DIST)
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
     if params["sim.visualize"]:
         print("INFO: 'visualize' ignored when training.")
         params["sim.visualize"] = False
-    VISUALIZE = False
+    if params["sim.printResults"]:
+        print("INFO: 'printResults' ignored when training.")
+        params["sim.printResults"] = False
     PRINT_ERRORS = params["sim.printErrors"]
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
@@ -320,10 +322,10 @@ if __name__ == "__main__":
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
     # Charge routing info
-    if params["electric.useStationFinder"]:
+    if params["station.routing.useStationFinder"]:
         print("INFO: Using StationFinder for vehicle charging and station routing.")
     else:
-        charge_routing_str = "centralized" if (params["electric.centralizedStationRouting"]) else "selfish";
+        charge_routing_str = "centralized" if (params["station.routing.centralized"]) else "selfish";
         print("INFO: Using " + charge_routing_str + " policy for station routing.")
     # Divide K
     if K % AGENT_COUNT == 0:
@@ -375,9 +377,6 @@ if __name__ == "__main__":
     network_diameter = float(nx.diameter(base_G, weight="length"))
     coverage_radius_target = network_diameter / np.sqrt(K)
     gnnutil.setMaxCoverageRadius(network_diameter)
-    #sess_charge_scale = None;
-    #sess_duration_scale = MAX_DURATION if (DURATION_SET) else 1000.0;
-    ## Globals
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
@@ -394,11 +393,10 @@ if __name__ == "__main__":
     params.write(output_path + "/config.xml")
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
-                               #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
-                               destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
+                               destination_count_probs=DESTINATION_COUNT_DIST,
                                #min_distance_per_des=(network_diameter / 4.0),
-                               min_distance=network_diameter*0.5,
-                               max_distance=network_diameter*2.0,
+                               min_distance=MIN_DISTANCE, #network_diameter*0.5,
+                               max_distance=MAX_DISTANCE, #network_diameter*2.0,
                                ev_pen=EV_PEN)
     average_trip_len = base_trips.averageTripLen()
     # Prepare results
@@ -461,6 +459,7 @@ if __name__ == "__main__":
         sel_log_probs.append(None); price_log_probs.append(None);
         sel_entropy.append(None); price_entropy.append(None);
         formulas.append({});
+    training_stime = time.perf_counter();
     while iteration < ITERATIONS:
         all_stations = [];
         for a in range(AGENT_COUNT):
@@ -655,7 +654,7 @@ if __name__ == "__main__":
                     fig.savefig(output_path + f"/training/coverage_{(iteration)}.jpg")
             """
     pbar.close()
-
+    training_etime = time.perf_counter();
     #### Finish and save
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     ## Save model
@@ -691,9 +690,12 @@ if __name__ == "__main__":
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
     # Clean up files
     xmlOut.cleanCache(output_path + "/_cache", network_name)
+    # Print
+    full_path = pathlib.Path(output_path + "/results/").resolve()
+    time_diff = training_etime - training_stime
+    print(f"\nTraining finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")
     # Show training results
     plt.show()
-
 
 
 

@@ -169,7 +169,7 @@ def initializeResultsDict(params, iteration_count, K, agent_count=1):
     else:
         train_results["reward"] = np.zeros(iteration_count)
         #train_results["price"] = np.zeros(iteration_count)
-        train_results["stations"] = np.empty(iteration_count, dtype=str)
+        train_results["stations"] = np.empty((iteration_count, K), dtype=str)
     return train_results
 def initializeBestDict(params, competitive=False):
     if competitive: group_name = "compReward";

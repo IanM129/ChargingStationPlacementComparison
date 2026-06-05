@@ -206,7 +206,6 @@ def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=F
           '-o', output_filepath]
     result = call(cmnd,
           stdout=DEVNULL, stderr=DEVNULL)
-    print(' '.join(cmnd))
     if delete:
         os.remove(nodes_filepath);
         os.remove(edges_filepath);
