@@ -2,47 +2,6 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-## Hardcoded defaults
-"""
-def getSimulationDefault():
-    return {
-        "stepLength" : 0.1,
-        "vehicleCount" : 200,
-        "visualize" : False,
-        "frameDur" : 0.01,
-        "saveLog" : True
-    }
-def getElectricDefault():
-    return {
-        "electric.penetration" : 0.8,
-        "electric.needToChargeProb" : 1.0,
-        "electric.batteryEmptyThreshold" : 2.0,
-        "electric.manualChargeDecide" : True
-    }
-def getStationDefault():
-    return {
-        "station.capacity" : 10,
-        "station.waitQueue" : 10,
-        "station.fillReverse" : False,
-        "station.moneyPerKWH" : 0.25
-    }
-def getPreprocessDefault():
-    return {
-        "prep.preprocess" : True,
-        "prep.recreateNetwork" : False,
-        "prep.saveInputs" : True
-    };
-def getAllDefault():
-    return {
-        **getSimulationDefault(),
-        **getElectricDefault(),
-        **getStationDefault(),
-        **getPreprocessDefault()
-    }
-"""
-
-import xml.etree.ElementTree as ET
-
 def castByTypeName(val, typename):
     typename = typename.lower()
     if typename == "bool":
@@ -92,10 +51,10 @@ class Parameters:
         if isinstance(xml_tree, str):
             #parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
             xml_tree = ET.parse(xml_tree)#, parser=parser)
-        params.xml_tree = xml_tree
         root = xml_tree.getroot()
         # Nested in groups
         params.parse_recursive(root, "", use_default)
+        params.xml_tree = xml_tree
         return params
     def parse_recursive(self, node, path, use_default=False):
         if node.tag == "param":
@@ -113,10 +72,11 @@ class Parameters:
         self.xml_tree.write(filepath)
     def getGroup(self, group):
         return self.groups[group];
-    def __getitem__(self, item, default=None):
+    def tryGet(self, item, default=None):
+        return self.__getitem__(item, default=default, printError=False)
+    def __getitem__(self, item, default=None, printError=True):
         index = self.names.get(item, None)
         if isinstance(index, int): return self.values[index];
-        #elif isinstance(index, str): return self.values[self.names[index]];
         elif isinstance(index, str): # -> "dirty"
             dbg = ""; first = True;
             par = self.parents[item]
@@ -124,19 +84,26 @@ class Parameters:
                 if first: first = False;
                 else: dbg += " - ";
                 dbg += s
-            print(f"ERROR: Trying to retrieve ambigous parameter '{item}', between: ({dbg})", file=sys.stderr)
-        else: print(f"ERROR: Failed to get '{item}' parameter.", file=sys.stderr)
+            if (printError):
+                print(f"ERROR: Trying to retrieve ambigous parameter '{item}', between: ({dbg})", file=sys.stderr)
+        else:
+            if (printError):
+                print(f"ERROR: Failed to get '{item}' parameter.", file=sys.stderr)
+        return default
     def __setitem__(self, item : str, value):
         if '.' in item:
             # Check if already exists
             cur = self.names.get(item, None)
             if isinstance(cur, int):
-                self.values[cur] = value; # if yes, just set it
+                # if yes, just set it
+                self.values[cur] = value;
+                self.__updateInXML(item, value)
             else:
                 group, name = item.rsplit('.', 1)
                 # Add the new parameter
                 self.values.append(value)
                 self.names[item] = self.size
+                self.__updateInXML(item, value)
                 # Add to group
                 if (group not in self.groups): self.groups[group] = set()
                 self.groups[group].add(name)
@@ -157,11 +124,26 @@ class Parameters:
             cur = self.names.get(item, None)
             if isinstance(cur, int):
                 self.values[cur] = value
+                self.__updateInXML(item, value)
             elif isinstance(cur, str):
                 #self.values[self.names[cur]] = value
                 raise Exception("ERROR: Trying to add another parameter to already dirty name.")
             else:
                 raise Exception(f"ERROR: No parameter name '{item}'.")
+    def __updateInXML(self, item, value):
+        if self.xml_tree is None: return;
+        if '.' not in item:
+            els = self.xml_tree.findall(f".//param[@name='{item}']")
+            if len(els) == 0: return;
+            elif len(els) > 1: raise Exception(f"Too many parameters found named '{item}'");
+            els[0].text = str(value)
+            return;
+        hierarchy = item.split('.')
+        el = self.xml_tree
+        for n in hierarchy:
+            el = el.find(f"*[@name='{n}']")
+        if el.tag == "param":
+            el.text = str(value)
     def __contains__(self, item):
         return item in self.names;
     def __repr__(self):

@@ -24,7 +24,7 @@
 			2000
 		</param>
 		<param name="vehicleCount" type="int" default="100">
-			10
+			200
 		</param>
 		<!-- [0, 0.3, 0.5, 0.2] = 30% chance the vehicle has 2 destinations, 50% 3 destinations and 20% 4 destinations. -->
 		<param name="destinationCountDistribution" type="list" default="[0, 0.3, 0.5, 0.2]">
@@ -43,7 +43,7 @@
 		</param>
 		<!-- Inactive during training -->
 		<param name="visualize" type="bool" default="False">
-			True
+			False
 		</param>
 		<param name="frameDur" type="float" default="0.01">
 			0.01
@@ -53,6 +53,9 @@
 		</param>
 		<param name="printErrors" type="bool" default="False">
 			False
+		</param>
+		<param name="deleteCache" type="bool" default="True">
+			True
 		</param>
 	</group>
 	<group name="electric">
@@ -71,7 +74,7 @@
 			6
 		</param>
 		<param name="capacity" type="int" default="10">
-			7
+			8
 		</param>
 		<param name="waitQueue" type="int" default="10">
 			10
@@ -81,7 +84,7 @@
 		</param>
 		<group name="routing">
 			<param name="centralized" type="bool" default="False">
-				True
+				False
 			</param>
 			<!-- Use SUMO StationFinder device instead 
 			 > only considers spatial and temporal values, hence only usable in solo runs -->
@@ -90,14 +93,26 @@
 			</param>
 			<!-- Cars park in a seperate wait queue parking instead of piling up in the lane -->
 			<param name="waitParking" type="bool" default="True">
-				True
-			</param>
-			<param name="costFunction_priceCoefficient" type="float" default="100.0">
-				100.0
+				False
 			</param>
 			<param name="waitQueueCoefficient" type="float" default="100.0">
 				100.0
 			</param>
+			<group name="costFunction">
+				<param name="timeCoefficient" type="float" default="1.0">
+					1.0
+				</param>
+				<param name="distanceCoefficient" type="float" default="0.1">
+					0.1
+				</param>
+				<param name="priceCoefficient" type="float" default="100.0">
+					50
+				</param>
+				<!-- Increase the effect of the station price relative to how much charge is needed to complete the rest of the trip -->
+				<param name="scalePriceByChargeNeeded" type="float" default="0.1">
+					0.1
+				</param>
+			</group>
 		</group>
 		<param name="moneyPerKWh" type="float" default="0.25"> <!-- euro -->
 			0.25
@@ -115,18 +130,14 @@
 				0.3
 			</param>
 		</param>
-		<!-- Increase the effect of the station price relative to how much charge needs to be recharged -->
-		<param name="scalePriceByChargeNeeded" type="bool" default="False">
-			False
-		</param>
 	</group>
 	<group name="training">
 		<param name="iterations" type="int" default="1000">
-			10
+			4
 		</param>
 		<!-- Max 10 -->
 		<param name="agents" type="int" default="2">
-			3
+			2
 		</param>
 		<param name="minPrice" type="float" default="0.1">
 			0.1
@@ -149,14 +160,14 @@
 				0.1
 			</param>
 			<param name="entropyCoeff" type="float" default="0.02">
-				0.05
+				0.04
 			</param>
 			<param name="gradClip" type="float" default="1.0">
 				1.0
 			</param>
 		</group>
 		<param name="progressDebugs" type="int" default="10">
-			10
+			0
 		</param>
 		<param name="printProgress" type="bool" default="True">
 			False
@@ -174,57 +185,57 @@
 	<!-- Reward based on the global environment state -->
 	<group name="reward">
 		<!-- [0, network diameter] -->
-		<param name="totalCoverage" type="float" default="2.0">
+		<param name="totalCoverage" type="float" default="1.0">
 			1.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [0, inf] -->
-		<param name="totalCharge" type="float" default="1.5">
+		<param name="totalCharge" type="float" default="0.0">
 			0.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [-1, 0] | -1.5 if not completed -->
-		<param name="simDuration" type="float" default="1.0">
+		<param name="simDuration" type="float" default="0.2">
 			0.2
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
-		<param name="tripDuration" type="float" default="0.0">
-			0.1
+		<param name="tripDuration" type="float" default="0.25">
+			0.25
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [0, inf] (/ (average_trip_length * 2)) -->
-		<param name="tripLength" type="float" default="0.0">
-			0.1
+		<param name="tripLength" type="float" default="0.25">
+			0.25
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
-		<param name="waitTime" type="float" default="0.0">
-			0.125
+		<param name="waitTime" type="float" default="0.15">
+			0.15
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
-		<param name="stopTime" type="float" default="0.0">
-			0.05
+		<param name="stopTime" type="float" default="0.15">
+			0.15
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [?, ?] -->
 		<param name="timeLoss" type="float" default="0.0">
-			0.125
+			0.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
@@ -240,14 +251,14 @@
 	<!-- Reward based agent performance (unique per agent) -->
 	<group name="compReward">
 		<!-- [0, network diameter] -->
-		<param name="coverage" type="float" default="2.0">
-			2.0
+		<param name="coverage" type="float" default="1.0">
+			1.0
 			<param name="monitor" type="bool" default="True">
 				True
 			</param>
 		</param>
 		<!-- [0, inf] -->
-		<param name="charge" type="float" default="1.5">
+		<param name="charge" type="float" default="0.0">
 			0.0
 			<param name="monitor" type="bool" default="True">
 				True

@@ -191,7 +191,7 @@ def extractNetworkFeatures(network_tree=None, network_filepath=None):
                 el.set("name", name)
     return (nodes_tree, edges_tree)
 ## Write network
-def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=False):
+def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=False, conns_filepath=None):
     nodes_filepath = "new_nodes.nod.xml"
     edges_filepath = "new_edges.edg.xml"
     if temp_folder != "":
@@ -204,6 +204,7 @@ def writeToXML(nodes_tree, edges_tree, output_filepath, temp_folder="", delete=F
           '-n', nodes_filepath,
           '-e', edges_filepath,
           '-o', output_filepath]
+    if conns_filepath is not None: cmnd.extend(["--connection-files", conns_filepath]);
     result = call(cmnd,
           stdout=DEVNULL, stderr=DEVNULL)
     if delete:
@@ -379,16 +380,51 @@ def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
     else:
         return (nodes_tree, edges_tree, stations_tree)
 
+
+def removeStationLeftTurns_connXML(net_xml_filepath, filepath, stations, write=True, delete=True):
+    net_tree = ET.parse(net_xml_filepath); net_root = net_tree.getroot();
+    del_tree = ET.ElementTree(ET.fromstring("<connections></connections>"))
+    del_root = del_tree.getroot()
+    for si in stations:
+        st_edge_id = si.edge_id
+        station_edge = getReverseEdge(si.redge_id)
+        for conn in net_root.findall(f"connection[@from='{station_edge}']"):
+            if conn.get("dir") == "l":
+                el = ET.SubElement(del_root, "delete", {
+                        "from": station_edge,
+                        "to": conn.get("to")
+                        })
+    del_tree.write(filepath)
+    if write:
+        cmnd = [netconvertBinary,
+              '-s', net_xml_filepath,
+              '--connection-files', filepath,
+              '-o', net_xml_filepath]
+        result = call(cmnd, stdout=DEVNULL, stderr=DEVNULL)
+        if delete: os.remove(filepath);
+        
+
+"""
+#### OBSOLETE
 def removeStationLeftTurns_netXML(xml_filepath, stations):
     net_tree = ET.parse(xml_filepath)
     root = net_tree.getroot()
+    # Find same stations
+    sttn_cnt = {}
+    for st in stations:
+        edge_id = st.edge_id
+        if edge_id not in sttn_cnt: sttn_cnt[edge_id] = 0;
+        sttn_cnt[edge_id] += 1;
     for si in stations:
+        st_edge_id = si.edge_id
         station_edge = getReverseEdge(si.redge_id)
         for conn in root.findall(f"connection[@from='{station_edge}']"):
             if conn.get("dir") == "l":
+                print("  -> station edge:", station_edge)
                 # Original connection
                 lane = conn.get("via")
                 root.remove(conn)
+                print("  -> removed lane:", lane)
                 # Edge
                 edge = lane.rsplit('_', 1)[0]
                 edge_el = root.find(f"edge[@id='{edge}']")
@@ -399,28 +435,38 @@ def removeStationLeftTurns_netXML(xml_filepath, stations):
                 # Inside via
                 junction = edge.rsplit('_', 1)[0][1:]
                 junc_el = root.find(f"junction[@id='{junction}']")
-                int_lanes = junc_el.get("intLanes").split(' ')
-                try:
-                    int_lanes.remove(lane)
-                except Exception as e:
-                    print("int lanes:", int_lanes)
-                    print("lane:", lane)
-                    raise
-                junc_el.set("intLanes", ' '.join(int_lanes))
+                if sttn_cnt[st_edge_id] > 1:
+                    int_lanes = junc_el.get("intLanes").split(' ')
+                    for int_junc_id in int_lanes:
+                        int_junc = root.find(f"junction[@id='{int_junc_id}']")
+                        if int_junc is not None:
+                            print("!!!! ", int_junc_id)
+                            ET.dump(int_junc)
+                            inc_lanes = int_junc.get("incLanes").split(' ')
+                            if lane in inc_lanes:
+                                inc_lanes.remove(lane)
+                                int_junc.set("incLanes", ' '.join(inc_lanes))
+                else:
+                    int_lanes = junc_el.get("intLanes").split(' ')
+                    try:
+                        int_lanes.remove(lane)
+                        junc_el.set("intLanes", ' '.join(int_lanes))
+                    except Exception as e:
+                        print("LEFT TURN REMOVE ERROR:")
+                        print("  - stations:", stations.listEdges())
+                        print("  - station edge:", station_edge)
+                        ET.dump(conn) #print("  - conn:", conn)
+                        print("  - lane:", lane)
+                        print("  - edge:", edge)
+                        ET.dump(conn) #print("  - sec conn:", sec_conn)
+                        print("  - junc:", junction)
+                        ET.dump(junc_el) 
+                        print("  - int lanes:", int_lanes)
+                        #exit()
+                        #raise
     net_tree.write(xml_filepath)
-
-
-
-
-
-
-
-
-
-
-
-
-
+    exit()
+"""
 
 """
 def addChargingStations(net_filepath, add_filepath, output_filepath, stations, capacity=1):
@@ -434,8 +480,6 @@ def addChargingStations(net_filepath, add_filepath, output_filepath, stations, c
     add_tree.write(data_path + "/add.xml")
     parkingNetGen.write(nodes_tree, edges_tree, (data_path + "/net.net.xml"))
 """
-
-
 
 """
 def createParkingNet_filepath(network_filepath, edge_id, parknet_id, offset=50-7.2, output_path=""):

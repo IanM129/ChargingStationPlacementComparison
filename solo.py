@@ -40,8 +40,8 @@ os.chdir(MAIN_DIR)
 
 
 
-RANDOM_STATIONS = True
-def stationDistribution(G, G_d, k, debug=False):
+RANDOM_STATIONS = False
+def stationDistribution(G, G_d, k, output_path, debug=False):
     candidates = graphing.calcCandidates(G_d, detailed_graph=True)
     ## Charging stations
     print("-- Station distribution algorithm (" +
@@ -62,7 +62,7 @@ def stationDistribution(G, G_d, k, debug=False):
     if not RANDOM_STATIONS:
         plt.clf()
         graphdraw.drawCenters(G_d, stations_d, radius, node_labels=False, edge_labels=False)
-        plt.savefig(cache_output_path + "/distribution.jpg"); plt.clf();
+        plt.savefig(output_path + "/distribution.jpg"); plt.clf();
     #
     #print(f"-- Station distribution finished in {alg_etime - alg_stime:0.2f} seconds")
     #stations_edges = [graphutil.translateDetailedRoad(s, as_tuple=False) for s in stations_d]
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     else: network_name = str(sys.argv[1]);
     # Adjust params
     params = Parameters.config()
-    print(params.groupPrint())
+    params["agents"] = 1
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
     DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
@@ -138,7 +138,8 @@ if __name__ == "__main__":
     output_folder = network_name + "_solo_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
+    # Save params
+    params.write(output_path + "/config.xml")
     # Generate trips
     trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                             #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
@@ -149,7 +150,7 @@ if __name__ == "__main__":
                             ev_pen=EV_PEN)
     # Station distribution
     stations = []; dist_radius = 0.0;
-    stations, dist_radius = stationDistribution(base_G, base_G_d, K)
+    stations, dist_radius = stationDistribution(base_G, base_G_d, K, output_path)
     # Station info from detailed edges
     stations = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
     print("-- stations:", stations.printEdges())
@@ -161,13 +162,16 @@ if __name__ == "__main__":
 
 ###### POSTPROCESS
     # Write results
+    pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     res_dict = results.getFullDict(include_edge_data=True)
-    #Evaluation.suffixesToNames(res_dict)
     res_tree = ET.ElementTree(ET.fromstring('<results></results>'))
     xmlOut.dictToElement_recursive(res_dict, res_tree.getroot())
     ET.indent(res_tree, space="    ")
-    res_tree.write(output_path + "/results.xml");
+    res_tree.write(output_path + "/results/results.xml");
     full_save_path = pathlib.Path(output_path + "/results.xml").resolve()
     print(f"Simulation finished, saved results under\n'{str(full_save_path)}'")
+    # Clean up files
+    if params["sim.deleteCache"]:
+        xmlOut.cleanCache(output_path + "/_cache", network_name)
 
     

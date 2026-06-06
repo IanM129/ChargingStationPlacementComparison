@@ -49,11 +49,14 @@ os.chdir(MAIN_DIR)
 
 ## Recharge cost function
 def stationCostFunction(detour_time, detour_distance, price, charge_amount=None):
-    global SCALE_PRICE_BY_CHARGE
-    if (charge_amount is not None) and (SCALE_PRICE_BY_CHARGE):
-        return float(detour_time + detour_distance + (charge_amount * price))
-    else:
-        return float(detour_time + detour_distance + (PRICE_COSTFUNC_COEF * price))
+    global TIME_COST_COEFF, DISTANCE_COST_COEFF, PRICE_COST_COEF, SCALE_PRICE_BY_CHARGE
+    #print("cost: (time:", detour_time, "; dist: ", detour_distance, "; price:", price, "; charge:", charge_amount)
+    cost = (TIME_COST_COEFF * detour_time) +\
+            (DISTANCE_COST_COEFF * detour_distance) +\
+            (PRICE_COST_COEF * price)
+    if (charge_amount is not None) and (SCALE_PRICE_BY_CHARGE != 0.0):
+        cost += (charge_amount * price) * SCALE_PRICE_BY_CHARGE
+    return cost
 
 def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
@@ -137,6 +140,8 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     MONEY_PER_KWH = params["station.moneyPerKWh"]
     AGENT_COUNT = len(agent_stations)
+    if AGENT_COUNT < 2:
+        raise Exception("Agent count is less than 2.")
     # Charge routing enum
     global CHARGE_ROUTING
     if params["station.routing.useStationFinder"]: CHARGE_ROUTING = StationRouting.STATIONFINDER;
@@ -147,10 +152,13 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
             CHARGE_ROUTING = StationRouting.SELFISH;
     QUEUE_PARKING = params["station.routing.waitParking"]
     # Prices
+    global TIME_COST_COEFF, DISTANCE_COST_COEFF, PRICE_COST_COEF, SCALE_PRICE_BY_CHARGE
     if prices is None:
         prices = [MONEY_PER_KWH] * AGENT_COUNT;
-    global SCALE_PRICE_BY_CHARGE
-    SCALE_PRICE_BY_CHARGE = params["station.routing.costFunction_priceCoefficient"]
+    TIME_COST_COEFF = params["station.routing.costFunction.timeCoefficient"]
+    DISTANCE_COST_COEFF = params["station.routing.costFunction.distanceCoefficient"]
+    PRICE_COST_COEF = params["station.routing.costFunction.priceCoefficient"]
+    SCALE_PRICE_BY_CHARGE = params["station.routing.costFunction.scalePriceByChargeNeeded"]
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
@@ -190,15 +198,20 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                                     wait_queue_size=WAIT_QUEUE_SIZE,
                                                     wait_queue_parking=QUEUE_PARKING,
                                                     suffix=suffixes[0])
+    #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", agent_stations[0]);
     for a in range(1, AGENT_COUNT):
         parkingNetGen.appendStationsToNetwork(base_net, agent_stations[a],
                                                 nodes_tree, edges_tree, stations_tree,
-                                                write=True, output_path=cache_data_path,
+                                                output_path=cache_data_path, write=True,
                                                 vehicle_length=EV_len, min_gap=min_gap,
                                                 wait_queue_size=WAIT_QUEUE_SIZE,
                                                 wait_queue_parking=QUEUE_PARKING,
                                                 suffix=suffixes[a], reverse_angle=True);
-    parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", all_stations);
+    #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", all_stations);
+    parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
+                                                 cache_data_path + "/del_left_turns.con.xml",
+                                                 all_stations,
+                                                 delete=False);
     STOP_DISTANCE = parkingNetGen.calcStationStopDistance(WAIT_QUEUE_SIZE, EV_len, min_gap, QUEUE_PARKING)
     SEARCH_REVERSE = params["station.fillReverse"]
     WAIT_QUEUE_COEFF = params["station.routing.waitQueueCoefficient"]
@@ -303,7 +316,9 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                         route = traci.vehicle.getRoute(vehID);
                         cur_index = traci.vehicle.getRouteIndex(vehID);
                         next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
-                        approx_charge_needed = traciutil.calcNeededChargeLeft(vehID, trips[vehID]) - charge
+                        approx_charge_needed = traciutil.calcNeededChargeLeft(vehID, trips[vehID])
+                        approx_charge_amount = (max(approx_charge_needed, ev_ntc_charge[vehID]) - charge)
+                        #max((traciutil.calcNeededChargeLeft(vehID, trips[vehID]) + 200) - charge, 0)
                         # Find a charging station to charge at
                         if CHARGE_ROUTING == StationRouting.SELFISH:
                             # Get best charging station and station trip

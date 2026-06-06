@@ -48,8 +48,10 @@ os.chdir(MAIN_DIR)
 
 ## Recharge cost function
 def stationCostFunction(detour_time, detour_distance, price, charge_amount=None):
+    global TIME_COST_COEFF, DISTANCE_COST_COEFF 
     # No price because only one agent
-    return detour_time + detour_distance
+    return (TIME_COST_COEFF * detour_time) +\
+           (DISTANCE_COST_COEFF * detour_distance)
 
 def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     if not params: params = Parameters.default();
@@ -137,6 +139,10 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         else:
             CHARGE_ROUTING = StationRouting.SELFISH;
     QUEUE_PARKING = params["station.routing.waitParking"]
+    # Coeffs
+    global TIME_COST_COEFF, DISTANCE_COST_COEFF
+    TIME_COST_COEFF = params["station.routing.costFunction.timeCoefficient"]
+    DISTANCE_COST_COEFF = params["station.routing.costFunction.distanceCoefficient"]
     # Traci switching
     if VISUALIZE: import traci;
     else: import libsumo as traci;
@@ -162,7 +168,11 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
                                        vehicle_length=EV_len, min_gap=min_gap,
                                        wait_queue_size=WAIT_QUEUE_SIZE,
                                         wait_queue_parking=QUEUE_PARKING)
-    parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
+    #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
+    parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
+                                                 cache_data_path + "/del_left_turns.con.xml",
+                                                 stations,
+                                                 delete=False)
     STOP_DISTANCE = parkingNetGen.calcStationStopDistance(WAIT_QUEUE_SIZE, EV_len, min_gap, QUEUE_PARKING)
     SEARCH_REVERSE = params["station.fillReverse"]
     WAIT_QUEUE_COEFF = params["station.routing.waitQueueCoefficient"]

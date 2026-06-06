@@ -271,7 +271,7 @@ def runSimulation(network_name, G, stations, all_stations, prices, base_trips, p
 
 
 ###### SETTINGS
-agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
+agent_colors = visutil.getAgentColors()
 ## Training
 edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged", "price"]
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
@@ -321,6 +321,9 @@ if __name__ == "__main__":
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
+    if AGENT_COUNT < 2:
+        print("ERROR: Agent count is less than 2, aborting.")
+        exit()
     # Charge routing info
     if params["station.routing.useStationFinder"]:
         print("INFO: Using StationFinder for vehicle charging and station routing.")
@@ -334,7 +337,6 @@ if __name__ == "__main__":
     else:
         print(f"WARNING: k ({K}) is not divisible by {AGENT_COUNT}, using it unchanged.")
     # Traci switch
-    #traciutil.initialize(True)
     global libsumo_m, traci_m
     traci = libsumo_m
     
@@ -376,7 +378,7 @@ if __name__ == "__main__":
     global network_diameter, coverage_radius_target, charge_max_eval
     network_diameter = float(nx.diameter(base_G, weight="length"))
     coverage_radius_target = network_diameter / np.sqrt(K)
-    gnnutil.setMaxCoverageRadius(network_diameter)
+    visutil.setMaxCoverageRadius(network_diameter)
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
@@ -389,7 +391,7 @@ if __name__ == "__main__":
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
-    # Copy params
+    # Save params
     params.write(output_path + "/config.xml")
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
@@ -657,8 +659,9 @@ if __name__ == "__main__":
     training_etime = time.perf_counter();
     #### Finish and save
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
-    ## Save model
-    torch.save(model.state_dict(), output_path + "/results/model.pt")
+    ## Save models
+    for a in range(AGENT_COUNT):
+        torch.save(models[a].state_dict(), output_path + "/results/model_" + str(a+1) + ".pt")
     ## Save training results
     # Write best
     gnnutil.updateBestTree_comp(best_tree, best, best_modified)
@@ -666,8 +669,12 @@ if __name__ == "__main__":
     best_tree.write(output_path + "/training/best.xml");
     best_tree.write(output_path + "/results/best.xml");
     # Save result data
-    xmlOut.saveTrainResults(train_results, output_path + "/results/data.xml")
+    xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
+    xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
+    xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
     # Write plot figures
+    figs = visutil.plotMARL(train_results, iterations=ITERATIONS, agent_colors=agent_colors);
+    """
     figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS, agent_colors=agent_colors)
     # Combine similar
     # reward
@@ -685,44 +692,16 @@ if __name__ == "__main__":
     metadata["title"] += " (Combined)";
     figs["chargeCombined"] = gnnutil.combineFigures([figs["totalCharge"][1], figs["charge"][1]], metadata)
     #del figs["totalCharge"]
+    """
     for stat in figs:
         fig, ax = figs[stat]
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
     # Clean up files
-    xmlOut.cleanCache(output_path + "/_cache", network_name)
+    if params["sim.deleteCache"]:
+        xmlOut.cleanCache(output_path + "/_cache", network_name)
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()
     time_diff = training_etime - training_stime
     print(f"\nTraining finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")
     # Show training results
     plt.show()
-
-
-
-
-
-
-
-
-
-
-
-"""
-# "edge_attrs" middleman variable (OBSOLETE)
-def extractEdgeAttrs(G, edge_stats, edge_data):
-    edge_attrs = {"vehicles" : {}, "flow" : {}, "vaporized" : {}}
-    ids = nx.get_edge_attributes(G, "id")
-    for edge in G.edges():
-        edge_id = ids[edge]
-        stats = edge_stats.get(edge_id, {"vehicles" : 0, "flow" : 0.0})
-        edge_attrs["vehicles"][edge] = stats["vehicles"]
-        edge_attrs["flow"][edge] = stats["flow"]
-        data = edge_data.get(edge_id, {"entered" : 0, "vaporized" : 0})
-        edge_attrs["vaporized"][edge] = data["vaporized"]
-    return edge_attrs
-def applyEdgeAttributes(G, edge_attrs):
-    nx.set_edge_attributes(G, edge_attrs["vehicles"], "vehicles")
-    nx.set_edge_attributes(G, edge_attrs["flow"], "flow")
-    nx.set_edge_attributes(G, edge_attrs["vaporized"], "vaporized")
-    return G
-"""

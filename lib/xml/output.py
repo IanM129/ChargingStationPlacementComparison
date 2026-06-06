@@ -1,6 +1,9 @@
 import os
+import pathlib
 import xml.etree.ElementTree as ET
 import re
+
+import numpy as np
 
 import lib.graphing.utility as graphutil
 
@@ -300,11 +303,70 @@ def getEdgeDataStats(filepath):
     
 
 # Finalization
-def saveTrainResults(train_results, filepath):
+def saveTrainResults_XML(train_results, filepath):
     tree = ET.ElementTree(ET.fromstring("<results></results>"))
     dictToElement_recursive(train_results, tree.getroot())
     ET.indent(tree, space=' ' * 4)
     tree.write(filepath)
+def saveTrainResults_numpy(train_results, folder_path):
+    pathlib.Path(folder_path).mkdir(parents=True, exist_ok=True)
+    for stat in train_results:
+        filepath = folder_path + "/" + str(stat) + ".npy"
+        if stat == "stations": np.save(filepath, train_results[stat], allow_pickle=True);
+        else: np.save(filepath, train_results[stat]);
+def saveTrainResults_csv(train_results, folder_path):
+    pathlib.Path(folder_path).mkdir(parents=True, exist_ok=True)
+    for stat in train_results:
+        filepath = folder_path + "/" + str(stat)
+        if stat == "stations":
+            shape = train_results[stat].shape
+            if len(shape) > 2:
+                for a in range(shape[0]):
+                    with open(filepath + "_" + str(a) + ".csv", "w") as f:
+                        s = "["; first_i = True;
+                        for i in range(shape[1]):
+                            if first_i: first_i = False;
+                            else: s += ", ";
+                            s += "["; first_j = True;
+                            for j in range(shape[2]):
+                                if first_j: first_j = False;
+                                else: s += ", ";
+                                s += str(train_results[stat][a][i][j])
+                            s += "]"
+                        s += "]"
+                        f.write(s)
+                #    np.savetxt(filepath + "_" + str(a) + ".csv", train_results[stat][a], delimiter=',')
+            else:
+                with open(filepath + ".csv", "w") as f:
+                    s = "["; first_i = True;
+                    for i in range(shape[0]):
+                        if first_i: first_i = False;
+                        else: s += ", ";
+                        s += "["; first_j = True;
+                        for j in range(shape[1]):
+                            if first_j: first_j = False;
+                            else: s += ", ";
+                            s += str(train_results[stat][i][j])
+                        s += "]"
+                    s += "]"
+                    f.write(s)
+        else:
+            np.savetxt(filepath + ".csv", train_results[stat], delimiter=',')
+
+# Analysis load
+def loadTrainResulst_numpy(filepath):
+    train_results = {}
+    for f in os.listdir(filepath):
+        if f.endswith(".npy"):
+            stat = f[:-4]
+            if stat == "stations":
+                train_results[stat] = np.load(filepath + "/" + f, allow_pickle=True)
+            else:
+                train_results[stat] = np.load(filepath + "/" + f)
+    return train_results;
+
+
+
 
 def clean(data_path):
     files_to_delete = [
@@ -318,6 +380,7 @@ def clean(data_path):
             # Temp net
             "new_edges.edg.xml",
             "new_nodes.nod.xml",
+            "del_left_turns.con.xml",
             # Output
             "output/loop.out.xml",
             "output/edgeData.out.xml",
@@ -344,6 +407,7 @@ def cleanCache(cache_data_path, network_name):
             # Temp net
             "new_edges.edg.xml",
             "new_nodes.nod.xml",
+            "del_left_turns.con.xml",
             # Output
             "output/loop.out.xml",
             "output/edgeData.out.xml",

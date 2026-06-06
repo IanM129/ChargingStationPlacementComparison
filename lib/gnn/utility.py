@@ -16,9 +16,6 @@ def initialize(attr_list, attr_map, dvc):
     edge_attr_list = attr_list
     edge_attr_map = attr_map
     device = dvc
-def setMaxCoverageRadius(value):
-    global max_coverage
-    max_coverage = value
 
 
 #### Utility
@@ -165,11 +162,12 @@ def initializeResultsDict(params, iteration_count, K, agent_count=1):
         #train_results["reward"]["_red"] = np.zeros(iteration_count)
         #train_results["reward"]["_blue"] = np.zeros(iteration_count)
         train_results["price"] = np.zeros((agent_count, iteration_count))
-        train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=str)
+        train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=np.dtypes.StringDType())
     else:
         train_results["reward"] = np.zeros(iteration_count)
         #train_results["price"] = np.zeros(iteration_count)
-        train_results["stations"] = np.empty((iteration_count, K), dtype=str)
+        #train_results["stations"] = [[None for k in range(K)] for i in range(iteration_count)]
+        train_results["stations"] = np.empty((iteration_count, K), dtype=np.dtypes.StringDType())
     return train_results
 def initializeBestDict(params, competitive=False):
     if competitive: group_name = "compReward";
@@ -266,116 +264,3 @@ def updateBestTree_comp(best_tree, best : dict, modified : set = None):
             if el == None: el = ET.SubElement(parent, p);
             xmlout.dictToElement(best[r][p][1], root=el)
     return
-
-
-#### Plotting
-def getPlotMetadata(stat):
-    data = {"title": "",
-            "unit" : "",
-            "label": "Total"}
-    match (stat):
-        case "totalCoverage" | "coverage":
-            data["title"] = "Coverage radius"
-            if stat == "totalCoverage": data["title"] += " (Total)";
-            data["unit"] = "Meters (m)"
-            data["label"] = "Global"
-            global max_coverage
-            if max_coverage is not None:
-                data["title"] += f" [max {max_coverage:0.2f} m]";
-        case "totalCharge" | "charge":
-            data["title"] = "Charge"
-            if stat == "totalCharge": data["title"] += " (Total)";
-            data["unit"] = "Watt hours (Wh)"
-        case "simDuration":
-            data["title"] = "Simulation duration"
-            data["unit"] = "Seconds (s)"
-        case "tripDuration":
-            data["title"] = "Trip duration (average)"
-            data["unit"] = "Seconds (s)"
-        case "tripLength":
-            data["title"] = "Trip length (average)"
-            data["unit"] = "Meters (m)"
-        case "waitTime":
-            data["title"] = "Watiting time (average)"
-            data["unit"] = "Seconds (s)"
-        case "stopTime":
-            data["title"] = "Stopped time (average)"
-            data["unit"] = "Seconds (s)"
-        case "timeLoss":
-            data["title"] = "Time lost (average)"
-            data["unit"] = "Seconds (s)"
-        case "energyConsumed":
-            data["title"] = "Energy consumed (average)"
-            data["unit"] = "Watt hours (Wh)"
-        case "totalMoneyEarned" | "moneyEarned":
-            data["title"] = "Money earned"
-            if stat == "totalMoneyEarned": data["title"] += " (Total)";
-            data["unit"] = "Euro (€)"
-        case "price":
-            data["title"] = "Charge price"
-            data["unit"] = "Euro (€) per kWh"
-        case "reward" | "generalReward":
-            data["title"] = "Reward"
-            data["label"] = ""
-    return data
-def createPlotFigure(metadata):
-    fig = plt.figure()
-    # Set integer X line
-    ax = fig.gca()
-    ax.xaxis.get_major_locator().set_params(integer=True)
-    # Set metadata
-    fig.suptitle(metadata["title"])
-    ax.set_ylabel(metadata["unit"])
-    ax.set_xlabel("Iteration")
-    return (fig, ax)
-def combineFigures(axes, metadata):
-    fig, ax = createPlotFigure(metadata)
-    lines = []
-    for ax_og in axes:
-        for og_line in ax_og.lines:
-            x = og_line.get_xdata(); y = og_line.get_ydata();
-            label=og_line.get_label();
-            if "agent" not in label:
-                color = "black"
-            else:
-                color = label.split(' ', 1)[0].lower();
-            line = ax.plot(x, y, color=color, label=label)
-            if isinstance(line, list): lines.extend(line);
-            else: lines.append(line);
-    ax.legend(handles=lines)
-    return (fig, ax)
-def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
-    figs = {}
-    x = np.arange(0, iterations)
-    for stat in train_results:
-        if stat == "stations": continue;
-        metadata = getPlotMetadata(stat)
-        data = train_results[stat]
-        if len(data.shape) > 1:
-            fig, ax = createPlotFigure(metadata)
-            handles = []
-            for a in range(len(data)):
-                line, = ax.plot(x, data[a], agent_colors[a], label=agent_colors[a].capitalize() + " agent")
-                handles.append(line)
-                #metadata_c = metadata.copy()
-                #match (color):
-                #    case "_general":
-                #        line, = ax.plot(x, data[color], "g", label="Total")
-                #        handles.append(line)
-                #        #clr_title = "Total";
-                #    case "_red":
-                #        line, = ax.plot(x, data[color], "r", label="Red agent")
-                #        handles.append(line)
-                #        #clr_title = r"\textcolor{red}{Red}";
-                #    case "_blue":
-                #        line, = ax.plot(x, data[color], "b", label="Blue agent")
-                #        handles.append(line)
-                #        #clr_title = r"\textcolor{red}{Blue}";
-                #metadata_c["title"] += " (" + clr_title + ")";
-            ax.legend(handles=handles)
-            figs[stat] = (fig, ax)
-        else:
-            fig, ax = createPlotFigure(metadata)
-            ax.plot(x, data, label=metadata["label"])
-            figs[stat] = (fig, ax)
-    return figs
