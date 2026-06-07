@@ -352,6 +352,22 @@ def saveTrainResults_csv(train_results, folder_path):
                     f.write(s)
         else:
             np.savetxt(filepath + ".csv", train_results[stat], delimiter=',')
+def writeMetadata(filepath, network_name, datetime_str, sess_type, network_diameter=0.0):
+    tree = ET.ElementTree(ET.fromstring("<metadata></metadata>"))
+    root = tree.getroot()
+    datetime_splt = datetime_str.rsplit('_', 1)
+    date_el = ET.SubElement(root, "date")
+    date_el.text = datetime_splt[0]
+    time_el = ET.SubElement(root, "time")
+    time_el.text = datetime_splt[1]
+    netname_el = ET.SubElement(root, "network")
+    netname_el.text = str(network_name)
+    type_el = ET.SubElement(root, "type")
+    type_el.text = str(sess_type)
+    dm_el = ET.SubElement(root, "networkDiameter")
+    dm_el.text = str(network_diameter)
+    tree.write(filepath)
+
 
 # Analysis load
 def loadTrainResulst_numpy(filepath):
@@ -367,7 +383,7 @@ def loadTrainResulst_numpy(filepath):
 
 
 
-
+#### Clean up
 def clean(data_path):
     files_to_delete = [
             # Base

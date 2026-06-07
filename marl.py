@@ -63,10 +63,10 @@ os.chdir(SCRIPT_DIR)
 
 ###### FUNCTIONS
 #### Training environment
-def getReward_flow(selected_edges, graph, iteration):
-    global edge_attr_map
-    flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
-    return flow_sum
+#def getReward_flow(selected_edges, graph, iteration):
+#    global edge_attr_map
+#    flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
+#    return flow_sum
 def rewardFunction_general(stations, results, params, formula):
     global running_dict
     reward = 0.0
@@ -257,28 +257,28 @@ def rewardFunction_unique(stations_u, results, params, formula, suffix):
     formula["reward"] = (float(reward), 0.0)
     return reward
 
-def runSimulation(network_name, G, stations, all_stations, prices, base_trips, params, results, iteration=None, debug=False, agent_colors=None):
-    trips = copy.deepcopy(base_trips)
-    output_subfolder = "comp";
-    if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(base_net, G, data_path, network_name, trips, results,
-                          stations, all_stations,
-                          output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
-                          params=params, debug=debug)
-    return results
+##def runSimulation(network_name, G, stations, all_stations, prices, base_trips, params, results, iteration=None, debug=False, agent_colors=None):
+##    trips = copy.deepcopy(base_trips)
+##    output_subfolder = "comp";
+##    if iteration != None: output_subfolder += "_" + str(iteration);
+##    results = sumoCompRun(base_net, G, data_path, network_name, trips, results,
+##                          stations, all_stations,
+##                          output_path, output_subfolder=output_subfolder,
+##                          prices=prices, agent_colors=agent_colors,
+##                          params=params, debug=debug)
+##    return results
         
 
 
 ###### SETTINGS
 agent_colors = visutil.getAgentColors()
 ## Training
-edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged", "price"]
-edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
+edge_attr_list = gnnutil.getEdgeAttrList(True);
+edge_attr_map = gnnutil.getEdgeAttrMap(edge_attr_list)
 
 ###### INITIALIZATION
 # Torch init
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = gnnutil.initDevice()
 # GNN utility
 gnnutil.initialize(edge_attr_list, edge_attr_map, device)
 
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     # Create
     graph = Data(num_nodes=num_nodes,edge_index=edge_index, pos=pos)
     if graph.x == None:
-        graph.x = torch.ones(num_nodes, 1, dtype=torch.float32)
+        graph.x = torch.ones(num_nodes, 1, dtype=torch.float32, device=device)
     # Edge attributes
     edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
     gnnutil.applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
@@ -391,8 +391,9 @@ if __name__ == "__main__":
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
-    # Save params
+    # Save params and metadata
     params.write(output_path + "/config.xml")
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "MARL", network_diameter)
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                                destination_count_probs=DESTINATION_COUNT_DIST,
@@ -463,11 +464,13 @@ if __name__ == "__main__":
         formulas.append({});
     training_stime = time.perf_counter();
     while iteration < ITERATIONS:
+        
+        #### 1. Models' forward, 2. Sample edges and price
         all_stations = [];
         for a in range(AGENT_COUNT):
             model = models[a]
             model.train(); optimizers[a].zero_grad();
-            #### 1. Get edge scores and probability
+            # Get edge scores and probability, and price distribution parameters
             # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
             logits, price_alpha, price_beta = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
             # Process
@@ -475,24 +478,18 @@ if __name__ == "__main__":
                 logits = logits / TEMPERATURE
                 price_alpha = price_alpha / TEMPERATURE
                 price_beta = price_beta / TEMPERATURE
-            # Edge selection probabilitites
+            ## Edge sampling
             sel_probs = torch.softmax(logits, dim=0)
-            sel_log_probs_cur = torch.log(sel_probs + 1e-10)
-            entropy_cur = -(sel_probs * sel_log_probs_cur).sum(dim=-1).mean()
+            # Select K edges - sampling (multinomial)
+            selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
+            selected_edge_indices = selected_indices_t.tolist()
+            selected_edge_ids = [translator.indexToID(sei) for sei in selected_edge_indices] #[translator.edgeToID(edge) for edge in selected_edges]
+            ## Price sampling
             # Price decision distribution
             price_dist = Beta(price_alpha, price_beta)
-            #### 2. Select k edges and price
-            # Edge sampling (multinomial)
-            selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
-            sel_log_probs_cur = gnnutil.calculate_log_probs(logits, selected_indices_t)
-            selected_edge_indices = selected_indices_t.tolist()
-            selected_edges = [translator.indexToEdge(sei) for sei in selected_edge_indices]
-            selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
-            # Price sampling
             unit_price = price_dist.rsample()
             price = (MIN_PRICE + (unit_price * (MAX_PRICE - MIN_PRICE)))
             price_log_probs_cur = price_dist.log_prob(unit_price)
-            price_entropy_cur = price_dist.entropy()
             price = price.detach().item()
             # Transform to stations
             chosen_stations = []
@@ -501,6 +498,10 @@ if __name__ == "__main__":
             # Check if double
             if len(selected_edge_indices) != len(set(selected_edge_indices)):
                 print("ERROR: One edge selected twice:", selected_edge_indices, "->", chosen_stations.listEdges())
+            # Entropy
+            sel_log_probs_cur = torch.log(sel_probs + 1e-10)  #gnnutil.calculate_log_probs(logits, selected_indices_t)
+            entropy_cur = -(sel_probs * sel_log_probs_cur).sum(dim=-1).mean()
+            price_entropy_cur = price_dist.entropy()
             # Save for outside of loop
             stations[a] = chosen_stations; all_stations.extend(chosen_stations.arr);
             prices[a] = price#.detach().item()
@@ -515,8 +516,9 @@ if __name__ == "__main__":
         if MEASURE_TIME: sim_stime = time.perf_counter();
         results = Evaluation(translator)
         try:
-            results = runSimulation(network_name, base_G, stations, all_stations, prices, base_trips,
-                                    params, results, iteration, agent_colors=agent_colors, debug=False)
+            results = gnnutil.runSimulation_comp(network_name, data_path, output_path,
+                                                 base_net, base_G, stations, all_stations, prices, base_trips,
+                                                 params, results, iteration, agent_colors=agent_colors, debug=False)
             sim_tries = 0
         except Exception as e:
             # Very rarely crashes when setting stop for charging - WIP
@@ -674,25 +676,6 @@ if __name__ == "__main__":
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
     # Write plot figures
     figs = visutil.plotMARL(train_results, iterations=ITERATIONS, agent_colors=agent_colors);
-    """
-    figs = gnnutil.plotTrainingResults_figs(train_results, ITERATIONS, agent_colors=agent_colors)
-    # Combine similar
-    # reward
-    metadata = gnnutil.getPlotMetadata("reward");
-    metadata["title"] += " (Combined)";
-    figs["rewardCombined"] = gnnutil.combineFigures([figs["generalReward"][1], figs["reward"][1]], metadata);
-    # coverage
-    metadata = gnnutil.getPlotMetadata("coverage");
-    temp_title = metadata["title"].split('[', 1)
-    metadata["title"] = temp_title[0] + " (Combined) [" + temp_title[1];
-    figs["coverageCombined"] = gnnutil.combineFigures([figs["totalCoverage"][1], figs["coverage"][1]], metadata)
-    #del figs["totalCoverage"]
-    # charge
-    metadata = gnnutil.getPlotMetadata("charge");
-    metadata["title"] += " (Combined)";
-    figs["chargeCombined"] = gnnutil.combineFigures([figs["totalCharge"][1], figs["charge"][1]], metadata)
-    #del figs["totalCharge"]
-    """
     for stat in figs:
         fig, ax = figs[stat]
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")

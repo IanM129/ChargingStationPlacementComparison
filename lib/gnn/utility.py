@@ -1,13 +1,29 @@
+import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
 import networkx as nx
 
 import torch
+from torch.distributions import Multinomial, Beta
+from torch_geometric.data import Data
+
+import lib.graphing as graphing  #= lib/graphing/__init__.py
 
 import lib.xml.output as xmlout
 
 import lib.utility as util
+
+#from lib.structs.stationinfo import StationInfo, StationInfoDataset
+from lib.structs.trip import Trip
+from lib.structs.graphtranslator import GraphTranslator
+from lib.structs.evaluation import Evaluation
+#from lib.structs.params import Parameters
+
+import sumolib
+from lib.sumo.blank import sumoBlankRun
+from lib.sumo.solo import sumoSoloRun
+from lib.sumo.comp import sumoCompRun
 
 
 
@@ -41,18 +57,19 @@ def isMinOrMax(val_name : str) -> int:
 def createEdgeAttrUpdateList(attr_update, attr_list):
     return [(a if (a in attr_update) else None) for a in attr_list]
 
-#### Main
-##def formEdgeAttributes(vals : dict, num_edges : int=0, keys : list[str]=None):
-##    if num_edges < 1: num_edges = len(vals[keys[0]]);
-##    if keys == None: keys = vals.keys();
-##    edges = list(vals[keys[0]].values())
-##    edge_attr = torch.tensor(
-##        [[vals[k][edges[i]] for k in keys] for i in range(num_edges)],
-##        #[list(vals[k].values()) for k in keys],
-##        dtype=torch.float
-##    )
-##    return edge_attr
-## Edge attributes
+###### Main
+#def formEdgeAttributes(vals : dict, num_edges : int=0, keys : list[str]=None):
+#    if num_edges < 1: num_edges = len(vals[keys[0]]);
+#    if keys == None: keys = vals.keys();
+#    edges = list(vals[keys[0]].values())
+#    edge_attr = torch.tensor(
+#        [[vals[k][edges[i]] for k in keys] for i in range(num_edges)],
+#        #[list(vals[k].values()) for k in keys],
+#        dtype=torch.float
+#    )
+#    return edge_attr
+#### Update graph 
+# From edge attributes
 def applyBaseGraphEdgeAttributes(graph, G, translator, attrs):
     global edge_attr_list, edge_attr_map
     num_features = len(edge_attr_list)
@@ -142,7 +159,120 @@ def applyResultsToGraph(graph, translator, attrs, results):
     return graph
 
 
+#### Simulation
+def initDevice():
+    global device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    return device
+## Load environment
+def getEdgeAttrList(competitive):
+    edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
+    if competitive: edge_attr_list.append("price");
+    return edge_attr_list
+def getEdgeAttrMap(edge_attr_list):
+    return dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
+def loadEnvironment(network_name, edge_attr_list_loc):
+    global edge_attr_list, edge_attr_map
+    edge_attr_list = edge_attr_list_loc
+    edge_attr_map = getEdgeAttrMap(edge_attr_list);
+    # Folder paths (file organization)
+    data_path = "networks/" + network_name + "/";
+    #print("Using network '" + network_name + "' under '" + data_path + "'")
+    ## Graph
+    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
+    base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
+                                 lengths=True, travel_time=True,
+                                 internal_lengths=False, node_position=True)
+    base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
+    num_nodes = base_G.number_of_nodes()
+    # Detailed graph for coverage calculations
+    #global coverage_G_d
+    #coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
+    # Edge translator
+    translator = GraphTranslator(base_G)
+    ## PyG Data
+    # Edge index
+    edge_index = translator.getEdgeIndexArray()
+    edge_index = torch.as_tensor(edge_index, dtype=torch.int, device=device)
+    # Pos
+    pos = nx.get_node_attributes(base_G, "pos")
+    pos = translator.dictToNodePos(pos)
+    pos = torch.as_tensor(pos, dtype=torch.float32, device=device)
+    # Create
+    graph = Data(num_nodes=num_nodes,edge_index=edge_index, pos=pos)
+    if graph.x == None:
+        graph.x = torch.ones(num_nodes, 1, dtype=torch.float32, device=device)
+    graph.to(device)
+    # Edge attributes
+    edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
+    applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
+    return graph, base_net, base_G, base_G_d, translator
+## Models
+def getAgentSuffixes(agent_colors):
+    return [("_" + n) for n in agent_colors]
+def EdgePosGNN_chooseEdges(model, graph, K):
+    #### 1. Model forward
+    # Get edge scores and probability
+    # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
+    logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
+    #### 2. Sample edges
+    sel_probs = torch.softmax(logits, dim=0)
+    # Select K edges - sampling (multinomial)
+    selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
+    selected_edge_indices = selected_indices_t.tolist()
+    #selected_edge_ids = [translator.indexToID(sei) for sei in selected_edge_indices]
+    return selected_edge_indices
+def EdgePosAndPriceGNN_chooseEdgesAndPrice(model, graph, K):
+     #### 1. Model forward
+    # Get edge scores and probability, and price distribution parameters
+    # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
+    logits, price_alpha, price_beta = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
+    #### 2. Sample edges and price
+    ## Edge sampling
+    sel_probs = torch.softmax(logits, dim=0)
+    # Select K edges - sampling (multinomial)
+    selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
+    selected_edge_indices = selected_indices_t.tolist()
+    #selected_edge_ids = [translator.indexToID(sei) for sei in selected_edge_indices] #[translator.edgeToID(edge) for edge in selected_edges]
+    ## Price sampling
+    # Price decision distribution
+    price_dist = Beta(price_alpha, price_beta)
+    unit_price = price_dist.rsample()
+    #price = (MIN_PRICE + (unit_price * (MAX_PRICE - MIN_PRICE)))
+    #price = price.detach().item()
+    unit_price = unit_price.detach().item()
+    return selected_edge_indices, unit_price
+## Run simulation
+def runSimulation_blank(network_name, data_path, output_path, net, trips, params, results):
+    results = sumoBlankRun(net, data_path, network_name, trips, results, params=params,
+                           output_path=output_path, output_subfolder="blank")
+    return results
+def runSimulation_solo(network_name, data_path, output_path,
+                       net, G, stations, base_trips,
+                       params, results, iteration=None, debug=False):
+    trips = copy.deepcopy(base_trips)
+    output_subfolder = "solo";
+    if iteration != None: output_subfolder += "_" + str(iteration);
+    results = sumoSoloRun(net, G, data_path, network_name, trips, results, stations,
+                          output_path=output_path, output_subfolder=output_subfolder,
+                          params=params, debug=debug)
+    return results
+def runSimulation_comp(network_name, data_path, output_path,
+                       net, G, stations, all_stations, prices, base_trips,
+                       params, results, iteration=None, debug=False, agent_colors=None):
+    trips = copy.deepcopy(base_trips)
+    output_subfolder = "comp";
+    if iteration != None: output_subfolder += "_" + str(iteration);
+    results = sumoCompRun(net, G, data_path, network_name, trips, results,
+                          stations, all_stations,
+                          output_path, output_subfolder=output_subfolder,
+                          prices=prices, agent_colors=agent_colors,
+                          params=params, debug=debug)
+    return results
 
+
+###### Bookkeeping
 #### Training dictionaries
 ## Init
 def initializeResultsDict(params, iteration_count, K, agent_count=1):
@@ -195,7 +325,6 @@ def initializeRunningDict(suffixes=[]):
                 d[n][suffix] = (None, None);
             #d[n]["_red"] = (None, None); d[n]["_blue"] = (None, None);
     return d
-    
 ## Update
 # Dictionary
 def updateResultsDict(train_results, stations, formula, iteration):

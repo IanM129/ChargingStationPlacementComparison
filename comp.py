@@ -156,8 +156,9 @@ if __name__ == "__main__":
     output_folder = network_name + "_comp_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-    # Save params
+    # Save params and metadata
     params.write(output_path + "/config.xml")
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "competitive")
     # Generate trips
     trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                             #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2

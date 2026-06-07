@@ -15,6 +15,7 @@ networks/**/vTypes.add.xml
 networks/**/output.add.xml
 networks/**/stations.add.xml
 results/*
+results_BACKUP/*
 
 # Big networks
 networks/Zagreb

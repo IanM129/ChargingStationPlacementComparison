@@ -62,10 +62,10 @@ os.chdir(MAIN_DIR)
 
 ###### FUNCTIONS
 #### Training environment
-def getReward_flow(selected_edges, graph, iteration):
-    global edge_attr_map
-    flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
-    return flow_sum
+#def getReward_flow(selected_edges, graph, iteration):
+#    global edge_attr_map
+#    flow_sum = graph.edge_attr[selected_edges, edge_attr_map["flow"]].sum().item()
+#    return flow_sum
 def rewardFunction(stations, results, params, formula):
     global running_dict
     reward = 0.0
@@ -203,20 +203,21 @@ def rewardFunction(stations, results, params, formula):
         else: formula["energyConsumed"] = (energy_consumed, 0.0);
     formula["reward"] = (float(reward), 0.0)
     return reward
-def runSimulation(network_name, G, stations, base_trips, params, results, iteration=None, debug=False):
-    trips = copy.deepcopy(base_trips)
-    output_subfolder = "solo";
-    if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
-                          output_path=output_path, output_subfolder=output_subfolder,
-                          params=params, debug=debug)
-    return results
+
+##def runSimulation(network_name, G, stations, base_trips, params, results, iteration=None, debug=False):
+##    trips = copy.deepcopy(base_trips)
+##    output_subfolder = "solo";
+##    if iteration != None: output_subfolder += "_" + str(iteration);
+##    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
+##                          output_path=output_path, output_subfolder=output_subfolder,
+##                          params=params, debug=debug)
+##    return results
         
 
 
 ###### SETTINGS
 ## Training
-edge_attr_list = ["travelTime", "vehicles", "flow", "vaporized", "charged"]
+edge_attr_list = gnnutil.getEdgeAttrList(False)
 edge_attr_map = dict(zip(edge_attr_list, [i for i in range(len(edge_attr_list))]))
 
 ###### INITIALIZATION
@@ -325,8 +326,9 @@ if __name__ == "__main__":
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
-    # Save params
+    # Save params and metadata
     params.write(output_path + "/config.xml")
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "GNN", network_diameter)
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                                destination_count_probs=DESTINATION_COUNT_DIST,
@@ -351,7 +353,7 @@ if __name__ == "__main__":
 ###### TRAINING
     #### Preprocess
     graph = graph.to(device)
-    model = EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64) #EdgeGNN
+    model = EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64) #EdgePosGNN
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     # Reward side variables
@@ -378,25 +380,21 @@ if __name__ == "__main__":
     best_modified = {}
     training_stime = time.perf_counter();
     while iteration < ITERATIONS:
-        model.train()
-        optimizer.zero_grad()
-
-        #### 1. Get edge scores and probability
+        model.train(); optimizer.zero_grad();
+        
+        #### 1. Model forward
+        # Get edge scores and probability
         # x: [junctions, features], edge_index: [2, roads], edge_attr: [roads, features]
         logits = model(graph.x, graph.edge_index, graph.edge_attr, graph.pos)
         if TEMPERATURE > 0.0:
             logits = logits / TEMPERATURE
-        probs = torch.softmax(logits, dim=0)
-        log_probs = torch.log(probs + 1e-10)
-        entropy = -(probs * log_probs).sum(dim=-1).mean()
-
-        #### 2. Select k edges
-        # Sampling (multinomial)
-        selected_indices_t = torch.multinomial(probs, num_samples=K, replacement=False)
-        sel_log_probs = gnnutil.calculate_log_probs(logits, selected_indices_t)
+            
+        #### 2. Sample edges
+        sel_probs = torch.softmax(logits, dim=0)
+        # Select K edges - sampling (multinomial)
+        selected_indices_t = torch.multinomial(sel_probs, num_samples=K, replacement=False)
         selected_edge_indices = selected_indices_t.tolist()
-        selected_edges = [translator.indexToEdge(sei) for sei in selected_edge_indices]
-        selected_edge_ids = [translator.edgeToID(edge) for edge in selected_edges]
+        selected_edge_ids = [translator.indexToID(sei) for sei in selected_edge_indices]
         # Transform to stations
         stations = []
         for edge in selected_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY, MONEY_PER_KWH));
@@ -404,17 +402,19 @@ if __name__ == "__main__":
         # Check if double
         if len(selected_edge_indices) != len(set(selected_edge_indices)):
             print("ERROR: One edge selected twice:", selected_edge_indices, "->", stations.listEdges())
+        # Entropy
+        sel_log_probs = torch.log(sel_probs + 1e-10)  #gnnutil.calculate_log_probs(logits, selected_indices_t)
+        entropy = -(sel_probs * sel_log_probs).sum(dim=-1).mean()
 
         #### 3. Run evaluation
-        if sim_tries > 10:
-            raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {stations.listEdges()}.")
         last_results = results
         if (iteration == 1): params["prep.preprocess"] = False;
         if MEASURE_TIME: sim_stime = time.perf_counter();
         results = Evaluation(translator)
         try:
-            results = runSimulation(network_name, base_G, stations, base_trips,
-                                    params, results, iteration, debug=False)
+            results = gnnutil.runSimulation_solo(network_name, data_path, output_path,
+                                                 base_net, base_G, stations, base_trips,
+                                                 params, results, iteration, debug=False)
             sim_tries = 0
         except Exception as e:
             # Very rarely crashes when setting stop for charging - WIP
@@ -424,6 +424,11 @@ if __name__ == "__main__":
                 print(e)
             sim_tries += 1
             traci.close()
+            if sim_tries >= 10:
+                if not PRINT_ERRORS:
+                    traceback.print_tb(e.__traceback__)
+                    print(e)
+                raise Exception(f"Simulation failed 10 times in a row at iteration {iteration+1} for stations: {all_stations.listEdges()}.")
             continue
         if MEASURE_TIME:
             sim_etime = time.perf_counter();

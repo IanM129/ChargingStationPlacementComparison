@@ -222,7 +222,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     for sttn_edge_id, _ in stations.listIDss():
         sttn_util_rate[sttn_edge_id] = [0, 0];
     ## Run simulation
-    if PRINT_RESULTS: sim_stime = time.perf_counter();
+    sim_stime = time.perf_counter();
     traci.start(cmnd);
     ## Subscriptions
     traci.simulation.subscribe([
@@ -435,18 +435,19 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     ########## Simulation done
     sim_time = traci.simulation.getTime()
     traci.close()
+    sim_etime = time.perf_counter()
     steps_processed = int(sim_time / params["stepLength"])
+    exec_duration = sim_etime - sim_stime;
     if params["printResults"]:
-        sim_etime = time.perf_counter()
         print("\n")
-        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {exec_duration:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
         print(f"         vehicle count: {total_veh_count:6d}")
         print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %; expected {round((params['electric.penetration'])*100, 2):4.2f} %)")
         print()
 
 #### POSTPROCESS
     results.clear();
-    results.setSimulationData(fully_completed, sim_time)
+    results.setSimulationData(fully_completed, sim_time, exec_duration)
     ## Process step data
     # Utilization rate
     for si in stations:
@@ -486,7 +487,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
         print(f"  > money earned: {round(money_earned, 2)}€ ({round(MONEY_PER_KWH,2)}€ per KWh)")
         print()
-    results.setStationData(stations, MONEY_PER_KWH, sttn_util_rate, station_charges, total_charge, money_earned)
+    results.setStationData(stations, MONEY_PER_KWH, station_charges, sttn_util_rate, sttn_vehicle_count, total_charge, money_earned)
 
     ## Trip stats/info
     trip_stats = xmlOut.getTripStats(cache_output_path)

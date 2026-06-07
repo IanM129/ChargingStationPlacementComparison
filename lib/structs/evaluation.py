@@ -22,7 +22,7 @@ class Evaluation:
         # . flow
         # . vaporized
     #station_data           data for each station
-    station_comp_stats = ["charged", "occupancyRate", "utilization"]
+    station_comp_stats = ["charged", "occupancyRate", "utilization", "vehicleCount"]
         # . charged
         # . occupancyRate
         # . utilization
@@ -59,9 +59,10 @@ class Evaluation:
             }
         self.agent_data = {}
     ## Set
-    def setSimulationData(self, fully_completed, simulationTime):
+    def setSimulationData(self, fully_completed, simulationTime, duration):
         self.fullyCompleted = fully_completed
         self.simulationTime = simulationTime
+        self.executionDuration = duration
     def setVehicleData(self, vehicle_count,
                        EV_count, EV_set_charge, EV_arrived, EV_charged):
         self.vehicle_data["vehicleCount"] = int(vehicle_count)
@@ -82,10 +83,11 @@ class Evaluation:
             self.edge_data["vehicles"][edge] = int(data["entered"]);
             self.edge_data["flow"][edge] = float(stats["flow"]);
             self.edge_data["vaporized"][edge] = int(data["vaporized"]);
-    def setStationData(self, stations, price, sttn_util_rate, station_charges, total_charge, money_earned):
+    def setStationData(self, stations, price, station_charges, sttn_util_rate, sttn_vehicle_count, total_charge, money_earned):
         self.station_data["charged"] = {};
         self.station_data["occupancyRate"] = {};
         self.station_data["utilization"] = {};
+        self.station_data["vehicleCount"] = {};
         self.station_data["price"] = float(price);
         for si in stations:
             sid = si.getID()
@@ -93,9 +95,10 @@ class Evaluation:
             self.station_data["charged"][seid] = float(station_charges[sid]);
             self.station_data["occupancyRate"][seid] = float(sttn_util_rate[sid][0]);
             self.station_data["utilization"][seid] = float(sttn_util_rate[sid][1]);
+            self.station_data["vehicleCount"][seid] = int(sttn_vehicle_count[sid]);
         self.station_data["totalCharge"] = float(total_charge)
         self.station_data["totalMoneyEarned"] = float(money_earned)
-    def setStationDataComp(self, stations, prices, sttn_util_rate, station_charges,
+    def setStationDataComp(self, stations, prices, station_charges, sttn_util_rate, sttn_vehicle_count,
                            total_charge, total_money_earned, charge, money_earned,
                            suffixes):
         agent_count = len(stations)
@@ -114,6 +117,7 @@ class Evaluation:
                 self.station_data["charged"][suff][seid] = float(station_charges[sid]);
                 self.station_data["occupancyRate"][suff][seid] = float(sttn_util_rate[sid][0]);
                 self.station_data["utilization"][suff][seid] = float(sttn_util_rate[sid][1]);
+                self.station_data["vehicleCount"][suff][seid] = int(sttn_vehicle_count[sid]);
         self.station_data["totalCharge"] = float(total_charge)
         self.station_data["totalMoneyEarned"] = float(total_money_earned)
         self.agent_data["totalCharge"] = {}

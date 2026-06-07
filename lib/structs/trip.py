@@ -90,7 +90,7 @@ class Trip:
         s += " "
         s += "|" + str(len(self.destinations)) + "|"
         s += "; "
-        s += str(self.total_distance)
+        s += str(round(self.total_distance, 2))
         s += ")"
         return s
     def fullPrint(self):

@@ -11,7 +11,7 @@ from lib.utility import colorNameToRGB
 
 import lib.graphing as graphing
 
-from lib.structs.stationinfo import StationInfoDataset
+#from lib.structs.stationinfo import StationInfoDataset
 
 
 STATION_IN_LANES = 3
@@ -297,7 +297,7 @@ def addStationPOIs(net_filepath, add_filepath, station_edges, suffix=""):
         addPOI(add_tree, "station_" + edge_id + suffix, x, y, poi_clr, "chargingStation")
     add_tree.write(add_filepath)
 #### Write stations to XML
-def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
+def addStationsToNetwork(net, stations_dataset, #: StationInfoDataset,
                          data_path, output_path="", write=True,
                          network_tree=None, network_filepath=None,
                          stations_tree=None,stations_filepath=None,
@@ -340,7 +340,7 @@ def addStationsToNetwork(net, stations_dataset : StationInfoDataset,
                    temp_folder=output_path)
     else:
         return (nodes_tree, edges_tree, stations_tree)
-def appendStationsToNetwork(net, stations_dataset : StationInfoDataset,
+def appendStationsToNetwork(net, stations_dataset, # : StationInfoDataset,
                             nodes_tree, edges_tree, stations_tree,
                             output_path="", write=True,
                             vehicle_length=5, min_gap=2.5,

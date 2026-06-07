@@ -24,6 +24,7 @@ jtrrouterBinary = sumolib.checkBinary('jtrrouter')
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import preprocess as prep
 import lib.utility as util
+import lib.visual_utility as visutil
 
 import lib.sumo.utility as sumoutil
 from lib.sumo.utility import StationRouting
@@ -128,7 +129,7 @@ def removeFromSimulationVars(vehicles : set, params):
 def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, results,
                 agent_stations, all_stations, 
                 output_path, output_subfolder="solo",
-                prices=None, agent_colors=[],
+                prices=None, agent_colors=None,
                 params=None, debug=False):
     if not params: params = Parameters.default();
     CPU_THREADS = params["sim.cpuThreads"]
@@ -170,6 +171,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     #        if agent_colors != None:
     #            print(f"    {agent_colors[a].capitalize():10s}:", agent_stations[a]);
     #        else: print(f"    {a:2d}:", agent_stations[a]);
+    if agent_colors is None: agent_colors = visutil.getAgentColors();
     suffixes = [("_" + n) for n in agent_colors]
     # TEMP
     k = len(agent_stations[0])
@@ -268,7 +270,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     for sttn_edge_id, _ in stations.listIDss():
         sttn_util_rate[sttn_edge_id] = [0, 0];
     ## Run simulation
-    if PRINT_RESULTS: sim_stime = time.perf_counter();
+    sim_stime = time.perf_counter();
     traci.start(cmnd);
     ## Subscriptions
     traci.simulation.subscribe([
@@ -483,18 +485,19 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     ########## Simulation done
     sim_time = traci.simulation.getTime()
     traci.close()
+    sim_etime = time.perf_counter()
     steps_processed = int(sim_time / params["stepLength"])
+    exec_duration = sim_etime - sim_stime
     if PRINT_RESULTS:
-        sim_etime = time.perf_counter()
         print("\n")
-        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {exec_duration:0.2f} seconds" + (f"(max duration reached ({MAX_DURATION}))" if not fully_completed else ""))
         print(f"         vehicle count: {total_veh_count:6d}")
         print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %; expected {round((params['electric.penetration'])*100, 2):4.2f} %)")
         print()
 
 #### POSTPROCESS
     results.clear();
-    results.setSimulationData(fully_completed, sim_time)
+    results.setSimulationData(fully_completed, sim_time, exec_duration)
     ## Process step data
     # Utilization rate
     for si in all_stations:
@@ -550,7 +553,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, resul
             print(f"  > total charge: {round(total_charge[a] / 1000.0, 2)} KWh")
             print(f"  > money earned: {round(money_earned[a], 2)}€ ({round(prices[a],2)}€ per KWh)")
     if PRINT_RESULTS: print();
-    results.setStationDataComp(agent_stations, prices, sttn_util_rate, station_charges,
+    results.setStationDataComp(agent_stations, prices, station_charges, sttn_util_rate, sttn_vehicle_count,
                                total_charge, total_money_earned, charge, money_earned,
                                suffixes)
 

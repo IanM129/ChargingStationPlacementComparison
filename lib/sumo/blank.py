@@ -71,7 +71,7 @@ def preprocess(data_path, sumo_filename, output_path, params=None):
     sumocfg_tree.write(sumo_filepath)
     ## Copy required files
     prep.copyFile(data_path + "/base_net.net.xml", cache_data_path + "/net.net.xml")
-    prep.copyFile(output_path + "/trips.xml", cache_data_path + "/routes.xml")
+    #prep.copyFile(output_path + "/trips.xml", cache_data_path + "/routes.xml")
     ## Load XMLs
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
     vTypes_tree = ET.parse("networks/vTypes.add.xml", parser=parser)
@@ -102,6 +102,8 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     cache_output_path = cache_data_path + "/output/"
     sumo_filepath = cache_data_path + "/" + sumo_filename + ".sumocfg"
 #### MAIN
+    ## Write trips
+    trips.xml_tree.write(cache_data_path + "/routes.xml")
     #### Process
     ## Preprocess output config (post station generation)
     # Induction loop
@@ -122,8 +124,7 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     fully_completed = True;
     EVs_count = 0; total_veh_count = 0;
     ## Run simulation
-    if debug:
-        sim_stime = time.perf_counter()
+    sim_stime = time.perf_counter()
     traci.start(cmnd)
     ## Subscriptions
     traci.simulation.subscribe([
@@ -152,18 +153,20 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     ## Simulation done
     sim_time = traci.simulation.getTime()
     traci.close()
+    sim_etime = time.perf_counter()
+    exec_duration = sim_etime - sim_stime
     if debug:
         sim_etime = time.perf_counter()
         steps_processed = int(sim_time / params["sim.stepLength"])
         print("\n")
-        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {sim_etime - sim_stime:0.2f} seconds")
+        print(f"-------- Simulation over at {sim_time} ({steps_processed} steps); after {exec_duration:0.2f} seconds")
         print(f"         vehicle count: {total_veh_count:6d}")
         print(f"             - electric: {EVs_count:6d} ({round((EVs_count / total_veh_count)*100, 2):4.2f} %)")
         print()
 
 #### POSTPROCESS
     results.clear()
-    results.setSimulationData(fully_completed, sim_time)
+    results.setSimulationData(fully_completed, sim_time, exec_duration)
     ## Get flow at edges
     edge_stats = xmlOut.getEdgeLoopStats(filepath=cache_output_path + "/loop.out.xml",
                                          max_flow=True)
@@ -172,6 +175,6 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     results.setVehicleData(vehicle_count=total_veh_count,
                            EV_count=0, EV_set_charge=0,
                            EV_arrived=0, EV_charged=0)
-    results.setStationData([], 0.0, None, None, 0.0, 0.0)
+    results.setStationData([], 0.0, None, None, None, 0.0, 0.0)
     return results
         

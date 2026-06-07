@@ -142,6 +142,27 @@ def writeTrip(parent, route, trip_id=0, return_trip=False, ev_type="electric"):
         via += route[-1]
     if via != "": trip.set("via", via)
     return parent
+def parseTripXMLElement(element, net, G):
+    trip_id = str(element.get("id"))
+    from_edge_id = str(element.get("from"))
+    to_edge_id = str(element.get("to"))
+    return_trip = (from_edge_id == to_edge_id)
+    # Generate route and distances
+    route = []; distances = [];
+    route.append(from_edge_id); last_edge = net.getEdge(from_edge_id);
+    via = str(element.get("via"))
+    for edge_id in via.split(' '):
+        edge = net.getEdge(edge_id);
+        path_len = nx.shortest_path_length(G, source=last_edge.getToNode().getID(), target=edge.getFromNode().getID(),
+                                           weight="length")
+        distances.append(path_len); route.append(edge_id);
+        last_edge = edge;
+    to_edge = net.getEdge(to_edge_id)
+    path_len = nx.shortest_path_length(G, source=last_edge.getToNode().getID(), target=to_edge.getFromNode().getID(),
+                                       weight="length")
+    distances.append(path_len); route.append(to_edge_id);
+    ev_type = str(element.get("type"))
+    return trip_id, Trip(route, distances), ev_type
 
 def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
          min_distance=0, min_distance_per_des=0, max_distance=0,
@@ -172,7 +193,13 @@ def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
     if write:
         ET.indent(tree); tree.write(filepath);
     return TripDataset(trips, tree)
-
+def load(filepath, net, G):
+    trips = {}
+    tree = ET.parse(filepath)
+    for child in tree.getroot():
+        trip_id, trip, _ = parseTripXMLElement(child, net, G)
+        trips[trip_id] = trip
+    return TripDataset(trips, tree)
 
 
 ## Utility
