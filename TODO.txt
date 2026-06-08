@@ -3,6 +3,7 @@ X vise agenata (vise od 2)
 X money model
 ~ zagreb network
 X coverage algoritam na "solo" i "comp"
-(- jos algoritama)
 [X comp saves results]
-- load results to recreate graphs
+~ load results to recreate graphs
+- jos algoritama
+	> baziran na podacima blank simulacije

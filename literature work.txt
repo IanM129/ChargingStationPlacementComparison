@@ -1,0 +1,39 @@
+- Albert Y.S.; Electric Vehicle Charging Station Placement:
+- Albert Y.S.; Electric Vehicle Charging Station Placement: Formulation, Complexity, and Solutions:
+undirected graph with a set of possible construction sites
+construction sites are connected by edges where distance = road distance
+D = average distance to be traversed by most typical EV models when fully charged
+definition of reachable by D
+Ci is construction cost
+minimize sum(Ci * Xi) (Xi is 0 or 1)
+Greedy algorithm:
+	N is all candidate nodes
+	repeat:
+		select node X with most cost and remove it from the graph
+		if the resulting graph is fully connected:
+			continue (the node stays removed from the graph)
+		else:
+			return X to graph and remove it from N 
+	until N is empty
+	--> the algorithm removes each of the nodes only when removing the node keeps the graph fully connected, otherwise it removes it from N, and so on until it finds a suboptimal solution of N nodes which are the selected stations
+MILP:
+	formulates a Mixed-Integer Linear Program problem where each Xi is 0 (not selected)
+	concludes that the problem is solvable through MILP methods (like branch-and-bound) if one of the Xi is 1
+	no trivial way to choose the starting Xi = 1 -> solve it for each possible starting Xi = 1
+
+
+
+
+- Roy A.; Examining spatial disparities in electric vehicle charging station placements using machine learning:
+developed a machine learning model to predict the needed density of charging stations for an area using the region's socioeconomic data
+
+
+
+
+- Sanchari D.; A novel chicken swarm and teaching learning based algorithm for electric vehicle charging station placement problem
+combines the existing Chicken Swarm Optimization and Teaching Learning Based Optimization algorithms into a hybrid algorithm
+includes grid based values: cost of placement and penalties for violating grid constraints
+solves selected benchmark problems and compares the hybrid algorithm
+
+
+
