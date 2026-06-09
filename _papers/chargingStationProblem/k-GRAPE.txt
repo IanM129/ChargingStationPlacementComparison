@@ -1,0 +1,93 @@
+Outer loop: charging station placement (choose k sites)
+
+The operator searches for a good subset S⊆C of candidate locations such that:
+
+∣S∣=k
+system performance under user equilibrium is optimized
+
+This is a combinatorial optimization problem (facility location style).
+
+Typical outer-loop structure:
+------------------------------------------------------------
+Initialize:
+    Candidate locations C
+    Select initial k stations S₀ ⊂ C
+    Best solution S* = S₀
+
+Repeat (search / improvement loop):
+
+    Generate a new candidate solution S' (|S'| = k)
+        e.g., swap one facility, greedy add/drop, or heuristic move
+
+    Evaluate S' by calling GRAPE (inner loop):
+        cost(S') = GRAPE_equilibrium(S')
+
+    If cost(S') < cost(S*):
+        S* = S'
+
+Until stopping criterion is met
+    (max iterations or no improvement)
+------------------------------------------------------------
+Inner loop: GRAPE equilibrium (user behavior solver)
+
+Given a fixed station set S, the goal is to compute how EV users distribute themselves.
+
+This is a congestion-aware user equilibrium (Wardrop/Nash-type) problem.
+
+
+
+
+> Inner loop structure:
+------------------------------------------------------------
+Initialize user-to-station assignment x⁰
+
+Repeat until convergence:
+
+    For each user (or OD pair):
+        Compute perceived cost to each station:
+            cost = travel_distance + waiting_time(congestion)
+
+        Update best response:
+            choose station with minimum cost
+
+    Update station loads:
+        congestion at each station = sum of assigned users
+
+Until equilibrium condition:
+    no user can reduce cost by switching stations
+------------------------------------------------------------
+
+This produces:
+
+stable assignment x
+∗
+(S)
+congestion levels at each station
+total system cost under placement S
+
+
+
+> Full k-GRAPE loop (combined view)
+------------------------------------------------------------
+Input: candidate sites C, number of stations k
+
+Initialize S₀ ⊂ C
+
+Repeat:
+
+    # INNER LOOP (GRAPE equilibrium)
+    x*(S_t) = SolveUserEquilibrium(S_t)
+
+    Evaluate objective:
+        F(S_t) = system_cost(x*(S_t), S_t)
+
+    # OUTER LOOP (placement update)
+    Generate S_{t+1} from S_t (swap / search / heuristic)
+
+    If F(S_{t+1}) improves:
+        accept S_{t+1}
+
+Until convergence
+
+Return best station set S*
+------------------------------------------------------------
