@@ -3,6 +3,18 @@ import math
 def clamp(val, smallest, largest):
     return max(smallest, min(val, largest))
 
+## Is value minimized or maximized?
+# -1 = minimize; 0,1 -> maximize
+def isMinOrMax(val_name : str) -> int:
+    match (val_name):
+        case "totalCoverage" | "coverage" | "simDuration" | "tripDuration" |\
+             "tripLength" | "waitTime" | "stopTime" | "timeLoss":
+            return -1; # -> minimize
+        case "reward":
+            return 1; # -> maximize
+        case _: # totalCharge, charge
+            return 0; # -> maximize from zero (0)
+    return None
 
 ## Z-score
 def zscore(x, mean, std):

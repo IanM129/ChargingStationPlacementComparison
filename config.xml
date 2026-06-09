@@ -24,7 +24,7 @@
 			2000
 		</param>
 		<param name="vehicleCount" type="int" default="100">
-			200
+			100
 		</param>
 		<!-- [0, 0.3, 0.5, 0.2] = 30% chance the vehicle has 2 destinations, 50% 3 destinations and 20% 4 destinations. -->
 		<param name="destinationCountDistribution" type="list" default="[0, 0.3, 0.5, 0.2]">
@@ -71,7 +71,7 @@
 	</group>
 	<group name="station">
 		<param name="k" type="int" default="5">
-			6
+			3
 		</param>
 		<param name="capacity" type="int" default="10">
 			8

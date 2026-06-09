@@ -168,6 +168,11 @@ class StationInfoDataset:
     def __getitem__(self, idx): return self.arr[idx];
     def getByID(self, x): return self.arr[self.rev_dict[x]];
     def getIndexByID(self, x): return self.rev_dict[x];
+    def getByEdgeID(self, edge_id):
+        for si in self.arr:
+            if si.edge_id == edge_id: return si;
+        print(f"ERROR: No station found with edge id '{edge_id}'", file=sys.stderr);
+        return None;
     # Overloads
     def __iter__(self):
         for el in self.arr:

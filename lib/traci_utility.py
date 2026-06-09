@@ -158,7 +158,7 @@ def findClosestChargingStation(vehID, charge, stations, cost_function, approx_ch
     route_info_before = station_routes[chosen_sttn_id][0]
     route_info_after = station_routes[chosen_sttn_id][1]
     station_route = station_routes[chosen_sttn_id][0].edges + station_routes[chosen_sttn_id][1].edges[1:]
-    new_trip = Trip([cur_edge, sttn_info.redge_id, next_dest_edge], [route_info_before.length, route_info_after.length])
+    new_trip = Trip([cur_edge, sttn_info.redge_id, next_dest_edge], [route_info_before.length, route_info_after.length], True)
     return chosen_sttn_id, new_trip, station_route
 def waitQueueCost(cost, waiting, wait_coef=100.0):
     return cost + (wait_coef * waiting);

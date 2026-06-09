@@ -34,6 +34,7 @@ from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
 
 import lib.algorithms.algorithms as alg
+import lib.algorithms.coverage as coverAlg
 
 import lib.graphing.utility as graphutil
 import lib.graphing.draw as graphdraw
@@ -119,8 +120,9 @@ def removeFromSimulationVars(vehicles : set, stations, params):
                 stations[si_index].releaseSpot(park_side)
                 charging.pop(vehID, None);
 #### Sumo
-def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, results, stations,
-                output_path, output_subfolder="solo", params=None, debug=False):
+def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stations, results,
+                output_path, output_subfolder="solo", charge_data=None, coverage_G_d=None,
+                params=None, debug=False):
     if not params: params = Parameters.default();
     CPU_THREADS = params["sim.cpuThreads"]
     MAX_DURATION = params["sim.maxDuration"]
@@ -156,11 +158,10 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     cache_data_path = output_path_full + "/_cache/"
     cache_output_path = cache_data_path + "/output/"
     sumo_filepath = cache_data_path + "/" + network_name + ".sumocfg"
-    #global base_net, G
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
     global avg_trip_len, avg_trip_charge
     
-#### PRE STATION WRITE
+#### STATION WRITE
     ## Write stations to XML
     parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
                                        write=True, output_path=cache_data_path,
@@ -216,6 +217,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
         going_to_charge = {}
         charging = {}
         ev_ntc_charge = {}
+        charging_min = {}
         remaining_range = {}
     if VISUALIZE:
         veh_colors = {}
@@ -390,7 +392,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
             # Update dict (found spot/started charging)
             for vehID in start_charging_this_step:
                 going_to_charge.pop(vehID, None)
-                charge_target = min(traciutil.calcNeededChargeLeft(vehID, trips[vehID]) + 200, max_charge) # padding so it doesn't need to go recharge
+                charge_target = min(max(traciutil.calcNeededChargeLeft(vehID, trips[vehID]), charging_min[vehID]), max_charge) # padding so it doesn't need to go recharge
                 charging[vehID] = (start_charging_this_step[vehID], charge_target)
 
         ## Newly added
@@ -401,27 +403,32 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
             if vtype == "electric":
                 sim_EVs.add(vehID); EVs_count += 1;
                 # Set when vehicle needs to charge
-                need_to_charge_level = random.uniform(0.15, 0.4)
-                if CHARGE_ROUTING != StationRouting.STATIONFINDER:
-                    ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
-                else:
-                    traci.vehicle.setParameter(vehID, "device.stationfinder.needToChargeLevel", str(need_to_charge_level))
-                # Set battery charge on start
-                #min_charge = prep.calcApproxChargeNeeded(dist_radius); min_charge_p = min_charge / max_charge;
-                trip_len = trips[vehID].total_distance
-                approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
-                if random.random() < params["electric.needToChargeProb"]:
-                    # v1 : random.uniform(0.2, 0.3) * max_charge
-                    # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
-                    # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
-                    set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
-                    set_charge_p = set_charge / max_charge
+                if charge_data is not None and vehID in charge_data:
+                    need_to_charge_level, set_charge, charge_min = charge_data[vehID]
                     set_need_to_charge_cnt += 1
                 else:
-                    set_charge = max_charge
-                traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(min(set_charge, max_charge)))
+                    need_to_charge_level = random.uniform(0.15, 0.4)
+                    # Set battery charge on start
+                    #min_charge = prep.calcApproxChargeNeeded(dist_radius);
+                    #min_charge_p = min_charge / max_charge;
+                    trip_len = trips[vehID].total_distance
+                    approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
+                    if random.random() < params["electric.needToChargeProb"]:
+                        # v1 : random.uniform(0.2, 0.3) * max_charge
+                        # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
+                        # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
+                        set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
+                        charge_min = random.uniform(250, 750)
+                        set_need_to_charge_cnt += 1
+                    else:
+                        set_charge = max_charge
                 if CHARGE_ROUTING != StationRouting.STATIONFINDER:
+                    ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
+                    charging_min[vehID] = float(charge_min)
                     will_need_to_charge.add(vehID);
+                else:
+                    traci.vehicle.setParameter(vehID, "device.stationfinder.needToChargeLevel", str(need_to_charge_level))
+                traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(min(set_charge, max_charge)))
         ####################
 
         ## Keep tracking of station use per time
@@ -514,6 +521,14 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, resul
     results.setVehicleData(vehicle_count=total_veh_count,
                            EV_count=EVs_count, EV_set_charge=set_need_to_charge_cnt,
                            EV_arrived=arrived_EVs_cnt, EV_charged=EVs_charged)
+
+    ## Get total coverage
+    if coverage_G_d is None:
+        coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
+    coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d, stations.listDNodes(base_net),
+                                                                epsilon=50,
+                                                                max_radius=network_diameter))
+    results.setCoverageData(coverage_radius, network_diameter)
 
     return results
         

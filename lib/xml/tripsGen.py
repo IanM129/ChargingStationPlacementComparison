@@ -188,7 +188,7 @@ def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
                                           return_len=False, return_len_arr=True)
         #print(f"[{destination_count:2d}] {route_len:8.2f} e [{min_distance:8.2f}, {max_distance:8.2f}]")
         writeTrip(root, route, trip_id=i, ev_type=vType)
-        trip = Trip(route, distances)
+        trip = Trip(route, distances, vType == "electric")
         trips[str(i)] = trip
     if write:
         ET.indent(tree); tree.write(filepath);

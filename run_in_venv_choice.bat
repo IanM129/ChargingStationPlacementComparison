@@ -16,6 +16,7 @@ echo 2 solo			- run an algorithmic solo simulation
 echo 3 comp			- (default) run an algorithmic competitive simulation
 echo 4 gnn			- trains a solo network
 echo 5 marl			- trains two competing networks
+echo 6 game			- finds the placement through a game theory based algorithm 
 echo ==========================
 set /p choice=Enter your choice:
 :: Choice to file
@@ -28,6 +29,7 @@ if /i "%choice%" == "2" (goto solo)
 if /i "%choice%" == "3" (goto comp)
 if /i "%choice%" == "4" (goto gnn)
 if /i "%choice%" == "5" (goto marl)
+if /i "%choice%" == "6" (goto game)
 if /i "%choice%"=="blank" (
 :blank
 	set pyfile=blank.py
@@ -56,6 +58,12 @@ if /i "%choice%"=="marl" (
 :marl
 	set pyfile=marl.py
 	set title=Multi-Agent RL
+	goto pass_type
+)
+if /i "%choice%"=="game" (
+:game
+	set pyfile=game.py
+	set title=Equilibrium game algorithm
 	goto pass_type
 )
 echo.

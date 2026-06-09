@@ -1,3 +1,4 @@
+import random
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,6 +10,7 @@ from torch.distributions import Multinomial, Beta
 from torch_geometric.data import Data
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
+import preprocess as prep
 
 import lib.xml.output as xmlout
 
@@ -45,15 +47,6 @@ def calculate_log_probs(logits, selected_indices):
         log_probs.append(log_p)
         mask[idx] = False
     return torch.stack(log_probs)
-def isMinOrMax(val_name : str) -> int:
-    match (val_name):
-        case "totalCoverage" | "coverage" | "simDuration" | "tripDuration" |\
-             "tripLength" | "waitTime" | "stopTime" | "timeLoss":
-            return -1; # -> minimize
-        case "reward":
-            return 1; # -> maximize
-        case _: # totalCharge, charge
-            return 0; # -> maximize from zero (0)
 def createEdgeAttrUpdateList(attr_update, attr_list):
     return [(a if (a in attr_update) else None) for a in attr_list]
 
@@ -208,6 +201,21 @@ def loadEnvironment(network_name, edge_attr_list_loc):
     edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
     applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
     return graph, base_net, base_G, base_G_d, translator
+# Vehicles
+def generateRandomChargeData(trips, max_charge):
+    charge_data = {}
+    for vehID, trip in trips.dict.items():
+        need_to_charge_level = random.uniform(0.15, 0.4)
+        trip_len = trip.total_distance
+        approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
+        # v1 : random.uniform(0.2, 0.3) * max_charge
+        # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
+        # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
+        set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
+        charging_min = random.uniform(250, 750)
+        # (need_to_charge_level, starting_charge, charging_min)
+        charge_data[vehID] = (need_to_charge_level, set_charge, charging_min)
+    return charge_data
 ## Models
 def getAgentSuffixes(agent_colors):
     return [("_" + n) for n in agent_colors]
@@ -249,25 +257,25 @@ def runSimulation_blank(network_name, data_path, output_path, net, trips, params
                            output_path=output_path, output_subfolder="blank")
     return results
 def runSimulation_solo(network_name, data_path, output_path,
-                       net, G, stations, base_trips,
+                       net, G, stations, base_trips, charge_data, coverage_G_d, 
                        params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
     output_subfolder = "solo";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoSoloRun(net, G, data_path, network_name, trips, results, stations,
+    results = sumoSoloRun(net, G, data_path, network_name, trips, stations, results,
                           output_path=output_path, output_subfolder=output_subfolder,
-                          params=params, debug=debug)
+                          charge_data=charge_data, coverage_G_d=coverage_G_d, params=params, debug=debug)
     return results
 def runSimulation_comp(network_name, data_path, output_path,
-                       net, G, stations, all_stations, prices, base_trips,
+                       net, G, stations, all_stations, prices, base_trips, charge_data, coverage_G_d,
                        params, results, iteration=None, debug=False, agent_colors=None):
     trips = copy.deepcopy(base_trips)
     output_subfolder = "comp";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(net, G, data_path, network_name, trips, results,
-                          stations, all_stations,
-                          output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
+    results = sumoCompRun(net, G, data_path, network_name, trips, stations, all_stations,
+                          results, output_path, output_subfolder=output_subfolder,
+                          charge_data=charge_data, prices=prices,
+                          agent_colors=agent_colors, coverage_G_d=coverage_G_d,
                           params=params, debug=debug)
     return results
 
@@ -284,19 +292,12 @@ def initializeResultsDict(params, iteration_count, K, agent_count=1):
         for p in params.groups["compReward"]:
             if params["compReward." + p + ".monitor"] == True:
                 train_results[p] = np.zeros((agent_count, iteration_count))
-                #train_results[p]["_red"] = np.zeros(iteration_count)
-                #train_results[p]["_blue"] = np.zeros(iteration_count)
         train_results["generalReward"] = np.zeros(iteration_count)
         train_results["reward"] = np.zeros((agent_count, iteration_count))
-        #train_results["reward"]["_general"] = np.zeros(iteration_count)
-        #train_results["reward"]["_red"] = np.zeros(iteration_count)
-        #train_results["reward"]["_blue"] = np.zeros(iteration_count)
         train_results["price"] = np.zeros((agent_count, iteration_count))
         train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=np.dtypes.StringDType())
     else:
         train_results["reward"] = np.zeros(iteration_count)
-        #train_results["price"] = np.zeros(iteration_count)
-        #train_results["stations"] = [[None for k in range(K)] for i in range(iteration_count)]
         train_results["stations"] = np.empty((iteration_count, K), dtype=np.dtypes.StringDType())
     return train_results
 def initializeBestDict(params, competitive=False):
@@ -305,7 +306,7 @@ def initializeBestDict(params, competitive=False):
     best = {}
     for p in params.groups[group_name]:
         if params[group_name + "." + p + ".monitor"] == True:
-            m = isMinOrMax(p);
+            m = util.isMinOrMax(p);
             match (m):
                 case -1: best[p] = (np.inf, None);
                 case 1: best[p] = (-np.inf, None);
@@ -364,7 +365,7 @@ def updateBestDict(best, station_edges, formula, prices=None, modified=None):
     for p in best:
         value = formula[p][0]
         cur = best[p][0]
-        m = isMinOrMax(p)
+        m = util.isMinOrMax(p)
         if m == -1:
             if value < cur:
                 best[p] = (value, result.copy()); modified.add(p);

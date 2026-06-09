@@ -41,7 +41,8 @@ os.chdir(MAIN_DIR)
 
 
 RANDOM_STATIONS = False
-def stationDistribution(G, G_d, k, output_path, debug=False):
+def stationDistribution(G, base_G_d, k, output_path, debug=False):
+    G_d = base_G_d.copy()
     candidates = graphing.calcCandidates(G_d, detailed_graph=True)
     ## Charging stations
     print("-- Station distribution algorithm (" +

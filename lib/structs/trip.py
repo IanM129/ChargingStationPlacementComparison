@@ -5,13 +5,15 @@ class Trip:
     # destinations
     # distances
     # total_distance
+    # electric
 
-    def __init__(self, destinations, distances, total_distance=None):
+    def __init__(self, destinations, distances, is_electric : bool, total_distance=None):
         self.destinations = destinations
         self.distances = distances
         if total_distance == None:
             self.total_distance = sum(distances)
         else: self.total_distance = total_distance
+        self.electric = bool(is_electric)
     def __getitem__(self, idx):
         return self.destinations[idx];
     def __setitem__(self, idx, value):
@@ -104,12 +106,19 @@ class TripDataset:
     # dict
     # xml_tree
     
-    def __init__(self, dictionary : dict[int,Trip], xml_tree=None):
+    def __init__(self, dictionary : dict[str,Trip], xml_tree=None):
         self.dict = dictionary
         self.xml_tree = xml_tree
+        self.types = {}
     def __getitem__(self, idx): return self.dict[idx];
     def __len__(self): return len(self.dict);
     def keys(self): return self.dict.keys();
     def values(self): return self.dict.values();
+    def vehicles(self): return list(self.dict.keys());
+    def EVs(self):
+        res = set()
+        for vehID, trip in self.dict.items():
+            if trip.electric: res.add(vehID);
+        return res
     def averageTripLen(self):
         return np.mean([trip.total_distance for trip in self.dict.values()])

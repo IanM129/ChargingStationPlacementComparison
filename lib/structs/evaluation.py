@@ -1,6 +1,13 @@
+import numpy as np
+
+from lib.utility import isMinOrMax
+
+
 class Evaluation:
     #fullyCompleted
     #simulationTime
+    #coverageRadius
+    #network_diameter
     ## Data
     #vehicle_data
         # * vehicleCount
@@ -44,6 +51,8 @@ class Evaluation:
     def clear(self):
         self.fullyCompleted = True
         self.simulationTime = -1.0
+        self.coverageRadius = None
+        self.networkDiameter = None
         self.vehicle_data = {}
         self.trip_data = {}
         self.edge_data = {
@@ -63,6 +72,9 @@ class Evaluation:
         self.fullyCompleted = fully_completed
         self.simulationTime = simulationTime
         self.executionDuration = duration
+    def setCoverageData(self, coverage_radius, network_diameter):
+        self.coverageRadius = coverage_radius
+        self.networkDiameter = network_diameter
     def setVehicleData(self, vehicle_count,
                        EV_count, EV_set_charge, EV_arrived, EV_charged):
         self.vehicle_data["vehicleCount"] = int(vehicle_count)
@@ -182,10 +194,66 @@ class Evaluation:
         return d
 
 
-
-
-
-
-
-
+def getStatFromResult(result, stat):
+    match (stat):
+        case "totalCoverage":
+            return result.coverageRadius
+        case "totalCharge":
+            return result.station_data["totalCharge"]
+        case "simDuration":
+            return result.simulationTime
+        case "tripDuration":
+            return result.trip_data["tripDuration"]
+        case "tripLength":
+            return result.trip_data["tripLength"]
+        case "waitTime":
+            return result.trip_data["waitTime"]
+        case "stopTime":
+            return result.trip_data["stopTime"]
+        case "timeLoss":
+            return result.trip_data["timeLoss"]
+        case "energyConsumed":
+            return result.trip_data["energyConsumed"]
+    return None
     
+class EvaluationDataset:
+    # arr
+
+    def __init__(self, results : list):
+        self.arr = results
+    def calcScores(self, params):
+        ## Define statistics
+        stats = params.getGroup("reward")
+        ## Get values
+        values = []
+        for i in range(len(self.arr)):
+            res = self.arr[i]; v = {};
+            for stat in stats: v[stat] = getStatFromResult(res, stat);
+            values.append(v)
+        ## Get max values for normalization
+        max_vals = {}
+        for stat in stats:
+            if stat == "totalCoverage": pass;
+            else: max_vals[stat] = max([values[i][stat] for i in range(len(values))])
+        ## Calculate scores, using params coefficients
+        scores = []
+        for i in range(len(self.arr)):
+            score = 0.0
+            res = self.arr[i]; vals = values[i];
+            for stat in stats:
+                if stat == "simDuration": continue;
+                # Normalize
+                if stat == "totalCoverage": val = float(vals[stat]) / float(res.networkDiameter);  # [0, 1]
+                else: val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
+                coeff = float(params["reward." + stat])
+                # Invert if minimizing or coefficient is negative
+                if (isMinOrMax(stat) == -1) or (coeff < 0):
+                    val = (1.0 - float(val))
+                score += float(val) * abs(coeff);
+            # Special case for simulation duration, because of possible non-completion,
+            # 0 if not completed, 1.5 - otherwise normalized value -> [0.5, 1.5] if completed, 0 otherwise
+            if res.fullyCompleted:
+                val = float(vals["simDuration"]) / float(max_vals["simDuration"]);  # [0, 1]
+                score += (1.5 - float(val)) * float(params["reward." + stat])  # [1.5, 0.5] * coeff
+            scores.append(score)
+        return scores

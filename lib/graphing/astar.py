@@ -6,7 +6,7 @@ from lib.graphing.utility import *
 
 
 
-
+#### Graph
 ## A*, with default use of spatial heuristic
 def path(G, start = None, target = None, use_spatial_heuristic=True, weight="length"):
     def spatial_heuristic(node_a, node_b):
@@ -74,4 +74,125 @@ def detailedEdgePoint(G, start : EdgePoint = None, target : EdgePoint = None, le
         if start != None: path[0] = start;
         if target != None: path[-1] = target;
         return path
-        
+
+
+
+
+# Graph with junction weights
+def edgePath_internalWeights(G, start, target, weight="length"):
+    import heapq
+    def neighbors(edge):
+        from_node, to_node = edge
+        for n in G.neighbors(to_node):
+            #if n == from_node: continue;
+            data = G.get_edge_data(to_node, n)
+            cost = float(data[weight])
+            if n not in int_lens[to_node][from_node]: continue;
+            cost += float(int_lens[to_node][from_node][n])
+            yield ((to_node, n), cost)
+    def spatial_heuristic(edge_a, edge_b):
+        pos_a = pos[edge_a[1]]; pos_b = pos[edge_b[1]];
+        return pow(pos_b[0] - pos_a[0], 2) + pow(pos_b[1] - pos_a[1], 2)
+    # Get node attributes
+    int_lens = nx.get_node_attributes(G, "intLens")
+    pos = nx.get_node_attributes(G, "pos")
+    # Initialize with starting state
+    start_state = (None, start)
+    open_heap = []
+    heapq.heappush(open_heap, (spatial_heuristic(start, target), 0.0, start_state))
+    g_score = {start_state: 0.0}
+    came_from = {}
+    closed_set = set()
+    # Main loop
+    while open_heap:
+        _, current_g, state = heapq.heappop(open_heap)
+        if state in closed_set: continue;
+        prev_edge, cur_edge = state
+        if cur_edge == target:
+            path = [cur_edge];
+            while state in came_from:
+                state = came_from[state]
+                _, edge = state
+                path.append(edge)
+            path.reverse()
+            return path
+        closed_set.add(state)
+        for next_edge, cost in neighbors(cur_edge):
+            next_state = (cur_edge, next_edge)
+            tentative_g = current_g + cost
+            if tentative_g < g_score.get(next_state, float("inf")):
+                g_score[next_state] = tentative_g
+                came_from[next_state] = state
+                f_score = tentative_g + spatial_heuristic(next_edge, target)
+                heapq.heappush(
+                    open_heap,
+                    (f_score, tentative_g, next_state)
+                )
+    return None
+
+
+
+"""
+def path_internalWeights(G, start, target, weight="length", previous=None, edge_path=False):
+    import heapq
+    def neighbors(node, previous):
+        res = []
+        neighbors = list(G.neighbors(node))
+        for n in neighbors:
+            data = G.get_edge_data(node, n)
+            cost = float(data[weight])
+            if previous is not None:
+                if n not in int_lens[node][previous]: continue;
+                cost += float(int_lens[node][previous][n])
+            res.append((n, cost))
+        return res
+    def spatial_heuristic(node_a, node_b):
+        pos_a = pos[node_a]; pos_b = pos[node_b];
+        return pow(pos_b[0] - pos_a[0], 2) + pow(pos_b[1] - pos_a[1], 2)
+    # Get node attributes
+    int_lens = nx.get_node_attributes(G, "intLens")
+    pos = nx.get_node_attributes(G, "pos")
+    # Initialize with starting state
+    start_previous = previous
+    start_state = (start_previous, start)
+    open_heap = []
+    heapq.heappush(open_heap, (spatial_heuristic(start, target), 0.0, start_state))
+    came_from = {}
+    g_score = {start_state: 0.0}
+    closed_set = set()
+    # Main loop
+    while open_heap:
+        _, current_g, state = heapq.heappop(open_heap)
+        if state in closed_set: continue;
+        previous, current = state
+        if current == target:
+            if edge_path: path = [];
+            else: path = [current];
+            while state in came_from:
+                if edge_path:
+                    prev_state = came_from[state]
+                    _, from_node = prev_state
+                    _, to_node = state
+                    path.append((from_node, to_node))
+                    state = prev_state
+                else:
+                    state = came_from[state]
+                    _, node = state
+                    path.append(node)
+            if edge_path: path.append((start_state));
+            path.reverse()
+            return path
+        closed_set.add(state)
+        for neighbor, cost in neighbors(current, previous):
+            next_state = (current, neighbor)
+            tentative_g = current_g + cost
+            if tentative_g < g_score.get(next_state, float("inf")):
+                g_score[next_state] = tentative_g
+                came_from[next_state] = state
+                f_score = tentative_g + spatial_heuristic(neighbor, target)
+                heapq.heappush(
+                    open_heap,
+                    (f_score, tentative_g, next_state)
+                )
+    return None
+"""

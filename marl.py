@@ -257,18 +257,6 @@ def rewardFunction_unique(stations_u, results, params, formula, suffix):
     formula["reward"] = (float(reward), 0.0)
     return reward
 
-##def runSimulation(network_name, G, stations, all_stations, prices, base_trips, params, results, iteration=None, debug=False, agent_colors=None):
-##    trips = copy.deepcopy(base_trips)
-##    output_subfolder = "comp";
-##    if iteration != None: output_subfolder += "_" + str(iteration);
-##    results = sumoCompRun(base_net, G, data_path, network_name, trips, results,
-##                          stations, all_stations,
-##                          output_path, output_subfolder=output_subfolder,
-##                          prices=prices, agent_colors=agent_colors,
-##                          params=params, debug=debug)
-##    return results
-        
-
 
 ###### SETTINGS
 agent_colors = visutil.getAgentColors()
@@ -394,6 +382,7 @@ if __name__ == "__main__":
     # Save params and metadata
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "MARL", network_diameter)
+    ## Generate vehicles
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                                destination_count_probs=DESTINATION_COUNT_DIST,
@@ -402,7 +391,12 @@ if __name__ == "__main__":
                                max_distance=MAX_DISTANCE, #network_diameter*2.0,
                                ev_pen=EV_PEN)
     average_trip_len = base_trips.averageTripLen()
-    # Prepare results
+    # Generate charge data
+    vTypes_tree = ET.parse("networks/vTypes.add.xml")
+    max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+    charge_data = gnnutil.generateRandomChargeData(base_trips, max_charge)
+    print(charge_data)
+    ## Prepare results
     results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
     ## Run
@@ -517,7 +511,8 @@ if __name__ == "__main__":
         results = Evaluation(translator)
         try:
             results = gnnutil.runSimulation_comp(network_name, data_path, output_path,
-                                                 base_net, base_G, stations, all_stations, prices, base_trips,
+                                                 base_net, base_G, stations, all_stations, prices,
+                                                 base_trips, charge_data, coverage_G_d,
                                                  params, results, iteration, agent_colors=agent_colors, debug=False)
             sim_tries = 0
         except Exception as e:

@@ -6,6 +6,40 @@ from lib.globalVars import *
 
 from lib.structs.edgepoint import EdgePoint
 from lib.structs.maxheap import TupleMaxHeap
+from lib.structs.trip import Trip
+
+
+class TupleEdge:
+    def __init__(self, from_node, to_node=None):
+        if isinstance(from_node, tuple):
+            self.__init__(from_node[0], from_node[1])
+            return
+        if to_node < from_node:
+            self.from_node = to_node;
+            self.to_node = from_node;
+        else:
+            self.from_node = from_node;
+            self.to_node = to_node;
+    def __getitem__(self, idx):
+        if idx == 0: return self.from_node;
+        elif idx == 1: return self.to_node;
+        else: raise Exception(f"Index OOR for tuple ('{idx}')")
+    def __setitem__(self, idx, value):
+        if idx == 0:
+            if value <= self.to_node: self.from_node = value;
+            else: self.to_node = value;
+        elif idx == 1:
+            if value >= self.from_node: self.to_node = value;
+            else: self.from_node = value;
+        else: raise Exception(f"Index OOR for tuple ('{idx}')")
+    def __eq__(self, other):
+        #if isinstance(other, tuple):
+        return self.from_node == other[0] and self.to_node == other[1];
+        #return self.from_node == other.from_node and self.to_node == other.to_node;
+    def __hash__(self):
+        return hash((self.from_node, self.to_node))
+    def __repr__(self):
+        return "(" + str(self.from_node) + ", " + str(self.to_node) + ")"
 
 
 def netHasNodeID(net, node_id):
@@ -39,7 +73,12 @@ def getNodesFromRoadID(road_id):
     return (from_id, to_id)
 ## Get road id from nodes
 def getRoadIDFromNodes(from_id, to_id):
+    if to_id < from_id:
+        return to_id + ROAD_ID_SEPARATOR + from_id
     return from_id + ROAD_ID_SEPARATOR + to_id
+## Get road id from nodes
+def getRoadIDFromTuple(edge_tuple):
+    return getRoadIDFromNodes(edge_tuple[0], edge_tuple[1])
 
 ## Translate EdgePoint to detailed nodes
 def getDetailedNodesFromEdgePoint(ep : EdgePoint):
@@ -78,12 +117,7 @@ def translateNetEdgeToDetailedEdgeID(net_edge):
 def translateNetEdgeToDetailedEdgeTuple(net_edge):
     from_id = net_edge.getFromNode().getID(); to_id = net_edge.getToNode().getID();
     return (from_id + NODE_EDGE_ID_SEPARATOR + to_id, to_id + NODE_EDGE_ID_SEPARATOR + from_id)
-
-
-## Translate normal edge to
-#def getEntryEdgesFromNormalEdge(nedge_id, net):
     
-
 
 
 ## Extract original edge ID from edge ID
@@ -119,9 +153,6 @@ def extractEdgeID(edge_id) -> tuple[str, int]:
         else:
             return (edge_id, 2);
         
-        
-            
-
 
 ## Get length of path
 def pathLength(G, path, weight="length"):
@@ -142,6 +173,25 @@ def pathLength(G, path, weight="length"):
             else: last = path[i-2];
             res += intLens[mid][last][cur]
     return res
+def edgePathLength(G, path, weight="length", use_internal=True):
+    res = 0
+    intLens = nx.get_node_attributes(G, "intLens")
+    has_internal_lanes = len(intLens) > 0 and use_internal
+    for i in range(len(path)):
+        if (type(path[i-1]) is EdgePoint): res += path[i-1].left;
+        elif (type(path[i]) is EdgePoint): res += path[i].distance;
+        else:
+            res += G.edges[path[i]][weight]
+        # Take internal lengths into account
+        if i > 0 and has_internal_lanes and type(path[i-1]) != EdgePoint:
+            if type(path[i]) == EdgePoint: cur = path[i].end;
+            else: cur = path[i][1];
+            mid = path[i][0];
+            if type(path[i-2]) == EdgePoint: last = path[i-2].start;
+            else: last = path[i-1][0];
+            res += intLens[mid][last][cur]
+    return res
+
 
 ## Get length of route
 

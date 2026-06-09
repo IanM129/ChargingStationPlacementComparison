@@ -204,16 +204,6 @@ def rewardFunction(stations, results, params, formula):
     formula["reward"] = (float(reward), 0.0)
     return reward
 
-##def runSimulation(network_name, G, stations, base_trips, params, results, iteration=None, debug=False):
-##    trips = copy.deepcopy(base_trips)
-##    output_subfolder = "solo";
-##    if iteration != None: output_subfolder += "_" + str(iteration);
-##    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
-##                          output_path=output_path, output_subfolder=output_subfolder,
-##                          params=params, debug=debug)
-##    return results
-        
-
 
 ###### SETTINGS
 ## Training
@@ -329,6 +319,7 @@ if __name__ == "__main__":
     # Save params and metadata
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "GNN", network_diameter)
+    ## Generate vehicles
     # Generate trips for the whole training session
     base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
                                destination_count_probs=DESTINATION_COUNT_DIST,
@@ -337,7 +328,11 @@ if __name__ == "__main__":
                                max_distance=MAX_DISTANCE, #network_diameter*2.0,
                                ev_pen=EV_PEN)
     average_trip_len = base_trips.averageTripLen()
-    # Prepare results
+    # Generate charge data
+    vTypes_tree = ET.parse("networks/vTypes.add.xml")
+    max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+    charge_data = gnnutil.generateRandomChargeData(base_trips, max_charge)
+    ## Prepare results
     results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
     # Prepare files
@@ -413,7 +408,7 @@ if __name__ == "__main__":
         results = Evaluation(translator)
         try:
             results = gnnutil.runSimulation_solo(network_name, data_path, output_path,
-                                                 base_net, base_G, stations, base_trips,
+                                                 base_net, base_G, stations, base_trips, charge_data, coverage_G_d,
                                                  params, results, iteration, debug=False)
             sim_tries = 0
         except Exception as e:
@@ -540,7 +535,7 @@ if __name__ == "__main__":
     ET.indent(best_tree, space="    ")
     best_tree.write(output_path + "/training/best.xml");
     best_tree.write(output_path + "/results/best.xml");
-    # Save result data
+    # Save training results data
     xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
     xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
