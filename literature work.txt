@@ -38,8 +38,8 @@ solves selected benchmark problems and compares the hybrid algorithm
 
 
 
-- Veisi M.; Optimal charging station placement of electric vehicles in the smart distribution network based on the mixed
-focuses on the perspective of the costs of placing stations: objective function is minimizing the cost of building charging stations and energy costs (electricity used, cost of supplying from the grid), with later voltage deviation included (system must keep the voltage within a safe range)
+- Veisi M.; Optimal charging station placement of electric vehicles in the smart distribution network based on the mixed focuses on the perspective of the costs of placing stations: 
+objective function is minimizing the cost of building charging stations and energy costs (electricity used, cost of supplying from the grid), with later voltage deviation included (system must keep the voltage within a safe range)
 integer linear programming
 mixed integer nonlinear programming -> runs very slowly when the dimension of the grid increases significantly
 develops mixed integer linear programming approximation of the original problem
@@ -48,7 +48,7 @@ modeled in GAMS to evaluate proposed formulation -> buses
 
 
 
-- Lopez, P. A.; Optimizing the Charging Station Placement By Considering the User’s Charging Behavior
+- Hidalgo, P. A. L.; Optimizing the Charging Station Placement By Considering the User’s Charging Behavior
 we first calculate the spatiotemporal energy demand to account for the specific demand of each user, we conduct a preselection step, where the locations and station types of little relevance are identified and excluded from optimization, The actual optimization step uses a multi-objective genetic algorithm with two objectives: minimizing the total installation costs of the infrastructure and minimizing the amount of trips that fail due to insufficient energy in the vehicles
 Finally, the study analyzes two factors, which possibly influence the optimization algorithm: the user’s charging behavior and developments of the battery energy efficiency
 

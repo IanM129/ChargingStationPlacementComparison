@@ -74,7 +74,7 @@ def runSimulation(network_name, G, stations, base_trips, params, results, iterat
     trips = copy.deepcopy(base_trips)
     output_subfolder = "solo";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoSoloRun(base_net, G, data_path, network_name, trips, results, stations,
+    results = sumoSoloRun(base_net, G, data_path, network_name, trips, stations, results,
                           output_path=output_path, output_subfolder=output_subfolder,
                           params=params, debug=debug)
     return results

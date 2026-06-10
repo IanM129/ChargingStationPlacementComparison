@@ -73,8 +73,8 @@ def runSimulation(network_name, G, stations, all_stations, base_trips, prices, p
     trips = copy.deepcopy(base_trips)
     output_subfolder = "comp";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = sumoCompRun(base_net, G, data_path, network_name, trips, results, stations, all_stations,
-                          output_path=output_path, output_subfolder=output_subfolder,
+    results = sumoCompRun(base_net, G, data_path, network_name, trips, stations, all_stations,
+                          results, output_path=output_path, output_subfolder=output_subfolder,
                           prices=prices, agent_colors=agent_colors,
                           params=params, debug=debug)
     return results

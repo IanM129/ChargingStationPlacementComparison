@@ -10,7 +10,7 @@ def setColors(color_dict, nodes, color):
         color_dict[node] = color
     return color_dict
 
-def drawGraph(G, base_color="red", node_colors=None, edge_colors=None, node_labels=True, edge_labels=True):
+def drawGraph(G, base_color="red", node_colors=None, edge_colors=None, node_labels=True, edge_labels=True, node_size=250):
     plt.clf()
     pos = nx.get_node_attributes(G, "pos")
     colors = []
@@ -27,12 +27,15 @@ def drawGraph(G, base_color="red", node_colors=None, edge_colors=None, node_labe
         node_color=colors,
         edge_color=edge_colors_arr,
         with_labels=node_labels,
-        node_size=250)
+        node_size=node_size)
     if edge_labels:
         edge_lbls = nx.get_edge_attributes(G, "length")
+        lbls = {}
         for k, val in edge_lbls.items():
             edge_lbls[k] = round(val, 2)
-        nx.draw_networkx_edge_labels(G, pos, edge_lbls, label_pos=0.3)
+            if edge_lbls[k] > 60:
+                lbls[k] = edge_lbls[k]
+        nx.draw_networkx_edge_labels(G, pos, lbls, label_pos=0.3)
 
 
 def drawCenters(G, centers, radius, ax=None, base_node_clr="grey",

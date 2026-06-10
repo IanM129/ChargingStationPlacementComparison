@@ -1,0 +1,20 @@
+k-clustering:
+A Game Approach for Charging Station Placement Based on User Preferences and Crowdedness
+
+genetic algorithms:
+Sanchari D.; A novel chicken swarm and teaching learning based algorithm for electric vehicle charging station placement problem
+Hidalgo, P. A. L.; Optimizing the Charging Station Placement By Considering the User’s Charging Behavior
+
+MILP:
+Albert Y.S.; Electric Vehicle Charging Station Placement: Formulation, Complexity, and Solutions:
+Veisi M.; Optimal charging station placement of electric vehicles in the smart distribution network based on the mixed focuses on the perspective of the costs of placing stations
+
+
+machine learning:
+Roy A.; Examining spatial disparities in electric vehicle charging station placements using machine learning
+
+- graph neural network: k, l
+
+
+game theory:
+A Game Approach for Charging Station Placement Based on User Preferences and Crowdedness
