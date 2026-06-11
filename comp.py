@@ -18,12 +18,14 @@ import traci as traci_m
 
 import preprocess as prep
 
+from lib.utility import parseArgs, generateRandomChargeData, writeChargeData, loadChargeData
+
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import lib.graphing.utility as graphutil
 import lib.graphing.draw as graphdraw
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
-from lib.structs.trip import Trip
+from lib.structs.trip import Trip, TripDataset
 from lib.structs.graphtranslator import GraphTranslator
 from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
@@ -69,13 +71,13 @@ def stationDistribution(G, G_d, k, output_path, debug=False):
     #print("Edges selected for stations:", stations_edges)
     return stations_d, radius
 
-def runSimulation(network_name, G, stations, all_stations, base_trips, prices, params, results, iteration=None, debug=False):
+def runSimulation(network_name, G, stations, all_stations, base_trips, charge_data, prices, params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
     output_subfolder = "comp";
     if iteration != None: output_subfolder += "_" + str(iteration);
     results = sumoCompRun(base_net, G, data_path, network_name, trips, stations, all_stations,
                           results, output_path=output_path, output_subfolder=output_subfolder,
-                          prices=prices, agent_colors=agent_colors,
+                          charge_data=charge_data, prices=prices, agent_colors=agent_colors,
                           params=params, debug=debug)
     return results
 
@@ -86,7 +88,9 @@ agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "c
 if __name__ == "__main__":
     # Parse arguments
     if len(sys.argv) < 2: network_name = "manhattan";
-    else: network_name = str(sys.argv[1]);
+    else:
+        network_name = sys.argv[1]
+        args = parseArgs(sys.argv[2:])
     # Adjust params
     params = Parameters.config()
     print(params.groupPrint())
@@ -139,7 +143,7 @@ if __name__ == "__main__":
     base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
     base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
                                  lengths=True, travel_time=True,
-                                 internal_lengths=False, node_position=True)
+                                 internal_lengths=True, node_position=True)
     base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
     # Edge translator
     translator = GraphTranslator(base_G)
@@ -159,15 +163,29 @@ if __name__ == "__main__":
     # Save params and metadata
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "competitive")
-    # Generate trips
-    trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
-                            #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
-                            destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
-                            #min_distance_per_des=(network_diameter / 4.0),
-                            min_distance=MIN_DISTANCE, #network_diameter*0.5,
-                            max_distance=MAX_DISTANCE, #network_diameter*2.0,
-                            ev_pen=EV_PEN)
-    # Station distribution
+    ## Vehicle data
+    if "vehicle-data" in args:
+        # Load
+        trips = TripDataset.parseXML(base_G, translator, args["vehicle-data"] + "/trips.xml")
+        trips.write(output_path + "/trips.xml")
+        charge_data = loadChargeData(args["vehicle-data"] + "/charge_data.xml")
+        print(f"INFO: Successfully loaded vehicle data for {len(trips.dict)} vehicles from '{args['vehicle-data']}'")
+    else:
+        # Generate trips
+        trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
+                                #[0, 0, 0, 0.3, 0.5, 0.2],  #4 -> 0.3; 5 -> 0.5 -> 6 -> 0.2
+                                destination_count_probs=[0, 0.3, 0.5, 0.2],  #2 -> 0.3; 3 -> 0.5 -> 4 -> 0.2
+                                #min_distance_per_des=(network_diameter / 4.0),
+                                min_distance=MIN_DISTANCE, #network_diameter*0.5,
+                                max_distance=MAX_DISTANCE, #network_diameter*2.0,
+                                ev_pen=EV_PEN)
+        # Generate charge data
+        vTypes_tree = ET.parse("networks/vTypes.add.xml")
+        max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+        charge_data = generateRandomChargeData(trips, max_charge)
+    # Save used charge data
+    writeChargeData(charge_data, output_path + "/charge_data.xml")
+    ## Station distribution
     stations = []; dist_radius = []; all_stations = [];
     for a in range(AGENT_COUNT):
         st, dr = stationDistribution(base_G, base_G_d, K, output_path)
@@ -180,7 +198,7 @@ if __name__ == "__main__":
     # Prepare results
     results = Evaluation(translator)
 ###### RUN
-    results = runSimulation(network_name, base_G, stations, all_stations, trips, prices,
+    results = runSimulation(network_name, base_G, stations, all_stations, trips, charge_data, prices,
                   params, results, iteration=None, debug=False)
 
 ###### POSTPROCESS

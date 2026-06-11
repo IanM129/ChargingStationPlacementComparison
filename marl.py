@@ -28,6 +28,7 @@ import libsumo as libsumo_m
 import traci as traci_m
 
 from lib.utility import clamp, welford, ema, ema_welford, zscore
+from lib.utility import parseArgs, generateRandomChargeData, writeChargeData, loadChargeData
 
 #from lib.gnn.model1 import EdgeGNN
 #from lib.gnn.model2 import EdgePosGNN
@@ -43,7 +44,7 @@ import lib.graphing.draw as graphdraw
 import preprocess as prep
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
-from lib.structs.trip import Trip
+from lib.structs.trip import Trip, TripDataset
 from lib.structs.graphtranslator import GraphTranslator
 from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
@@ -274,13 +275,15 @@ gnnutil.initialize(edge_attr_list, edge_attr_map, device)
 if __name__ == "__main__":
     # Parse arguments
     if len(sys.argv) < 2: network_name = "manhattan";
-    else: network_name = str(sys.argv[1]);
+    else:
+        network_name = sys.argv[1]
+        args = parseArgs(sys.argv[2:])
     # Adjust params
     params = Parameters.config()
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
     DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
-    print("dest cnt dist:", DESTINATION_COUNT_DIST)
+    #print("dest cnt dist:", DESTINATION_COUNT_DIST)
     MIN_DISTANCE = params["sim.minDistance"]
     MAX_DISTANCE = params["sim.maxDistance"]
     if params["sim.visualize"]:
@@ -321,9 +324,9 @@ if __name__ == "__main__":
     # Divide K
     if K % AGENT_COUNT == 0:
         K = int(K / AGENT_COUNT); params["station.k"] = K;
-        print(f"INFO: Every agent chooses {K} stations.")
     else:
         print(f"WARNING: k ({K}) is not divisible by {AGENT_COUNT}, using it unchanged.")
+    print(f"INFO: {AGENT_COUNT} agents, every agent chooses {K} stations.")
     # Traci switch
     global libsumo_m, traci_m
     traci = libsumo_m
@@ -338,9 +341,9 @@ if __name__ == "__main__":
     base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
     base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
                                  lengths=True, travel_time=True,
-                                 internal_lengths=False, node_position=True)
+                                 internal_lengths=True, node_position=True)
     base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
-    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d));
     num_nodes = base_G.number_of_nodes()
     # Detailed graph for coverage calculations
     global coverage_G_d
@@ -382,25 +385,33 @@ if __name__ == "__main__":
     # Save params and metadata
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "MARL", network_diameter)
-    ## Generate vehicles
-    # Generate trips for the whole training session
-    base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
-                               destination_count_probs=DESTINATION_COUNT_DIST,
-                               #min_distance_per_des=(network_diameter / 4.0),
-                               min_distance=MIN_DISTANCE, #network_diameter*0.5,
-                               max_distance=MAX_DISTANCE, #network_diameter*2.0,
-                               ev_pen=EV_PEN)
-    average_trip_len = base_trips.averageTripLen()
-    # Generate charge data
-    vTypes_tree = ET.parse("networks/vTypes.add.xml")
-    max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
-    charge_data = gnnutil.generateRandomChargeData(base_trips, max_charge)
-    print(charge_data)
+    ## Vehicle data
+    if "vehicle-data" in args:
+        # Load
+        trips = TripDataset.parseXML(base_G, translator, args["vehicle-data"] + "/trips.xml")
+        trips.write(output_path + "/trips.xml")
+        charge_data = loadChargeData(args["vehicle-data"] + "/charge_data.xml")
+        print(f"INFO: Successfully loaded vehicle data for {len(trips.dict)} vehicles from '{args['vehicle-data']}'")
+    else:
+        # Generate trips for the whole training session
+        trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
+                              destination_count_probs=DESTINATION_COUNT_DIST,
+                              #min_distance_per_des=(network_diameter / 4.0),
+                              min_distance=MIN_DISTANCE, #network_diameter*0.5,
+                              max_distance=MAX_DISTANCE, #network_diameter*2.0,
+                              ev_pen=EV_PEN)
+        # Generate charge data
+        vTypes_tree = ET.parse("networks/vTypes.add.xml")
+        max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+        charge_data = generateRandomChargeData(trips, max_charge)
+    average_trip_len = trips.averageTripLen()
+    # Save used charge data
+    writeChargeData(charge_data, output_path + "/charge_data.xml")
     ## Prepare results
     results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
     ## Run
-    results = sumoBlankRun(base_net, data_path, network_name, base_trips, results, params=params,
+    results = sumoBlankRun(base_net, data_path, network_name, trips, results, params=params,
                            output_path=output_path, output_subfolder="blank")
     ## Update graph (Data)
     graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
@@ -439,6 +450,7 @@ if __name__ == "__main__":
         best[key] = gnnutil.initializeBestDict(params, competitive=True);
         best_modified[key] = {};
     #### Loop
+    print("")
     pbar = tqdm(total=ITERATIONS)
     iteration = 0
     sim_tries = 0
@@ -493,8 +505,9 @@ if __name__ == "__main__":
             if len(selected_edge_indices) != len(set(selected_edge_indices)):
                 print("ERROR: One edge selected twice:", selected_edge_indices, "->", chosen_stations.listEdges())
             # Entropy
-            sel_log_probs_cur = torch.log(sel_probs + 1e-10)  #gnnutil.calculate_log_probs(logits, selected_indices_t)
-            entropy_cur = -(sel_probs * sel_log_probs_cur).sum(dim=-1).mean()
+            log_probs = torch.log_softmax(logits, dim=-1)
+            entropy_cur = -(sel_probs * log_probs).sum(dim=-1)#.mean()
+            sel_log_probs_cur = gnnutil.calculate_log_probs(logits, selected_indices_t) #torch.log(sel_probs + 1e-10)  
             price_entropy_cur = price_dist.entropy()
             # Save for outside of loop
             stations[a] = chosen_stations; all_stations.extend(chosen_stations.arr);
@@ -512,7 +525,7 @@ if __name__ == "__main__":
         try:
             results = gnnutil.runSimulation_comp(network_name, data_path, output_path,
                                                  base_net, base_G, stations, all_stations, prices,
-                                                 base_trips, charge_data, coverage_G_d,
+                                                 trips, charge_data, coverage_G_d,
                                                  params, results, iteration, agent_colors=agent_colors, debug=False)
             sim_tries = 0
         except Exception as e:
@@ -541,18 +554,11 @@ if __name__ == "__main__":
             formulas[a]["reward"] = (formulas[a]["reward"][0] + formula_general["reward"][0], 0.0);
             formulas[a]["price"] = (prices[a], 0.0)
             rewards[a] += reward_general
-        # Update results dictionary 
-        gnnutil.updateResultsDict_comp(train_results, stations, formula_general, formulas, iteration)
-        # Update best
-        best_modified["General"] = gnnutil.updateBestDict(best["General"], all_stations.listEdges(), formula_general, prices=prices, modified=best_modified["General"])
-        for a in range(AGENT_COUNT):
-            best_key = agent_colors[a].capitalize()
-            best_modified[best_key] = gnnutil.updateBestDict(best[best_key], stations[a].listEdges(), formulas[a], prices=prices, modified=best_modified[best_key])
         # Running reward/advantage
         if EFFECT_ON_RUN_REWARD > 0.0:
             if run_reward_general == None:
-                run_reward_general = reward_general;
-                run_rewards = rewards;
+                run_reward_general = reward_general.copy();
+                run_rewards = rewards.copy();
             advantage_general = float(reward_general - run_reward_general);
             run_reward_general = ((1 - EFFECT_ON_RUN_REWARD) * run_reward_general) +\
                                  (EFFECT_ON_RUN_REWARD * reward_general)
@@ -571,14 +577,16 @@ if __name__ == "__main__":
         for a in range(AGENT_COUNT):
             # Policy loss
             # (Edge selection normalized by sqrt instead of mean)
-            sel_edge_loss = ((sel_log_probs[a].sum() / np.sqrt(K)))
+            #sel_edge_loss = ((sel_log_probs[a].sum() / np.sqrt(K)))
+            # normalized by K
+            sel_edge_loss = (sel_log_probs[a].sum() / K)
             price_loss = price_log_probs[a] * PRICE_LAMBDA
             # Entropy loss for exploration
             entropy_bonus = (sel_entropy[a] + (0.1 * price_entropy[a]))
             entropy_loss = -ENTROPY_COEFF * entropy_bonus
             ## Loss; minimize negative to maximize reward
-            loss = -(sel_edge_loss + price_loss) * advantages[a]
-            loss += entropy_loss;
+            policy_loss = -(sel_edge_loss + price_loss) * advantages[a]
+            loss = policy_loss + entropy_loss;
             # Backprop
             loss.backward()
             # Gradient clipping
@@ -587,7 +595,7 @@ if __name__ == "__main__":
             # Step
             optimizers[a].step();
             # Save
-            losses[a] = loss.item();
+            losses[a] = policy_loss.detach().item();
 
         #### 6. Update environment
         if MEASURE_TIME: sim_stime = time.perf_counter();
@@ -595,6 +603,15 @@ if __name__ == "__main__":
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             envupdate_time += sim_etime - sim_stime;
+
+        #### 7. Bookkeeping
+        # Update results dictionary
+        gnnutil.updateResultsDict_comp(train_results, stations, losses, formula_general, formulas, iteration)
+        # Update best
+        best_modified["General"] = gnnutil.updateBestDict(best["General"], all_stations.listEdges(), formula_general, prices=prices, modified=best_modified["General"])
+        for a in range(AGENT_COUNT):
+            best_key = agent_colors[a].capitalize()
+            best_modified[best_key] = gnnutil.updateBestDict(best[best_key], stations[a].listEdges(), formulas[a], prices=prices, modified=best_modified[best_key])
 
         iteration += 1
         pbar.update(1)

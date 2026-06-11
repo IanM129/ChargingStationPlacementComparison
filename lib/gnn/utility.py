@@ -201,21 +201,6 @@ def loadEnvironment(network_name, edge_attr_list_loc):
     edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
     applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
     return graph, base_net, base_G, base_G_d, translator
-# Vehicles
-def generateRandomChargeData(trips, max_charge):
-    charge_data = {}
-    for vehID, trip in trips.dict.items():
-        need_to_charge_level = random.uniform(0.15, 0.4)
-        trip_len = trip.total_distance
-        approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
-        # v1 : random.uniform(0.2, 0.3) * max_charge
-        # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
-        # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
-        set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
-        charging_min = random.uniform(250, 750)
-        # (need_to_charge_level, starting_charge, charging_min)
-        charge_data[vehID] = (need_to_charge_level, set_charge, charging_min)
-    return charge_data
 ## Models
 def getAgentSuffixes(agent_colors):
     return [("_" + n) for n in agent_colors]
@@ -296,9 +281,11 @@ def initializeResultsDict(params, iteration_count, K, agent_count=1):
         train_results["reward"] = np.zeros((agent_count, iteration_count))
         train_results["price"] = np.zeros((agent_count, iteration_count))
         train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=np.dtypes.StringDType())
+        train_results["loss"] = np.empty((agent_count, iteration_count))
     else:
         train_results["reward"] = np.zeros(iteration_count)
         train_results["stations"] = np.empty((iteration_count, K), dtype=np.dtypes.StringDType())
+        train_results["loss"] = np.empty(iteration_count)
     return train_results
 def initializeBestDict(params, competitive=False):
     if competitive: group_name = "compReward";
@@ -328,13 +315,15 @@ def initializeRunningDict(suffixes=[]):
     return d
 ## Update
 # Dictionary
-def updateResultsDict(train_results, stations, formula, iteration):
+def updateResultsDict(train_results, stations, loss, formula, iteration):
     for p in train_results:
         if p == "stations":
             train_results[p][iteration] = stations.listEdges();
+        elif p == "loss":
+            train_results[p][iteration] = loss
         else:
             train_results[p][iteration] = formula[p][0];
-def updateResultsDict_comp(train_results, stations, formula_general, formulas, iteration):
+def updateResultsDict_comp(train_results, stations, losses, formula_general, formulas, iteration):
     for p in train_results:
         #if p == "reward":
         #      train_results[p]["_general"][iteration] = formula[p][0]
@@ -348,6 +337,9 @@ def updateResultsDict_comp(train_results, stations, formula_general, formulas, i
                 train_results[p][a][iteration] = stations[a].listEdges()
         elif p == "generalReward":
             train_results[p][iteration] = formula_general["reward"][0]
+        elif p == "loss":
+            for a in range(len(train_results[p])):
+                train_results[p][a][iteration] = losses[a];
         elif len(train_results[p].shape) > 1:
             for a in range(len(train_results[p])):
                 train_results[p][a][iteration] = formulas[a][p][0];

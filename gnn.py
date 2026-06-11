@@ -30,6 +30,7 @@ import traci as traci_m
 import preprocess as prep
 
 from lib.utility import clamp, welford, ema, ema_welford, zscore
+from lib.utility import parseArgs, generateRandomChargeData, writeChargeData, loadChargeData
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import lib.graphing.utility as graphutil
@@ -43,7 +44,7 @@ import lib.traci_utility as traciutil
 import lib.visual_utility as visutil
 
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
-from lib.structs.trip import Trip
+from lib.structs.trip import Trip, TripDataset
 from lib.structs.graphtranslator import GraphTranslator
 from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
@@ -220,7 +221,9 @@ gnnutil.initialize(edge_attr_list, edge_attr_map, device)
 if __name__ == "__main__":
     # Parse arguments
     if len(sys.argv) < 2: network_name = "manhattan";
-    else: network_name = str(sys.argv[1]);
+    else:
+        network_name = sys.argv[1]
+        args = parseArgs(sys.argv[2:])
     # Adjust params
     params = Parameters.config()
     # Load params
@@ -275,9 +278,9 @@ if __name__ == "__main__":
     base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
     base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
                                  lengths=True, travel_time=True,
-                                 internal_lengths=False, node_position=True)
+                                 internal_lengths=True, node_position=True)
     base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
-    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d));
     num_nodes = base_G.number_of_nodes()
     # Detailed graph for coverage calculations
     global coverage_G_d
@@ -319,19 +322,28 @@ if __name__ == "__main__":
     # Save params and metadata
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "GNN", network_diameter)
-    ## Generate vehicles
-    # Generate trips for the whole training session
-    base_trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
-                               destination_count_probs=DESTINATION_COUNT_DIST,
-                               #min_distance_per_des=(network_diameter / 4.0),
-                               min_distance=MIN_DISTANCE, #network_diameter*0.5,
-                               max_distance=MAX_DISTANCE, #network_diameter*2.0,
-                               ev_pen=EV_PEN)
-    average_trip_len = base_trips.averageTripLen()
-    # Generate charge data
-    vTypes_tree = ET.parse("networks/vTypes.add.xml")
-    max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
-    charge_data = gnnutil.generateRandomChargeData(base_trips, max_charge)
+    ## Vehicle data
+    if "vehicle-data" in args:
+        # Load
+        trips = TripDataset.parseXML(base_G, translator, args["vehicle-data"] + "/trips.xml")
+        trips.write(output_path + "/trips.xml")
+        charge_data = loadChargeData(args["vehicle-data"] + "/charge_data.xml")
+        print(f"INFO: Successfully loaded vehicle data for {len(trips.dict)} vehicles from '{args['vehicle-data']}'")
+    else:
+        # Generate trips for the whole training session
+        trips = tripsGen.main(base_net, base_G, VEHICLE_COUNT, output_path + "/trips.xml",
+                              destination_count_probs=DESTINATION_COUNT_DIST,
+                              #min_distance_per_des=(network_diameter / 4.0),
+                              min_distance=MIN_DISTANCE, #network_diameter*0.5,
+                              max_distance=MAX_DISTANCE, #network_diameter*2.0,
+                              ev_pen=EV_PEN)
+        # Generate charge data
+        vTypes_tree = ET.parse("networks/vTypes.add.xml")
+        max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
+        charge_data = generateRandomChargeData(trips, max_charge)
+    average_trip_len = trips.averageTripLen()
+    # Save used charge data
+    writeChargeData(charge_data, output_path + "/charge_data.xml")
     ## Prepare results
     results = Evaluation(translator)
     #### Run blank simulation once with conventional vehicles for statistics
@@ -339,7 +351,7 @@ if __name__ == "__main__":
     #prep.copyFile(data_path + "/base_net.net.xml", data_path + "/net.net.xml")
     #prep.copyFile(output_path + "/trips.xml", data_path + "/routes.xml")
     ## Run
-    results = sumoBlankRun(base_net, data_path, network_name, base_trips, results, params=params,
+    results = sumoBlankRun(base_net, data_path, network_name, trips, results, params=params,
                            output_path=output_path, output_subfolder="blank")
     ## Update graph (Data)
     graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
@@ -369,6 +381,7 @@ if __name__ == "__main__":
     train_results = gnnutil.initializeResultsDict(params, ITERATIONS, K)
     best = gnnutil.initializeBestDict(params)
     #### Loop
+    print("")
     pbar = tqdm(total=ITERATIONS)
     iteration = 0
     sim_tries = 0
@@ -398,8 +411,10 @@ if __name__ == "__main__":
         if len(selected_edge_indices) != len(set(selected_edge_indices)):
             print("ERROR: One edge selected twice:", selected_edge_indices, "->", stations.listEdges())
         # Entropy
-        sel_log_probs = torch.log(sel_probs + 1e-10)  #gnnutil.calculate_log_probs(logits, selected_indices_t)
-        entropy = -(sel_probs * sel_log_probs).sum(dim=-1).mean()
+        log_probs = torch.log_softmax(logits, dim=-1)
+        entropy = -(sel_probs * log_probs).sum(dim=-1)#.mean()
+        sel_log_probs = gnnutil.calculate_log_probs(logits, selected_indices_t) #torch.log(sel_probs + 1e-10)
+        
 
         #### 3. Run evaluation
         last_results = results
@@ -408,7 +423,7 @@ if __name__ == "__main__":
         results = Evaluation(translator)
         try:
             results = gnnutil.runSimulation_solo(network_name, data_path, output_path,
-                                                 base_net, base_G, stations, base_trips, charge_data, coverage_G_d,
+                                                 base_net, base_G, stations, trips, charge_data, coverage_G_d,
                                                  params, results, iteration, debug=False)
             sim_tries = 0
         except Exception as e:
@@ -433,11 +448,9 @@ if __name__ == "__main__":
         if MEASURE_TIME: sim_stime = time.perf_counter();
         formula = {}
         reward = rewardFunction(stations, results, params, formula)
-        gnnutil.updateResultsDict(train_results, stations, formula, iteration)
-        best_modified = gnnutil.updateBestDict(best, stations.listEdges(), formula, modified=best_modified)
         # Running reward/advantage
         if EFFECT_ON_RUN_REWARD > 0.0:
-            if run_reward == None: run_reward = reward;
+            if run_reward == None: run_reward = reward.copy();
             advantage = float(reward - run_reward)
             run_reward = ((1 - EFFECT_ON_RUN_REWARD) * run_reward) +\
                          (EFFECT_ON_RUN_REWARD * reward)
@@ -448,15 +461,15 @@ if __name__ == "__main__":
             rewardcalc_time += sim_etime - sim_stime;
             
 
-        # 5. Policy Gradient Update
+        #### 5. Policy Gradient Update
         # Entropy loss for exploration
         entropy_loss = -ENTROPY_COEFF * entropy
         # Loss; minimize negative to maximize reward
-        #  Mean
-        #loss = (-sel_log_probs * advantage).mean();
+        #  Normalized by K
+        policy_loss = (-sel_log_probs.sum() / K) * advantage;
         #  Normalized by sqrt
-        loss = (-sel_log_probs.sum() * advantage) / np.sqrt(K)
-        loss += entropy_loss;
+        #policy_loss = (-sel_log_probs.sum() / np.sqrt(K)) * advantage
+        loss = policy_loss + entropy_loss;
         # Backprop
         loss.backward()
         # Gradient clipping
@@ -465,12 +478,18 @@ if __name__ == "__main__":
         # Step
         optimizer.step()
 
-        # 6. Update environment
+        #### 6. Update environment
         if MEASURE_TIME: sim_stime = time.perf_counter();
         graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow", "vaporized", "charged"], results)
         if MEASURE_TIME:
             sim_etime = time.perf_counter();
             envupdate_time += sim_etime - sim_stime;
+
+        #### 7. Bookkeeping
+        # Update results dictionary
+        gnnutil.updateResultsDict(train_results, stations, policy_loss.detach().item(), formula, iteration)
+        # Update best
+        best_modified = gnnutil.updateBestDict(best, stations.listEdges(), formula, modified=best_modified)
 
         iteration += 1
         pbar.update(1)

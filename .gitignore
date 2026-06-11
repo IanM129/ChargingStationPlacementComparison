@@ -18,7 +18,8 @@ results/*
 results_BACKUP/*
 
 # Big networks
-networks/Zagreb
+networks/Zagreb/*.osm
+networks/Zagreb/*.net.xml
 
 _helpinfo
 

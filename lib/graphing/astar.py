@@ -79,7 +79,7 @@ def detailedEdgePoint(G, start : EdgePoint = None, target : EdgePoint = None, le
 
 
 # Graph with junction weights
-def edgePath_internalWeights(G, start, target, weight="length"):
+def edgePath(G, start, target, weight="length", use_internal=True):
     import heapq
     def neighbors(edge):
         from_node, to_node = edge
@@ -87,14 +87,18 @@ def edgePath_internalWeights(G, start, target, weight="length"):
             #if n == from_node: continue;
             data = G.get_edge_data(to_node, n)
             cost = float(data[weight])
-            if n not in int_lens[to_node][from_node]: continue;
-            cost += float(int_lens[to_node][from_node][n])
+            if use_internal:
+                if n not in int_lens[to_node][from_node]: continue;
+                cost += float(int_lens[to_node][from_node][n])
             yield ((to_node, n), cost)
     def spatial_heuristic(edge_a, edge_b):
         pos_a = pos[edge_a[1]]; pos_b = pos[edge_b[1]];
         return pow(pos_b[0] - pos_a[0], 2) + pow(pos_b[1] - pos_a[1], 2)
     # Get node attributes
-    int_lens = nx.get_node_attributes(G, "intLens")
+    if use_internal:
+        int_lens = nx.get_node_attributes(G, "intLens")
+        if len(int_lens) == 0:
+            raise Exception("ERROR: Calling 'use_internal=True' on a graph without internal weights loaded.");
     pos = nx.get_node_attributes(G, "pos")
     # Initialize with starting state
     start_state = (None, start)

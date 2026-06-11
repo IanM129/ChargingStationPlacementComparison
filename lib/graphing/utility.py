@@ -7,6 +7,7 @@ from lib.globalVars import *
 from lib.structs.edgepoint import EdgePoint
 from lib.structs.maxheap import TupleMaxHeap
 from lib.structs.trip import Trip
+from lib.structs.graphtranslator import GraphTranslator
 
 
 class TupleEdge:
@@ -152,9 +153,9 @@ def extractEdgeID(edge_id) -> tuple[str, int]:
                 return (other + re_match[:other_ind], 0);
         else:
             return (edge_id, 2);
-        
 
-## Get length of path
+#### Pathing
+## Get length of defined path
 def pathLength(G, path, weight="length"):
     res = 0
     intLens = nx.get_node_attributes(G, "intLens")
@@ -173,7 +174,7 @@ def pathLength(G, path, weight="length"):
             else: last = path[i-2];
             res += intLens[mid][last][cur]
     return res
-def edgePathLength(G, path, weight="length", use_internal=True):
+def edgePathLength(G, path : list[tuple], weight="length", use_internal=True):
     res = 0
     intLens = nx.get_node_attributes(G, "intLens")
     has_internal_lanes = len(intLens) > 0 and use_internal
@@ -191,9 +192,19 @@ def edgePathLength(G, path, weight="length", use_internal=True):
             else: last = path[i-1][0];
             res += intLens[mid][last][cur]
     return res
-
-
-## Get length of route
+# Wrapper function; accepts both edge ID and edge tuples
+def getShortestEdgePathLength(G, source : tuple | str, target : tuple | str, translator=None, weight="length", use_internal=True):
+    from lib.graphing.astar import edgePath
+    # Translate to tuples
+    if (not isinstance(source, tuple)):
+        if translator is None: translator = GraphTranslator(G);
+        source = translator.IDToEdge(source)
+    if (not isinstance(target, tuple)):
+        if translator is None: translator = GraphTranslator(G);
+        target = translator.IDToEdge(target)
+    # Main
+    path = edgePath(G, source, target, weight=weight, use_internal=use_internal)
+    return edgePathLength(G, path, weight=weight, use_internal=use_internal)
 
 
 ## Check if nodes are directly connected

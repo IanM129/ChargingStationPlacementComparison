@@ -71,7 +71,7 @@
 	</group>
 	<group name="station">
 		<param name="k" type="int" default="5">
-			3
+			6
 		</param>
 		<param name="capacity" type="int" default="10">
 			8
@@ -84,7 +84,7 @@
 		</param>
 		<group name="routing">
 			<param name="centralized" type="bool" default="False">
-				False
+				True
 			</param>
 			<!-- Use SUMO StationFinder device instead 
 			 > only considers spatial and temporal values, hence only usable in solo runs -->
@@ -133,11 +133,11 @@
 	</group>
 	<group name="training">
 		<param name="iterations" type="int" default="1000">
-			4
+			10
 		</param>
 		<!-- Max 10 -->
 		<param name="agents" type="int" default="2">
-			3
+			2
 		</param>
 		<param name="minPrice" type="float" default="0.1">
 			0.1

@@ -164,6 +164,8 @@ def getPlotMetadata(stat):
         case "reward" | "generalReward":
             data["title"] = "Reward"
             data["label"] = ""
+        case "loss":
+            data["title"] = "Loss"
     return data
 def createPlotFigure(metadata):
     fig = plt.figure()
@@ -172,6 +174,7 @@ def createPlotFigure(metadata):
     ax.xaxis.get_major_locator().set_params(integer=True)
     # Set metadata
     fig.suptitle(metadata["title"])
+    fig.canvas.manager.set_window_title(metadata["title"])
     ax.set_ylabel(metadata["unit"])
     ax.set_xlabel("Iteration")
     return (fig, ax)
