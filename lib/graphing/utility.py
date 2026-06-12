@@ -220,6 +220,7 @@ def getShortestEdgePathLength(G, source : tuple | str, target : tuple | str, tra
         target = translator.IDToEdge(target)
     # Main
     path = edgePath(G, source, target, weight=weight, use_internal=use_internal)
+    if path is None: return None;
     return edgePathLength(G, path, weight=weight, use_internal=use_internal)
 
 

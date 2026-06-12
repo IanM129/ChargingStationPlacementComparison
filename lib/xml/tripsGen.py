@@ -8,6 +8,7 @@ from lib.structs.edgepoint import EdgePoint
 from lib.structs.trip import Trip, TripDataset
 
 import lib.graphing.utility as graphutil
+#import lib.graphin.astar as astar
 
 
 
@@ -19,7 +20,7 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
     # Get edges outside of min_distance range
     if min_distance > 0:
         edges_in_range = graphutil.getEdgesInRadius(G, start_tn_id, min_distance,
-                                                    include_reverse=True, include_reached=True)
+                                                    include_reverse=False, include_reached=True)
         valid_end_edges = (G.edges() - edges_in_range).intersection(valid_end_edges)
         if len(valid_end_edges) == 0:
             if return_length: return (None, -1)
@@ -29,7 +30,7 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
     # Get edges inside of max_distance range
     if max_distance > 0:
         edges_in_range = graphutil.getEdgesInRadius(G, start_tn_id, max_distance,
-                                                    include_reverse=True)
+                                                    include_reverse=False)
         valid_end_edges = edges_in_range.intersection(valid_end_edges)
         if len(valid_end_edges) == 0:
             if return_length: return (None, 1);
@@ -49,7 +50,9 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
         print(f"{end_gedge} : ({end_fn_id}, {end_tn_id})"); print(G.edges());
     assert(end_edge != None)
     # Get path length from start edge to chosen edge
-    nodes_path_len = nx.shortest_path_length(G, source=start_tn_id, target=end_fn_id, weight="length")
+    nodes_path_len_nx = nx.shortest_path_length(G, source=start_tn_id, target=end_fn_id, weight="length")
+    nodes_path_len = graphutil.getShortestEdgePathLength(G, start_edge.getID(), end_gedge)
+    print(nodes_path_len_nx, " | ", nodes_path_len)
     #print("path:", nx.shortest_path(G, source=start_tn_id, target=end_fn_id, weight="length"))
     #print("-> full len:", (nodes_path_len))
     #if nodes_path_len < min_distance: print("YO MIN (", min_distance - nodes_path_len, ")");

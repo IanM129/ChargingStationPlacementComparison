@@ -83,7 +83,7 @@ def edgePath(G, start, target, weight="length", use_internal=True):
     import heapq
     def neighbors(edge):
         from_node, to_node = edge
-        for n in G.neighbors(to_node):
+        for n in G.successors(to_node):#neighbors(to_node):
             #if n == from_node: continue;
             data = G.get_edge_data(to_node, n)
             cost = float(data[weight])

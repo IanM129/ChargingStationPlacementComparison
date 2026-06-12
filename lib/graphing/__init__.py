@@ -38,16 +38,16 @@ def netToGraph(net_xml_filepath, net=None,
             node_id = node.getID();
             G.add_node(node_id); attrs[node_id] = {};
             if internal_lengths:
-                internal_lengths = {}
+                int_lens = {}
                 # Get all outgoing edges
                 for conn in node.getConnections():
                     cn_from_id = conn.getFrom().getFromNode().getID()
                     cn_to_id = conn.getTo().getToNode().getID()
                     lane = net_internal.getLane(conn.getViaLaneID())
-                    if (cn_from_id not in internal_lengths):
-                        internal_lengths[cn_from_id] = {};
-                    internal_lengths[cn_from_id][cn_to_id] = float(lane.getLength())
-                attrs[node_id]["intLens"] = internal_lengths
+                    if (cn_from_id not in int_lens):
+                        int_lens[cn_from_id] = {};
+                    int_lens[cn_from_id][cn_to_id] = float(lane.getLength())
+                attrs[node_id]["intLens"] = int_lens
             if node_position:
                 x, y = node.getCoord(); attrs[node_id]["pos"] = (float(x), float(y));
         nx.set_node_attributes(G, attrs)
