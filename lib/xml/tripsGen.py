@@ -66,7 +66,7 @@ def genRandomRoute(net, G, destination_count=1, min_distance=0.0, min_distance_p
     start_min_distance = min_distance
     if min_distance > 0:
         min_ecc_distance = min_distance / destination_count
-        eccentricity = nx.eccentricity(G, weight="length")
+        eccentricity = graphutil.getEccentricity(G, weight="length") #nx.eccentricity(G, weight="length")
         valid_nodes = set()
         for node in net.getNodes():
             nodeID = node.getID()

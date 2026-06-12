@@ -52,6 +52,22 @@ def netHasEdgeID(net, edge_id):
         net.getEdge(edge_id); return True;
     except KeyError: return False;
 
+
+def calcDiameter(G, weight="length"):
+    try:
+        return float(nx.diameter(G, weight=weight))
+    except:
+        undirected_G = G.to_undirected()
+        return float(nx.diameter(undirected_G, weight=weight))
+def getEccentricity(G, weight="length"):
+    try:
+        return nx.eccentricity(G, weight="length")
+    except:
+        undirected_G = G.to_undirected()
+        return nx.eccentricity(undirected_G, weight=weight)
+
+
+
 ## Node edge
 def genNodeEdgeID(from_id : str, to_id : str) -> str:
     return from_id + NODE_EDGE_ID_SEPARATOR + to_id

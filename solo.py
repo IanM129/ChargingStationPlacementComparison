@@ -191,7 +191,7 @@ if __name__ == "__main__":
     ET.indent(res_tree, space="    ")
     res_tree.write(output_path + "/results/results.xml");
     full_save_path = pathlib.Path(output_path + "/results.xml").resolve()
-    print(f"Simulation finished, saved results under\n'{str(full_save_path)}'")
+    print(f"Simulation finished in {round(results.executionDuration, 2)} seconds, saved results under\n'{str(full_save_path)}'")
     # Clean up files
     if params["sim.deleteCache"] == True:
         xmlOut.cleanCache(output_path + "/_cache", network_name)

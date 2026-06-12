@@ -214,6 +214,50 @@ def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
             ax.plot(x, data, label=metadata["label"])
             figs[stat] = (fig, ax)
     return figs
+def plotResultDataset(results_ds, names, params, stat_list=None):
+    from lib.structs.evaluation import getStatFromResult
+    from lib.utility import isMinOrMax, invertRange
+    if isinstance(params, list):
+        params_arr = params
+        stats = params_arr[0].getGroup("reward")
+    else:
+        params_arr = None;
+        stats = params_arr.getGroups("reward")
+    if stat_list is not None:
+        stats = set(stat_list).intersection(stats)
+    stats = sorted(stats)
+    # Get values
+    real_vals = results_ds.realStats(params)
+    norm_vals = results_ds.normalizedStats(params, invert_by_coeff=False)
+    # Invert range
+    rev_norm_vals = {}
+    for stat in stats:
+        vals = []
+        for i in range(len(results_ds.arr)):
+            vals.append(norm_vals[i][stat])
+        # Invert if minimizing or coefficient is negative
+        invert = False
+        if (isMinOrMax(stat) == -1): invert = True;
+        rev_norm_vals[stat] = invertRange(vals) if invert else vals
+    # Create plot data
+    data = {}
+    for i in range(len(results_ds.arr)):
+        vals = []
+        for stat in stats:
+            vals.append(rev_norm_vals[stat][i])
+        data[names[i]] = vals
+    # Plot
+    fig, ax = plt.subplots()
+    plot = ax.grouped_bar(data, tick_labels=stats, group_spacing=1)
+    for i in range(len(plot.bar_containers)):
+        container = plot.bar_containers[i]
+        labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
+        ax.bar_label(container, padding=3,labels=labels)
+    ax.set_ylabel("Normalized score")
+    ax.set_title("Score comparison")
+    ax.legend(loc="best")
+    return fig
+    
 ## High
 def plotGNN(train_results, iterations=None):
     if iterations is None:

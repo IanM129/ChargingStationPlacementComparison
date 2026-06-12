@@ -20,6 +20,29 @@ def isMinOrMax(val_name : str) -> int:
             return 0; # -> maximize from zero (0)
     return None
 
+def invertRange(values):
+    import numpy as np
+    """
+    ranked = np.argsort(values)
+    inv_vals = np.zeros(len(values))
+    i = 0; j = len(values) - 1;
+    while i < j:
+        find = ranked[i]
+        lind = ranked[j]
+        inv_vals[find] = values[lind]
+        inv_vals[lind] = values[find]
+        i += 1
+        j -= 1
+    if i == j: inv_vals[i] = values[i];
+    return inv_vals
+    """
+    values = np.asarray(values)
+    unique = np.unique(values)
+    inverted = unique[::-1]
+    mapping = dict(zip(unique, inverted))
+    return np.array([mapping[v] for v in values])
+    
+
 ## Z-score
 def zscore(x, mean, std):
     return ((x - mean) / (std + 1e-8))

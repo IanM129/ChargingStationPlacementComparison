@@ -3,6 +3,7 @@ import sys
 import pathlib
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 import lib.data_management as dm
 
@@ -170,3 +171,6 @@ if __name__ == "__main__":
     print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
+    # Plot
+    fig = visutil.plotResultDataset(results_ds, sess_names, params_arr)
+    plt.show()

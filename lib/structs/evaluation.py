@@ -104,6 +104,7 @@ class Evaluation:
         self.station_data["vehicleCount"] = {};
         self.station_data["price"] = float(price);
         for si in stations:
+            sid = si.getID()
             seid = self.translator.IDToEdge(si.edge_id)
             self.station_data["charged"][seid] = float(station_charges[sid]);
             self.station_data["occupancyRate"][seid] = float(sttn_util_rate[sid][0]);
@@ -260,6 +261,86 @@ class EvaluationDataset:
             results = Evaluation.fromTrainResults(data, network_diameter)
             train_results_arr.append(results)
         return EvaluationDataset(train_results_arr)
+    def realStats(self, params, rounded=0):
+        ## Validate params and define statistics
+        if isinstance(params, list):
+            if len(params) != len(self.arr):
+                raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
+            stats = sorted(params[0].getGroup("reward"))
+        else: stats = sorted(params.getGroup("reward"))
+        ## Get values
+        values = []
+        for i in range(len(self.arr)):
+            res = self.arr[i]; v = {};
+            for stat in stats:
+                 val = getStatFromResult(res, stat);
+                 if rounded > 0: val = round(val, rounded);
+                 v[stat] = val
+            values.append(v)
+        return values
+    def normalizedStats(self, params, invert_by_coeff=True, rounded=0):
+        ## Validate params and define statistics
+        if isinstance(params, list):
+            if len(params) != len(self.arr):
+                raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
+            params_arr = params
+            stats = sorted(params[0].getGroup("reward"))
+        else:
+            params_arr = None
+            stats = sorted(params.getGroup("reward"))
+        ## Get values
+        values = self.realStats(params)
+        ## Get max values for normalization
+        max_vals = {}
+        for stat in stats:
+            if stat == "totalCoverage": pass;
+            else: max_vals[stat] = max([values[i][stat] for i in range(len(values))])
+        ## Normalize
+        norm_vals = []
+        for i in range(len(self.arr)):
+            norm = {}
+            if params_arr is not None: params = params_arr[i];
+            res = self.arr[i]; vals = values[i];
+            for stat in stats:
+                # Normalize
+                if stat == "totalCoverage": val = float(vals[stat]) / float(res.networkDiameter);  # [0, 1]
+                else: val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
+                if invert_by_coeff:
+                    coeff = float(params["reward." + stat])
+                    # Invert for minimizing and if coefficient is negative
+                    invert = False
+                    if (isMinOrMax(stat) == -1): invert = not invert;                       
+                    if (coeff < 0): invert = not invert;
+                    if invert: val = (1.0 - float(val));
+                    if rounded > 0: val = round(val, rounded);
+                norm[stat] = val
+            norm_vals.append(norm)
+        return norm_vals
+    def doubleNormalizedStats(self, params, rounded=0):
+        ## Validate params and define statistics
+        if isinstance(params, list):
+            if len(params) != len(self.arr):
+                raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
+            params_arr = params
+            stats = sorted(params[0].getGroup("reward"))
+        else:
+            params_arr = None
+            stats = sorted(params.getGroup("reward"))
+        norm_vals = self.normalizedStats(params)
+        # Get max values for normalization
+        max_vals = {}
+        for stat in stats:
+            max_vals[stat] = max([norm_vals[i][stat] for i in range(len(norm_vals))])
+        # Normalize (again)
+        nn_vals = []
+        for i in range(len(norm_vals)):
+            nn = {}
+            for stat in stats:
+                val = norm_vals[i][stat] / max_vals[stat]
+                if rounded > 0: val = round(val, 2);
+                nn[stat] = val
+            nn_vals.append(nn)
+        return nn_vals
     def calcScores(self, params):
         ## Validate params and define statistics
         if isinstance(params, list):
@@ -281,6 +362,8 @@ class EvaluationDataset:
         for stat in stats:
             if stat == "totalCoverage": pass;
             else: max_vals[stat] = max([values[i][stat] for i in range(len(values))])
+        ## Get normalized values
+        #norm_vals = self.normalizedStats()
         ## Calculate scores, using params coefficients
         scores = []
         for i in range(len(self.arr)):

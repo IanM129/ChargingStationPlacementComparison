@@ -3,6 +3,7 @@ import sys
 import pathlib
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 import lib.data_management as dm
 
@@ -27,10 +28,8 @@ def getBestResults(filepath, params=None):
     #for ri in range(len(results_ds.arr)):
     #    print(str(ri) + ": " + str(results_ds.arr[ri]))
     scores = results_ds.calcScores(params)
-    print(scores)
     ranked_indeces = list(np.argsort(scores))
     best_index = ranked_indeces[-1]
-    print("best index:", best_index)
     return results_ds.arr[best_index]
 
 
@@ -39,7 +38,7 @@ PRINT_RESULTS = False
 #def rerunAndCompareSessions(filepaths):
 if __name__ == "__main__":
     # Parse filepaths from args
-    filepaths = []
+    filepaths = [];
     for i in range(1, len(sys.argv)):
         filepaths.append(sys.argv[i])
     print("Comparing by best:", filepaths, "\n")
@@ -70,3 +69,6 @@ if __name__ == "__main__":
     print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
+    # Plot
+    fig = visutil.plotResultDataset(results_ds, sess_names, params_arr)
+    plt.show()

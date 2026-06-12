@@ -103,13 +103,8 @@ def generateVehicleData(network_name):
     el.text = network_name
     metadata_tree.write(folder_path + "/metadata.xml")
     print(f"\nGenerated vehicle data in '{folder_path}'")
-def rerunAndCompare():
-    groups, prec = dm.getSessionGroups("results")
-    print("Choose sessions to load:")
-    options = printSessionGroups(groups, prefix="  ", prec=prec)
-    print("")
-    inp = int(input("Select group: "))
-    sel = options[inp-1]
+def rerunAndCompare(sel):
+    global groups, prec, group_opts
     data = groups[sel[0]][sel[1]]
     filepaths = [(el[1] + "/" + el[0]) for el in data]
     print("Comparing", filepaths)
@@ -117,13 +112,8 @@ def rerunAndCompare():
     cmnd = ["cmd", "/k", VENV_PYTHON, "compare_rerun.py"] #"start", f"Rerun and compare {len(filepaths)} sessions", 
     cmnd.extend(filepaths)
     subprocess.run(cmnd)
-def compareByBest():
-    groups, prec = dm.getSessionGroups("results")
-    print("Choose sessions to load:")
-    options = printSessionGroups(groups, prefix="  ", prec=prec)
-    print("")
-    inp = int(input("Select group: "))
-    sel = options[inp-1]
+def compareByBest(sel):
+    global groups, prec, group_opts
     data = groups[sel[0]][sel[1]]
     filepaths = [(el[1] + "/" + el[0]) for el in data]
     print("Comparing", filepaths)
@@ -152,8 +142,7 @@ if __name__ == "__main__":
     print("=" * 20)
     print("Analysis:")
     print("0 | gen            - generate new vehicle data in '/vehicle_data'")
-    print("1 | rerun          - compare existing sessions by reruning them")
-    print("2 | best           - compare existing sessions by comparing their best results")
+    print("1 | compare        - compare finished sessions")
     print("-" * 20)
     print("Run options")
     print("2 | blank          - run a blank example (no charging stations)")
@@ -178,28 +167,25 @@ if __name__ == "__main__":
         "0": (None, "generateChargeData"),
         "gen": (None, "generateChargeData"),
         
-        "1": (None, "rerunAndCompare"),
-        "rerun": (None, "rerunAndCompare"),
-
-        "2": (None, "compareByBest"),
-        "best": (None, "compareByBest"),
+        "1": (None, "compare"),
+        "rerun": (None, "compare"),
         
-        "3": ("blank.py", "Blank simulation"),
+        "2": ("blank.py", "Blank simulation"),
         "blank": ("blank.py", "Blank simulation"),
 
-        "4": ("solo.py", "Solo algorithm"),
+        "3": ("solo.py", "Solo algorithm"),
         "solo": ("solo.py", "Solo algorithm"),
 
-        "5": ("comp.py", "Competitive algorithm"),
+        "4": ("comp.py", "Competitive algorithm"),
         "comp": ("comp.py", "Competitive algorithm"),
 
-        "6": ("game.py", "Equilibrium game algorithm"),
+        "5": ("game.py", "Equilibrium game algorithm"),
         "game": ("game.py", "Equilibrium game algorithm"),
 
-        "7": ("gnn.py", "Graph NN RL"),
+        "6": ("gnn.py", "Graph NN RL"),
         "gnn": ("gnn.py", "Graph NN RL"),
 
-        "8": ("marl.py", "Multi-Agent RL"),
+        "7": ("marl.py", "Multi-Agent RL"),
         "marl": ("marl.py", "Multi-Agent RL"),
     }
 
@@ -219,10 +205,29 @@ if __name__ == "__main__":
             input("Press Enter to continue...")
             sys.exit(1)
     else:
-        if value == "rerunAndCompare":
-            rerunAndCompare(); exit();
-        elif value == "compareByBest":
-            compareByBest(); exit();
+        if value == "compare":
+            global groups, prec, group_opts
+            # Select group
+            groups, prec = dm.getSessionGroups("results")
+            print("Choose sessions to compare:")
+            group_opts = printSessionGroups(groups, prefix="  ", prec=prec)
+            print("")
+            inp = int(input("Select group: "))
+            sel = group_opts[inp-1]
+            # Choose method
+            while inp != "" and inp != "q" and inp != "quit" and inp != "exit":
+                print("-" * 20)
+                print("Choose method:")
+                print("0 | rerun        - compare by rerunning")
+                print("1 | best         - compare by best achieved results")
+                print("-" * 20)
+                inp = input("> ")
+                if inp == "0" or inp == "rerun":
+                    rerunAndCompare(sel);
+                elif inp == "1" or inp == "best":
+                    compareByBest(sel);
+                print("\n" * 1)
+            exit()
 
     # Detect network options
     networks_data, default_net = dm.getNetworkList("networks")
