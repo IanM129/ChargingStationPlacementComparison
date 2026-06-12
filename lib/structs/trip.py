@@ -44,10 +44,9 @@ class Trip:
         self.destinations[idx] = value;
     def __eq__(self, other):
         return self.destinations == other.destinations and\
-               self.is_electric == other.is_electric and\
-               self.total_distance == other.total_distance
+               self.is_electric == other.is_electric
     def __hash__(self):
-        return hash((tuple(self.destinations), self.is_electric))
+        return hash((tuple(self.destinations), self.electric))
     def insertToNextDestination(self, other_trip, next_dest_index):
         from lib.traci_utility import traci as traci
         next_dest_edge = self[next_dest_index]
@@ -160,6 +159,11 @@ class TripDataset:
         return res
     def averageTripLen(self):
         return np.mean([trip.total_distance for trip in self.dict.values()])
+    def __hash__(self):
+        trips = []
+        for vehID, trip in self.dict.items():
+            trips.append((vehID, hash(trip)))
+        return hash(tuple(trips))
     def __repr__(self):
         s = f"TripDataset[{len(self.dict)}]"
         return s

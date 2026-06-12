@@ -30,7 +30,8 @@ import traci as traci_m
 import preprocess as prep
 
 from lib.utility import clamp, welford, ema, ema_welford, zscore
-from lib.utility import parseArgs, generateRandomChargeData, writeChargeData, loadChargeData
+from lib.utility import parseArgs
+from lib.data_management import generateRandomChargeData, writeChargeData, loadChargeData
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import lib.graphing.utility as graphutil
@@ -564,7 +565,7 @@ if __name__ == "__main__":
         fig, ax = figs[stat]
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
     # Clean up files
-    if params["sim.deleteCache"]:
+    if params["sim.deleteCache"] == True:
         xmlOut.cleanCache(output_path + "/_cache", network_name)
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()

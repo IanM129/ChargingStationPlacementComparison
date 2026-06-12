@@ -56,6 +56,10 @@ class Parameters:
         params.parse_recursive(root, "", use_default)
         params.xml_tree = xml_tree
         return params
+    @staticmethod
+    def load(filepath, use_default=False):
+        tree = ET.parse(filepath)
+        return Parameters.parse(tree) 
     def parse_recursive(self, node, path, use_default=False):
         if node.tag == "param":
             if use_default: val_txt = node.get("default");

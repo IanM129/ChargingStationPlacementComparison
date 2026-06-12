@@ -162,7 +162,7 @@ def parseTripXMLElement(element, net, G):
                                        weight="length")
     distances.append(path_len); route.append(to_edge_id);
     ev_type = str(element.get("type"))
-    return trip_id, Trip(route, distances), ev_type
+    return trip_id, Trip(route, distances, ev_type == "electric")
 
 def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
          min_distance=0, min_distance_per_des=0, max_distance=0,
@@ -197,7 +197,7 @@ def load(filepath, net, G):
     trips = {}
     tree = ET.parse(filepath)
     for child in tree.getroot():
-        trip_id, trip, _ = parseTripXMLElement(child, net, G)
+        trip_id, trip = parseTripXMLElement(child, net, G)
         trips[trip_id] = trip
     return TripDataset(trips, tree)
 

@@ -1,0 +1,102 @@
+<routes>
+  <trip id="0" from="G4G5" to="H9G9" depart="0" type="electric" via="B5A5" />
+  <trip id="1" from="I3I2" to="C9B9" depart="0" type="electric" via="D0E0 F7G7" />
+  <trip id="2" from="H5I5" to="F7G7" depart="0" type="electric" via="G4G5 H5G5" />
+  <trip id="3" from="D2D1" to="D1C1" depart="0" type="electric" via="B7A7 H7H8" />
+  <trip id="4" from="G9G8" to="J8I8" depart="0" type="electric" via="F4E4 E4F4" />
+  <trip id="5" from="J4I4" to="F4F5" depart="0" type="conventional" via="G2F2 B8A8" />
+  <trip id="6" from="E9F9" to="H8G8" depart="0" type="electric" via="H6H5 C6C7" />
+  <trip id="7" from="A5A6" to="E6E7" depart="0" type="conventional" via="H3H4 F0F1" />
+  <trip id="8" from="J8I8" to="A8A7" depart="0" type="electric" via="F6F7 I4J4" />
+  <trip id="9" from="F9E9" to="F7E7" depart="0" type="electric" via="B8C8 B2C2" />
+  <trip id="10" from="G8F8" to="F4F3" depart="0" type="electric" via="B2C2 E9D9 E4F4" />
+  <trip id="11" from="J4I4" to="G5G6" depart="0" type="conventional" via="F4E4" />
+  <trip id="12" from="A9A8" to="G2F2" depart="0" type="electric" via="B1C1 J8J9 G3H3" />
+  <trip id="13" from="G8G7" to="F7F6" depart="0" type="electric" via="G4G5 G7G8" />
+  <trip id="14" from="E1F1" to="E1D1" depart="0" type="electric" via="I6H6 J5J6 C7B7" />
+  <trip id="15" from="J5I5" to="G1G2" depart="0" type="conventional" via="H2H1 C6C5" />
+  <trip id="16" from="C3D3" to="F2E2" depart="0" type="electric" via="G4H4 H8G8 F7E7" />
+  <trip id="17" from="A0A1" to="B1C1" depart="0" type="conventional" via="J7I7 G2H2 F8F7" />
+  <trip id="18" from="H2G2" to="D4D3" depart="0" type="electric" via="E2E1 E7F7" />
+  <trip id="19" from="H5G5" to="D7D8" depart="0" type="electric" via="J1J2 A0A1" />
+  <trip id="20" from="F7E7" to="G2F2" depart="0" type="electric" via="I3I2 B6B5" />
+  <trip id="21" from="C1B1" to="A0A1" depart="0" type="electric" via="F6E6 F7F8" />
+  <trip id="22" from="G5G4" to="A1B1" depart="0" type="electric" via="H8H9 G1H1" />
+  <trip id="23" from="H2H3" to="I9H9" depart="0" type="electric" via="E8E9" />
+  <trip id="24" from="A4A5" to="E0D0" depart="0" type="electric" via="G7G6 F6F5 A4A3" />
+  <trip id="25" from="D2D1" to="A2A1" depart="0" type="electric" via="B0C0 D5E5 G4H4" />
+  <trip id="26" from="E1D1" to="J5I5" depart="0" type="electric" via="G5G6 H3H4 I1J1" />
+  <trip id="27" from="A8B8" to="G4F4" depart="0" type="electric" via="E0F0 F3G3 D7D6" />
+  <trip id="28" from="E6D6" to="J4J3" depart="0" type="electric" via="B6C6 C5B5" />
+  <trip id="29" from="F9E9" to="D6D7" depart="0" type="electric" via="E9E8" />
+  <trip id="30" from="C1D1" to="B9A9" depart="0" type="conventional" via="C3D3 A3A2" />
+  <trip id="31" from="B5C5" to="J1J2" depart="0" type="conventional" via="E4F4 F7F8 A2B2" />
+  <trip id="32" from="H7I7" to="C8C9" depart="0" type="conventional" via="E0F0 J1J0" />
+  <trip id="33" from="G2G1" to="J4J5" depart="0" type="conventional" via="I6I5 G3G4 B3C3" />
+  <trip id="34" from="H0H1" to="C4D4" depart="0" type="electric" via="G9H9 I5H5" />
+  <trip id="35" from="C1C0" to="E9E8" depart="0" type="electric" via="J1J2 A9A8" />
+  <trip id="36" from="D7D6" to="H1I1" depart="0" type="electric" via="J8J7 C7C6 F7F8" />
+  <trip id="37" from="F9G9" to="E8D8" depart="0" type="electric" via="C8C7 A3A2" />
+  <trip id="38" from="B9C9" to="E6F6" depart="0" type="electric" via="E1D1" />
+  <trip id="39" from="E6E7" to="E3F3" depart="0" type="electric" via="H4H3 J1J0 G5G6" />
+  <trip id="40" from="B3A3" to="C1B1" depart="0" type="electric" via="C8C7 D6D5" />
+  <trip id="41" from="H2H1" to="D5E5" depart="0" type="conventional" via="G0H0 J1J0" />
+  <trip id="42" from="B6B7" to="B3B2" depart="0" type="electric" via="D4C4 H7H6 B2A2" />
+  <trip id="43" from="D7E7" to="I6H6" depart="0" type="electric" via="E9F9 B6A6 F7E7" />
+  <trip id="44" from="H7I7" to="F4F5" depart="0" type="conventional" via="F8G8 F2F3" />
+  <trip id="45" from="G8H8" to="H9G9" depart="0" type="electric" via="B6B5 E8F8" />
+  <trip id="46" from="H3H4" to="H6H5" depart="0" type="conventional" via="I3J3 F2G2" />
+  <trip id="47" from="I5H5" to="H2I2" depart="0" type="conventional" via="D7E7 C7B7 C1D1" />
+  <trip id="48" from="E8E9" to="H3G3" depart="0" type="electric" via="D4D3 A4A3" />
+  <trip id="49" from="G3G4" to="B4C4" depart="0" type="electric" via="D5C5 D2C2" />
+  <trip id="50" from="H7H6" to="I7I8" depart="0" type="conventional" via="I7I6 G1G0" />
+  <trip id="51" from="C8C9" to="B7B6" depart="0" type="electric" via="I6H6" />
+  <trip id="52" from="J9J8" to="A9A8" depart="0" type="electric" via="H7H8 C7C8 C7D7" />
+  <trip id="53" from="J0I0" to="C9B9" depart="0" type="electric" via="B7A7 H9I9 F9G9" />
+  <trip id="54" from="H6I6" to="F3E3" depart="0" type="electric" via="E4D4 D6D7" />
+  <trip id="55" from="I7I6" to="B8A8" depart="0" type="electric" via="G4G3 C3C4" />
+  <trip id="56" from="J3J4" to="D8D7" depart="0" type="electric" via="G0G1" />
+  <trip id="57" from="C2C1" to="J6I6" depart="0" type="electric" via="D9D8 H7H6" />
+  <trip id="58" from="G6G5" to="A5A6" depart="0" type="electric" via="D2D1" />
+  <trip id="59" from="C9B9" to="G3F3" depart="0" type="conventional" via="D3C3 F8F7" />
+  <trip id="60" from="A5A4" to="C4B4" depart="0" type="electric" via="A1B1" />
+  <trip id="61" from="B2A2" to="C3C2" depart="0" type="electric" via="F3F2" />
+  <trip id="62" from="J6I6" to="B4C4" depart="0" type="electric" via="H8H7" />
+  <trip id="63" from="G7F7" to="E8E9" depart="0" type="electric" via="H4I4 B2B1 I6J6" />
+  <trip id="64" from="A7B7" to="I4I3" depart="0" type="conventional" via="C5D5 F4F3" />
+  <trip id="65" from="C7C6" to="C5B5" depart="0" type="conventional" via="J5J6 H3H2" />
+  <trip id="66" from="J9I9" to="E4E3" depart="0" type="electric" via="J4J3 C8C9" />
+  <trip id="67" from="C4C3" to="C6B6" depart="0" type="electric" via="A5B5 D0C0" />
+  <trip id="68" from="I6H6" to="A7A6" depart="0" type="electric" via="E3E2 F5F6" />
+  <trip id="69" from="C8D8" to="H9I9" depart="0" type="conventional" via="H4H5 I6I7 G9F9" />
+  <trip id="70" from="A8B8" to="J6I6" depart="0" type="electric" via="H5I5 C3D3 J5J4" />
+  <trip id="71" from="G5G4" to="H2H1" depart="0" type="electric" via="G7F7" />
+  <trip id="72" from="F5G5" to="E9F9" depart="0" type="electric" via="D1E1" />
+  <trip id="73" from="C1C2" to="B0C0" depart="0" type="electric" via="A5A6" />
+  <trip id="74" from="D8D7" to="G2H2" depart="0" type="electric" via="B2B1 H9H8" />
+  <trip id="75" from="D7E7" to="E1F1" depart="0" type="electric" via="D1C1 I5H5 I9I8" />
+  <trip id="76" from="D9C9" to="D0C0" depart="0" type="electric" via="D6C6 C8D8" />
+  <trip id="77" from="E1E0" to="G2H2" depart="0" type="electric" via="G6F6 D7E7 A3A4" />
+  <trip id="78" from="G6H6" to="H6G6" depart="0" type="electric" via="A8B8 J3I3 A9B9" />
+  <trip id="79" from="B6B5" to="H6G6" depart="0" type="electric" via="F9G9 F9E9 J2J1" />
+  <trip id="80" from="J2J1" to="F8F7" depart="0" type="electric" via="J5J6 E4E5 D3D2" />
+  <trip id="81" from="E3E4" to="F0E0" depart="0" type="electric" via="C2B2 E2E1" />
+  <trip id="82" from="C9B9" to="H4H3" depart="0" type="electric" via="D0D1" />
+  <trip id="83" from="J2J1" to="J7J6" depart="0" type="electric" via="H9G9 A3A2" />
+  <trip id="84" from="E5F5" to="E2E1" depart="0" type="electric" via="F9G9 B3B4 B4B3" />
+  <trip id="85" from="J4J3" to="F0G0" depart="0" type="conventional" via="B9B8 G1G0" />
+  <trip id="86" from="B5A5" to="F5G5" depart="0" type="electric" via="H2H1" />
+  <trip id="87" from="G7G8" to="B1B2" depart="0" type="electric" via="H7G7" />
+  <trip id="88" from="E2E1" to="J5J4" depart="0" type="electric" via="A9B9 B9B8" />
+  <trip id="89" from="H6H5" to="F1F2" depart="0" type="electric" via="I3J3 F7G7 D4D5" />
+  <trip id="90" from="I6I7" to="J8I8" depart="0" type="electric" via="D1D2 H5H4" />
+  <trip id="91" from="B3A3" to="F7F6" depart="0" type="electric" via="I0J0" />
+  <trip id="92" from="I0J0" to="F5F4" depart="0" type="electric" via="I3H3" />
+  <trip id="93" from="G3H3" to="I5I4" depart="0" type="conventional" via="F5F6 F9E9 I0I1" />
+  <trip id="94" from="I8I7" to="H4G4" depart="0" type="conventional" via="D7D6 B7A7" />
+  <trip id="95" from="B9C9" to="G7G6" depart="0" type="electric" via="C2C1" />
+  <trip id="96" from="B1B2" to="H8G8" depart="0" type="electric" via="I9J9 I2H2 F7G7" />
+  <trip id="97" from="A8A7" to="F5F4" depart="0" type="electric" via="A9B9" />
+  <trip id="98" from="J6J5" to="B5B4" depart="0" type="electric" via="E0F0 H3H2" />
+  <trip id="99" from="D1D2" to="I9H9" depart="0" type="electric" via="B7A7 C1C0 C3C2" />
+</routes>

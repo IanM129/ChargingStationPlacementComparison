@@ -50,45 +50,6 @@ def ema_welford(x, mean, var, alpha=0.01):
     return mean, var
 
 
-#### Preparation
-# Charge data
-def generateRandomChargeData(trips, max_charge):
-    import preprocess as prep
-    charge_data = {}
-    for vehID, trip in trips.dict.items():
-        need_to_charge_level = random.uniform(0.15, 0.4)
-        trip_len = trip.total_distance
-        approx_charge_needed = prep.calcApproxChargeNeeded(trip_len)
-        # v1 : random.uniform(0.2, 0.3) * max_charge
-        # v0 : max(0.02, 0.1 + (random.gauss() * 0.03)) * max_charge;
-        # v2 : max(min_charge, random.uniform(0.4, 0.8) * approx_charge_needed)
-        set_charge = (need_to_charge_level * max_charge) + (approx_charge_needed * random.uniform(0.0, 1.0))
-        charging_min = random.uniform(250, 750)
-        # (need_to_charge_level, starting_charge, charging_min)
-        charge_data[vehID] = (need_to_charge_level, set_charge, charging_min)
-    return charge_data
-def writeChargeData(charge_data, filepath):
-    tree = ET.ElementTree(ET.fromstring("<chargeData></chargeData>"))
-    root = tree.getroot()
-    for vehID, data in charge_data.items():
-        el = ET.SubElement(root, "vehicle", {
-                                "id": vehID,
-                                "needToChargeLevel": str(data[0]),
-                                "startingCharge": str(data[1]),
-                                "chargingMin": str(data[2])})
-    tree.write(filepath)
-def loadChargeData(filepath):
-    charge_data = {}
-    tree = ET.parse(filepath)
-    for el in tree.getroot():
-        vehID = str(el.get("id"))
-        data = [float(el.get("needToChargeLevel")),
-                float(el.get("startingCharge")),
-                float(el.get("chargingMin"))]
-        charge_data[vehID] = data
-    return charge_data
-
-
 #### CLI
 def parseArgs(args_str):
     args = {}
@@ -98,7 +59,7 @@ def parseArgs(args_str):
             value = args_str[i+1]
             if '/' not in value:
                 from lib.data_management import getVehicleDataList
-                data_list = getVehicleDataList("vehicle_data")
+                data_list = dm.getVehicleDataList("vehicle_data")
                 if value.isdigit():
                     index = int(value)-1
                     if index < 0:

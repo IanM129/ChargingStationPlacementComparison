@@ -2,6 +2,8 @@ import numpy as np
 
 from lib.utility import isMinOrMax
 
+#from lib.structs.stationinfo import StationInfo
+
 
 class Evaluation:
     #fullyCompleted
@@ -102,7 +104,6 @@ class Evaluation:
         self.station_data["vehicleCount"] = {};
         self.station_data["price"] = float(price);
         for si in stations:
-            sid = si.getID()
             seid = self.translator.IDToEdge(si.edge_id)
             self.station_data["charged"][seid] = float(station_charges[sid]);
             self.station_data["occupancyRate"][seid] = float(sttn_util_rate[sid][0]);
@@ -192,6 +193,13 @@ class Evaluation:
                 d["agent_data"][stat][name] = value;
                 del d["agent_data"][stat][suffix]
         return d
+    @staticmethod
+    def fromTrainResults(train_results, network_diameter):
+        results = Evaluation(None)
+        for p in train_results:
+            setStatToResult(results, p, train_results[p])
+        results.networkDiameter = network_diameter
+        return results
 
 
 def getStatFromResult(result, stat):
@@ -215,15 +223,53 @@ def getStatFromResult(result, stat):
         case "energyConsumed":
             return result.trip_data["energyConsumed"]
     return None
+def setStatToResult(result, stat, value):
+    match (stat):
+        case "totalCoverage":
+            result.coverageRadius = value
+        case "totalCharge":
+            result.station_data["totalCharge"] = value
+        case "simDuration":
+            result.simulationTime = value
+        case "tripDuration":
+            result.trip_data["tripDuration"] = value
+        case "tripLength":
+            result.trip_data["tripLength"] = value
+        case "waitTime":
+            result.trip_data["waitTime"] = value
+        case "stopTime":
+            result.trip_data["stopTime"] = value
+        case "timeLoss":
+            result.trip_data["timeLoss"] = value
+        case "energyConsumed":
+            result.trip_data["energyConsumed"] = value
     
 class EvaluationDataset:
     # arr
 
     def __init__(self, results : list):
         self.arr = results
+    @staticmethod
+    def fromTrainResults(train_results, params, network_diameter):
+        iterations = len(train_results["simDuration"])
+        train_results_arr = []
+        for i in range(iterations):
+            data = {}
+            for p in params.getGroup("reward"):
+                data[p] = train_results[p][i];
+            results = Evaluation.fromTrainResults(data, network_diameter)
+            train_results_arr.append(results)
+        return EvaluationDataset(train_results_arr)
     def calcScores(self, params):
-        ## Define statistics
-        stats = params.getGroup("reward")
+        ## Validate params and define statistics
+        if isinstance(params, list):
+            if len(params) != len(self.arr):
+                raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
+            params_arr = params
+            stats = sorted(params[0].getGroup("reward"))
+        else:
+            params_arr = None
+            stats = sorted(params.getGroup("reward"))
         ## Get values
         values = []
         for i in range(len(self.arr)):
@@ -238,6 +284,8 @@ class EvaluationDataset:
         ## Calculate scores, using params coefficients
         scores = []
         for i in range(len(self.arr)):
+            if params_arr is not None:
+                params = params_arr[i]
             score = 0.0
             res = self.arr[i]; vals = values[i];
             for stat in stats:
@@ -249,11 +297,11 @@ class EvaluationDataset:
                 # Invert if minimizing or coefficient is negative
                 if (isMinOrMax(stat) == -1) or (coeff < 0):
                     val = (1.0 - float(val))
-                score += float(val) * abs(coeff);
+                score += (float(val) * abs(coeff));
             # Special case for simulation duration, because of possible non-completion,
             # 0 if not completed, 1.5 - otherwise normalized value -> [0.5, 1.5] if completed, 0 otherwise
             if res.fullyCompleted:
                 val = float(vals["simDuration"]) / float(max_vals["simDuration"]);  # [0, 1]
-                score += (1.5 - float(val)) * float(params["reward." + stat])  # [1.5, 0.5] * coeff
+                score += ((1.5 - float(val)) * float(params["reward." + stat]))  # [1.5, 0.5] * coeff
             scores.append(score)
         return scores

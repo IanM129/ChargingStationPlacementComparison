@@ -18,81 +18,10 @@ import lib.xml.output as xmlOut
 RESULTS_PATH = pathlib.Path("results/")
 
 
-## bad:  -1 = parent folder doesn't exist   0 = no model file found,
-## good: 1 = found model.pt (GNN)           2 = found model_1.pt (MARL)
-def isValidModelFolder(folder, parent_folder=""):
-    parent_path = folder
-    if parent_folder != "": parent_path = parent_folder + "/" + folder
-    if not pathlib.Path(parent_path).exists(): return -1;
-    if pathlib.Path(parent_path + "/results/model.pt").exists(): return 1;
-    if pathlib.Path(parent_path + "/results/model_1.pt").exists(): return 2;
-    return 0;
-def isValidResultsFolder(folder, parent_folder="results"):
-    if not pathlib.Path(parent_folder + "/" + folder).exists(): return 1;
-    if not pathlib.Path(parent_folder + "/" + folder + "/results").exists():
-        return 2;
-    return 0;
-def isValidNetworkFolder(name):
-    if not pathlib.Path("networks/" + name).exists(): return 1;
-    #if not pathlib.Path("networks/" + name + "/" + name.lower() + ".sumocfg").exists():
-    #   return 2;
-    if not pathlib.Path("networks/" + name + "/base_net.net.xml").exists():
-        return 3;
-    return 0;
-
-
 def adjustRunParameters(res_params, cfg_params):
     res_params["sim.visualize"] = cfg_params["sim.visualize"]
     res_params["prep.preprocess"] = True
     return res_params
-
-def getSessionType(path, params, agentCount):
-    sess_type = None
-    if pathlib.Path(path + "/training").exists():
-        if agentCount is None:
-            if "marl" in path: sess_type = "MARL";
-            if "gnn" in path:
-                if sess_type is None: sess_type = "GNN";
-                else: sess_type = None;
-        else:
-            if agentCount > 1: sess_type = "MARL";
-            else: sess_type = "GNN";
-    else:
-        if agentCount == None: sess_type = "simulation"
-        elif agentCount > 1: sess_type = "competitive";
-        else: sess_type = "solo";
-    return sess_type
-def fetchSessionMetadata(path):
-    metadata = {}
-    if not pathlib.Path(path).exists(): return None;
-    # Config xml
-    config_path = pathlib.Path(path + "/config.xml")
-    if config_path.exists():
-        config_tree = ET.parse(str(config_path))
-        params = Parameters.parse(config_tree)
-        metadata["configExists"] = True
-    else:
-        params = Parameters();
-        metadata["configExists"] = False
-    metadata["agentCount"] = params.tryGet("training.agents")
-    sess_type = getSessionType(path, params, metadata["agentCount"])
-    metadata["sessionType"] = sess_type if (sess_type is not None) else "?"
-    metadata["centralizedRouting"] = params.tryGet("station.routing.centralized")
-    if metadata["centralizedRouting"] is None: metadata["centralizedRouting"] = False;
-    metadata["k"] = params.tryGet("station.k")
-    # Metadata xml
-    mtdt_path = pathlib.Path(path + "/metadata.xml")
-    if mtdt_path.exists():
-        mtdt_tree = ET.parse(str(mtdt_path));
-        mtdt_root = mtdt_tree.getroot();
-        metadata["date"] = mtdt_root.find("date").text
-        metadata["time"] = mtdt_root.find("time").text
-        metadata["network"] = mtdt_root.find("network").text
-        metadata["type"] = mtdt_root.find("type").text
-        metadata["metadataExists"] = True
-    else:
-        metadata["metadataExists"] = False
-    return metadata
 
 def getSavedSessionPaths(folder):
     paths = []
@@ -143,22 +72,7 @@ def parseFolderInput(val, options):
             exit();
         return ("results/" + val)
 
-def loadModels(filepath, agent_count, graph):
-    model = None;
-    if (model_folder := isValidModelFolder(filepath)) > 0:
-        global device
-        if model_folder == 1:
-            model = EdgePosGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64)
-            model.load_state_dict(torch.load(filepath + "/results/model.pt", weights_only=True))
-            model.to(device); model.eval();
-        else:
-            model = []
-            for a in range(agent_count):
-                model.append(EdgePosAndPriceGNN(graph.x.shape[1], graph.edge_attr.shape[1], 64))
-                model[a].load_state_dict(torch.load(filepath + "/results/model_" + str(a+1) + ".pt",
-                                                    weights_only=True))
-                model[a].to(device); model[a].eval();
-    return model
+
 
 ###### Network selection
 def getNetworkPaths():
@@ -268,7 +182,7 @@ if __name__ == "__main__":
     res_params = Parameters.parse(filepath + "/config.xml")
     params = adjustRunParameters(res_params, cfg_params)
     # Load metadata
-    metadata = fetchSessionMetadata(filepath)
+    metadata = dm.loadSessionMetadata(filepath)
     # Load environment and model(s) (if applicable)
     if (model_folder := isValidModelFolder(filepath)) > 0:
         print("Training session detected, importing...")

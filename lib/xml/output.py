@@ -370,7 +370,7 @@ def writeMetadata(filepath, network_name, datetime_str, sess_type, network_diame
 
 
 # Analysis load
-def loadTrainResulst_numpy(filepath):
+def loadTrainResults_numpy(filepath):
     train_results = {}
     for f in os.listdir(filepath):
         if f.endswith(".npy"):

@@ -175,13 +175,13 @@ def loadEnvironment(network_name, edge_attr_list_loc):
     base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
     base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
                                  lengths=True, travel_time=True,
-                                 internal_lengths=False, node_position=True)
+                                 internal_lengths=True, node_position=True)
     base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
     print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
     num_nodes = base_G.number_of_nodes()
     # Detailed graph for coverage calculations
     #global coverage_G_d
-    #coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
+    coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
     # Edge translator
     translator = GraphTranslator(base_G)
     ## PyG Data
@@ -200,7 +200,7 @@ def loadEnvironment(network_name, edge_attr_list_loc):
     # Edge attributes
     edge_attr = np.zeros((graph.edge_index.shape[1], len(edge_attr_list)))
     applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
-    return graph, base_net, base_G, base_G_d, translator
+    return graph, base_net, base_G, base_G_d, coverage_G_d, translator
 ## Models
 def getAgentSuffixes(agent_colors):
     return [("_" + n) for n in agent_colors]

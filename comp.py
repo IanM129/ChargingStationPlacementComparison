@@ -18,7 +18,8 @@ import traci as traci_m
 
 import preprocess as prep
 
-from lib.utility import parseArgs, generateRandomChargeData, writeChargeData, loadChargeData
+from lib.utility import parseArgs
+from lib.data_management import generateRandomChargeData, writeChargeData, loadChargeData
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
 import lib.graphing.utility as graphutil
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     full_save_path = pathlib.Path(output_path + "/results.xml").resolve()
     print(f"Simulation finished, saved results under\n'{str(full_save_path)}'")
     # Clean up files
-    if params["sim.deleteCache"]:
+    if params["sim.deleteCache"] == True:
         xmlOut.cleanCache(output_path + "/_cache", network_name)
 
     
