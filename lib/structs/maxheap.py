@@ -2,12 +2,15 @@ import heapq
 
 #### Tuple
 class TupleMaxHeap:
-    def __init__(self): self.heap = [];
-    def push(self, x): heapq.heappush(self.heap, (-x[0], x[1]));
+    def __init__(self, count=2):
+        self.heap = [];
+        self.count = count
+    def push(self, x):
+        heapq.heappush(self.heap, (-x[0], *[x[i] for i in range(1, self.count)]));
     def pop(self):
-        x = heapq.heappop(self.heap); return (-x[0], x[1]);
+        x = heapq.heappop(self.heap); return (-x[0], *[x[i] for i in range(1, self.count)]);
     def __getitem__(self, i):
-        x = self.heap[i]; return (-x[0], x[1]);
+        x = self.heap[i]; return (-x[0], *[x[i] for i in range(1, self.count)]);
     def __len__(self): return len(self.heap);
     def __repr__(self):
         s = "["

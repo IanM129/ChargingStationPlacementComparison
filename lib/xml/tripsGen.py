@@ -15,12 +15,13 @@ import lib.graphing.utility as graphutil
 def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_length=False):
     start_edge = net.getEdge(start_edge_id)
     start_fn_id = start_edge.getFromNode().getID(); start_tn_id = start_edge.getToNode().getID();
+    start_edge_t = (start_fn_id, start_tn_id)
     ## Get valid edges
     valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
     # Get edges outside of min_distance range
     if min_distance > 0:
-        edges_in_range = graphutil.getEdgesInRadius(G, start_tn_id, min_distance,
-                                                    include_reverse=False, include_reached=True)
+        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, min_distance, use_internal=True,
+                                                        include_reverse=False, include_reached=True)
         valid_end_edges = (G.edges() - edges_in_range).intersection(valid_end_edges)
         if len(valid_end_edges) == 0:
             if return_length: return (None, -1)
@@ -29,8 +30,8 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
             #valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
     # Get edges inside of max_distance range
     if max_distance > 0:
-        edges_in_range = graphutil.getEdgesInRadius(G, start_tn_id, max_distance,
-                                                    include_reverse=False)
+        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, max_distance, use_internal=True,
+                                                        include_reverse=False, include_reached=True)
         valid_end_edges = edges_in_range.intersection(valid_end_edges)
         if len(valid_end_edges) == 0:
             if return_length: return (None, 1);
@@ -50,11 +51,9 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
         print(f"{end_gedge} : ({end_fn_id}, {end_tn_id})"); print(G.edges());
     assert(end_edge != None)
     # Get path length from start edge to chosen edge
-    nodes_path_len_nx = nx.shortest_path_length(G, source=start_tn_id, target=end_fn_id, weight="length")
-    nodes_path_len = graphutil.getShortestEdgePathLength(G, start_edge.getID(), end_gedge)
-    print(nodes_path_len_nx, " | ", nodes_path_len)
-    #print("path:", nx.shortest_path(G, source=start_tn_id, target=end_fn_id, weight="length"))
-    #print("-> full len:", (nodes_path_len))
+    #nodes_path_len_nx = nx.shortest_path_length(G, source=start_tn_id, target=end_fn_id, weight="length")
+    nodes_path_len = graphutil.getShortestEdgePathLength(G, (start_edge.getFromNode().getID(), start_edge.getToNode().getID()),
+                                                         end_gedge)
     #if nodes_path_len < min_distance: print("YO MIN (", min_distance - nodes_path_len, ")");
     #if nodes_path_len > max_distance: print("YO MAX");
     if return_length: return (end_edge.getID(), nodes_path_len)
@@ -69,7 +68,7 @@ def genRandomRoute(net, G, destination_count=1, min_distance=0.0, min_distance_p
     start_min_distance = min_distance
     if min_distance > 0:
         min_ecc_distance = min_distance / destination_count
-        eccentricity = graphutil.getEccentricity(G, weight="length") #nx.eccentricity(G, weight="length")
+        eccentricity = graphutil.eccentricity(G, weight="length") #nx.eccentricity(G, weight="length")
         valid_nodes = set()
         for node in net.getNodes():
             nodeID = node.getID()

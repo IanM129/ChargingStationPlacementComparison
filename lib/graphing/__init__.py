@@ -130,10 +130,14 @@ def lineGraph(G):
 def discretizeGraph(G, max_distance, add_min=0, add_max=-1, roads_only=False):
     edges = set()
     for edge in G.edges():
-        if edge[0] <= edge[1]: edges.add(edge);
-        else: edges.add(edge[::-1]);
+        rev_edge = edge[::-1]
+        if rev_edge not in edges: edges.add(edge);
+        #if edge[0] <= edge[1]: edges.add(edge);
+        #else: edges.add(edge[::-1]);
+        #print("-", edge)
     lengths = nx.get_edge_attributes(G, "length")
     for edge in edges:
+        #print("----", edge)
         if roads_only and util.areNodeEdgesSameNode(edge[0], edge[1]):
             continue;
         length = lengths[edge]
@@ -198,7 +202,7 @@ def calcCandidates(G, detailed_graph=True):
     #    candidates.append(node)
     og_verts = set(G.nodes())
     # Add points on edges
-    discretizeGraph(G, 50, add_min=1, roads_only=detailed_graph)
+    discretizeGraph(G, 50, add_min=1, add_max=1, roads_only=detailed_graph)
     candidates = set(G.nodes()) - og_verts
     return candidates
 

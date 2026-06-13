@@ -53,19 +53,41 @@ def netHasEdgeID(net, edge_id):
     except KeyError: return False;
 
 
-def calcDiameter(G, weight="length"):
-    try:
+def diameter(G, weight="length"):
+    if nx.is_strongly_connected(G):
         return float(nx.diameter(G, weight=weight))
-    except:
-        undirected_G = G.to_undirected()
+    undirected_G = G.to_undirected()
+    if nx.is_connected(undirected_G):
         return float(nx.diameter(undirected_G, weight=weight))
-def getEccentricity(G, weight="length"):
-    try:
-        return nx.eccentricity(G, weight="length")
-    except:
-        undirected_G = G.to_undirected()
-        return nx.eccentricity(undirected_G, weight=weight)
+    largest_cc = max(nx.strongly_connected_components(G), key=len)
+    G_cc = G.subgraph(largest_cc).copy()
+    return float(nx.diameter(G_cc, weight=weight))
 
+def eccentricity(G, weight="length"):
+    if nx.is_strongly_connected(G):
+        return nx.eccentricity(G, weight=weight)
+    undirected_G = G.to_undirected()
+    if nx.is_connected(undirected_G):
+        return nx.eccentricity(undirected_G, weight=weight)
+    largest_cc = max(nx.strongly_connected_components(G), key=len)
+    G_cc = G.subgraph(largest_cc).copy()
+    return nx.eccentricity(G_cc, weight=weight)
+
+def periphery(G, weight="length"):
+    if nx.is_strongly_connected(G):
+        return nx.periphery(G, weight=weight)
+    undirected_G = G.to_undirected()
+    if nx.is_connected(undirected_G):
+        return nx.periphery(undirected_G, weight=weight)
+    largest_cc = max(nx.strongly_connected_components(G), key=len)
+    G_cc = G.subgraph(largest_cc).copy()
+    return nx.periphery(G_cc, weight=weight)
+
+def shortest_path_length(G, start, target, weight="length"):
+    try:
+        return nx.shortest_path_length(G_d, start, target, weight="length");
+    except:
+        return np.inf
 
 
 ## Node edge
@@ -125,6 +147,11 @@ def translateDetailedRoad(road_d, as_tuple=True):
     to_node = translateDetailedNode(to_node_d);
     if as_tuple: return (from_node, to_node);
     else: return (from_node + to_node);
+def getNodesOfDetailedRoad(road_d):
+    from_node_d, to_node_d = getNodesFromRoadID(road_d)
+    from_node = translateDetailedNode(from_node_d);
+    to_node = translateDetailedNode(to_node_d);
+    return (from_node, to_node);
 
 ## Translate normal edge to detailed edge node
 def translateNetEdgeToDetailedEdgeID(net_edge):
@@ -139,8 +166,8 @@ def translateNetEdgeToDetailedEdgeTuple(net_edge):
 
 ## Extract original edge ID from edge ID
 # type: 0 - normal, 1 - detailed (WIP), 2 - charging station
-def extractEdgeID(edge_id) -> tuple[str, int]:
-    pattern = r'pcs(?:Entry|End)_([A-Za-z0-9]+)';
+def extractEdgeID(base_net, edge_id) -> tuple[str, int]:
+    pattern = r'pcs(?:Entry|End)_([A-Za-z0-9#]+)';
     sep_ind = edge_id.find(ROAD_ID_SEPARATOR)
     if sep_ind == -1:
         re_match = re.search(pattern, edge_id)
@@ -154,19 +181,47 @@ def extractEdgeID(edge_id) -> tuple[str, int]:
         match_r = re.search(pattern, second)
         if match_l and match_r: return (edge_id, 2);
         if match_l:
-            re_match = match_l.group(1); other = second;
-            other_ind = re_match.index(other)
-            if other_ind == 0:
-                return (re_match[len(other):] + other, 0);
+            re_match = match_l.group(1);
+            from_node = base_net.getNode(second).getID()
+            st_edge = base_net.getEdge(re_match)
+            st_from_node = st_edge.getFromNode()
+            if from_node == st_from_node.getID():
+                return (st_edge.getID(), 0)
             else:
-                return (re_match, 0);
+                to_node = from_node
+                from_node = st_from_node
+                edge = None
+                for e in from_node.getOutgoing():
+                    if e.getToNode() == to_node:
+                        edge = e; break;
+                return (edge, 0)
+            #other_ind = re_match.index(other)
+            #if other_ind == 0:
+            #    return (re_match[len(other):] + other, 0);
+            #else:
+            #    return (re_match, 0);
+            return (re_match, 0);
         elif match_r:
-            re_match = match_r.group(1); other = first;
-            other_ind = re_match.index(other)
-            if other_ind == 0:
-                return (re_match, 0);
+            re_match = match_r.group(1);
+            from_node = base_net.getNode(first).getID()
+            st_edge = base_net.getEdge(re_match)
+            st_from_node = st_edge.getFromNode()
+            if from_node == st_from_node.getID():
+                return (st_edge.getID(), 0)
             else:
-                return (other + re_match[:other_ind], 0);
+                to_node = from_node
+                from_node = st_from_node
+                edge = None
+                for e in from_node.getOutgoing():
+                    if e.getToNode() == to_node:
+                        edge = e; break;
+                return (edge, 0)
+            #other_ind = re_match.index(other)
+            #if other_ind == 0:
+            #    return (re_match, 0);
+            #else:
+            #    return (other + re_match[:other_ind], 0);
+            #return (re_match, 0);
         else:
             return (edge_id, 2);
 
@@ -256,7 +311,7 @@ def insertNode(G, start_id, end_id, name="", bidirectional=True,
     G.remove_edge(start_id, end_id)
     G.add_edge(start_id, name, length=len_a)
     G.add_edge(name, end_id, length=len_b)
-    if (bidirectional):
+    if (bidirectional) and (G.has_edge(end_id, start_id)):
         G.remove_edge(end_id, start_id)
         G.add_edge(end_id, name, length=len_b)
         G.add_edge(name, start_id, length=len_a)
@@ -348,9 +403,11 @@ def getNodesInRadius_withDistance(G, center, radius, reverse_roads=False) -> dic
                     if distance <= dis_left:
                         heap.push((dis_left - distance, next_node))
     return result
-def getEdgesInRadius(G, center, radius, ignore_edges=None, include_reverse=True, include_reached=False) -> set:
+def getEdgesInRadius(G, center, radius, previous=None, ignore_edges=None,
+                     include_reverse=True, include_reached=False) -> set:
     nodes_checked = set()
     edges_covered = set()
+    if previous is not None: nodes_checked.add(previous);
     heap = TupleMaxHeap(); heap.push((radius, center));
     all_lens = nx.get_edge_attributes(G, "length")
     while len(heap) > 0:
@@ -362,10 +419,43 @@ def getEdgesInRadius(G, center, radius, ignore_edges=None, include_reverse=True,
                 if ignore_edges != None and c in ignore_edges:
                     continue;
                 next_node = c[1]
+                if previous is not None and node == center and next_node == previous:
+                    continue;
                 if next_node not in nodes_checked:
                     distance = all_lens[c]
                     if distance <= dis_left:
                         heap.push((dis_left - distance, next_node))
+                    if distance <= dis_left or include_reached:
+                        edges_covered.add(c)
+                        if include_reverse:
+                            edges_covered.add((c[1], c[0]))
+    return edges_covered
+def getEdgesInEdgeRadius(G, start, radius, ignore_edges=None, use_internal=True,
+                         include_reverse=True, include_reached=False) -> set:
+    if not isinstance(start, tuple):
+        raise Exception(f"Given start is not a tuple ('{start}')");
+    nodes_checked = {start[0]}
+    edges_covered = set()
+    heap = TupleMaxHeap(3); heap.push((radius, start[1], start[0]));
+    all_lens = nx.get_edge_attributes(G, "length")
+    if use_internal:
+        int_lens = nx.get_node_attributes(G, "intLens");
+    while len(heap) > 0:
+        dis_left, node, prev = heap.pop()
+        if node not in nodes_checked:
+            nodes_checked.add(node)
+            conns = G.out_edges(node)
+            for c in conns:
+                if ignore_edges != None and c in ignore_edges:
+                    continue;
+                next_node = c[1]
+                if use_internal:
+                    if next_node not in int_lens[node][prev]:
+                        continue
+                if next_node not in nodes_checked:
+                    distance = all_lens[c]
+                    if distance <= dis_left:
+                        heap.push((dis_left - distance, next_node, node))
                     if distance <= dis_left or include_reached:
                         edges_covered.add(c)
                         if include_reverse:

@@ -168,7 +168,8 @@ def sumoBlankRun(net, data_path, sumo_filename, trips, results : Evaluation,
     results.clear()
     results.setSimulationData(fully_completed, sim_time, exec_duration)
     ## Get flow at edges
-    edge_stats = xmlOut.getEdgeLoopStats(filepath=cache_output_path + "/loop.out.xml",
+    edge_stats = xmlOut.getEdgeLoopStats(net,
+                                         filepath=cache_output_path + "/loop.out.xml",
                                          max_flow=True)
     edge_data = xmlOut.getEdgeDataStats(filepath=cache_output_path + "/edgeData.out.xml")
     results.setEdgeData(edge_stats, edge_data)

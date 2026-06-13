@@ -86,7 +86,7 @@ if __name__ == "__main__":
     translator = GraphTranslator(base_G)
     ## Other
     global network_diameter, coverage_radius_target, charge_max_eval
-    network_diameter = graphutil.calcDiameter(base_G, weight="length")
+    network_diameter = graphutil.diameter(base_G, weight="length")
     visutil.setMaxCoverageRadius(network_diameter)
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)

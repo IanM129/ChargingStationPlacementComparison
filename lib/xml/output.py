@@ -246,7 +246,7 @@ def getBatteryDepletionWarnings(log_filepath):
                 events.append((vehID, time))
     return events;
 ## Edge stats
-def getEdgeLoopStats(filepath, max_flow=False, max_vehicles=False) -> dict:
+def getEdgeLoopStats(base_net, filepath, max_flow=False, max_vehicles=False) -> dict:
     result = {}
     tree = ET.parse(filepath)
     root = tree.getroot()
@@ -256,7 +256,7 @@ def getEdgeLoopStats(filepath, max_flow=False, max_vehicles=False) -> dict:
         elID = e.get("id")
         #print(f"elID: '{elID}'")
         edgeID = elID[:elID.rindex('_')]
-        edgeID, edgeType = graphutil.extractEdgeID(edgeID);
+        edgeID, edgeType = graphutil.extractEdgeID(base_net, edgeID);
         #print(elID, "-> (" + edgeID + ",", str(edgeType) + ")")
         if edgeType == 0:
             stats = {

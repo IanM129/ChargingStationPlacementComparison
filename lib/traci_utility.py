@@ -119,10 +119,14 @@ def stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, appro
     #ric = traciutil.calculateRouteInfo(route, cur_index, next_dest_index+1)
     # Route before station
     route_info_before = traci.simulation.findRoute(cur_edge, sttn_edge)
+    if len(route_info_before.edges) == 0 and cur_edge != sttn_edge:
+        return None, None
     detour_time = route_info_before.travelTime;
     detour_distance = route_info_before.length;
     # Route after station
     route_info_after = traci.simulation.findRoute(sttn_edge, next_dest_edge)
+    if len(route_info_after.edges) == 0 and cur_edge != sttn_edge:
+        return None, None
     detour_time += route_info_after.travelTime;
     detour_distance += route_info_after.length;
     detour_time_diff = detour_time - route_info.travelTime
@@ -136,10 +140,9 @@ def findClosestChargingStation(vehID, charge, stations, cost_function, approx_ch
     if route == None: route = traci.vehicle.getRoute(vehID);
     if cur_index < 0: cur_index = traci.vehicle.getRouteIndex(vehID);
     cur_edge = route[cur_index]
-    if next_dest_index < 0:
-        next_dest_index = getNextDestIndexInRoute(vehID, route, cur_index)
+    #if next_dest_index < 0:
+    #    next_dest_index = getNextDestIndexInRoute(vehID, trip, route, cur_index)
     next_dest_edge = route[next_dest_index]
-    #print("-- destinations:\n", destinations)
     #print("-- route:\n", route)
     #print("---> next destination edge:", next_dest_edge)
     # Get station values
@@ -147,16 +150,22 @@ def findClosestChargingStation(vehID, charge, stations, cost_function, approx_ch
     for sttn_info in stations:
         sttn_id = sttn_info.getID()
         cost, routes = stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, approx_charge_needed)
-        station_costs[sttn_id] = cost; station_routes[sttn_id] = routes;
+        if cost is not None:
+            station_costs[sttn_id] = cost;
+            station_routes[sttn_id] = routes;
     #print(cur_edge, "->", next_dest_edge)
     #for stid, stct in station_costs.items():
         #print(f"{stid:20s}: {stct}")
+    # If no accessible
+    if len(station_costs) == 0: return None, None, None;
     # Choose by minimum of cost function
     chosen_sttn_id = min(station_costs, key=station_costs.get)
     sttn_info = stations.getByID(chosen_sttn_id)
     # Create adjusted route
     route_info_before = station_routes[chosen_sttn_id][0]
     route_info_after = station_routes[chosen_sttn_id][1]
+    #print("before:", station_routes[chosen_sttn_id][0].edges)
+    #print("after:", station_routes[chosen_sttn_id][1].edges)
     station_route = station_routes[chosen_sttn_id][0].edges + station_routes[chosen_sttn_id][1].edges[1:]
     new_trip = Trip([cur_edge, sttn_info.redge_id, next_dest_edge], [route_info_before.length, route_info_after.length], True)
     return chosen_sttn_id, new_trip, station_route
@@ -180,24 +189,31 @@ def findClosestChargingStation_centralized(vehID, charge, stations, cost_functio
         for sttn_info in free_stations:
             sttn_id = sttn_info.getID()
             cost, routes = stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, approx_charge_needed)
-            station_costs[sttn_id] = cost; station_routes[sttn_id] = routes;
-        # Go through them by minimum of cost function
-        sorted_sttns = [stid for stid, val in sorted(station_costs.items(), key=lambda e: e[1])]
-        for sttn_id in sorted_sttns:
-            sttn_info = stations.getByID(sttn_id)
-            has_spot = sttn_info.hasFreeSpot() #requestSpot(auto_take=False, search_reverse=search_reverse)
-            if has_spot != -1:
-                #sttn_info.addIncoming(vehID)
-                chosen_sttn_id = sttn_id
-                break
+            if cost is not None:
+                station_costs[sttn_id] = cost;
+                station_routes[sttn_id] = routes;
+        if len(station_costs) > 0:
+            # Go through them by minimum of cost function
+            sorted_sttns = [stid for stid, val in sorted(station_costs.items(), key=lambda e: e[1])]
+            for sttn_id in sorted_sttns:
+                sttn_info = stations.getByID(sttn_id)
+                has_spot = sttn_info.hasFreeSpot() #requestSpot(auto_take=False, search_reverse=search_reverse)
+                if has_spot != -1:
+                    #sttn_info.addIncoming(vehID)
+                    chosen_sttn_id = sttn_id
+                    break
     # No free stations -> get best based on cost and current waiting queue size
     if chosen_sttn_id is None:
         for sttn_info in stations:
             sttn_id = sttn_info.getID()
             if sttn_id not in station_costs:
                 cost, routes = stationCostWrapper(sttn_info, cur_edge, next_dest_edge, cost_function, approx_charge_needed)
-                station_costs[sttn_id] = cost; station_routes[sttn_id] = routes;
-            station_costs[sttn_id] = waitQueueCost(station_costs[sttn_id], sttn_info.getWaitingTotal(), wait_coef=wait_coef)
+                if cost is not None:
+                    station_costs[sttn_id] = cost;
+                    station_routes[sttn_id] = routes;
+            if sttn_id in station_costs:
+                station_costs[sttn_id] = waitQueueCost(station_costs[sttn_id], sttn_info.getWaitingTotal(), wait_coef=wait_coef)
+        if len(station_costs) == 0: return None, None, None
         chosen_sttn_id = min(station_costs, key=station_costs.get)
     # Create adjusted route
     sttn_info = stations.getByID(chosen_sttn_id)

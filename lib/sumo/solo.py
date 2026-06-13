@@ -91,7 +91,7 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     vTypes_tree.write(cache_data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
     ## Side vars
     global network_diameter, EV_len, min_gap, max_charge, min_charge, min_charge_p
-    network_diameter = float(nx.diameter(G, weight="length"))
+    network_diameter = graphutil.diameter(G, weight="length")
     EV_len = parkingNetGen.getVehicleLength(vTypes_tree);
     min_gap = prep.getMinGapFromAddTree(vTypes_tree)
     max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
@@ -163,12 +163,12 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
     
 #### STATION WRITE
     ## Write stations to XML
-    parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
-                                       write=True, output_path=cache_data_path,
-                                       network_filepath=cache_data_path + "/base_net.net.xml",
-                                       vehicle_length=EV_len, min_gap=min_gap,
-                                       wait_queue_size=WAIT_QUEUE_SIZE,
-                                        wait_queue_parking=QUEUE_PARKING)
+    _, _, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
+                                                               write=True, output_path=cache_data_path,
+                                                               network_filepath=cache_data_path + "/base_net.net.xml",
+                                                               vehicle_length=EV_len, min_gap=min_gap,
+                                                               wait_queue_size=WAIT_QUEUE_SIZE,
+                                                                wait_queue_parking=QUEUE_PARKING)
     #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
     parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
                                                  cache_data_path + "/del_left_turns.con.xml",
@@ -179,6 +179,11 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
     WAIT_QUEUE_COEFF = params["station.routing.waitQueueCoefficient"]
     # Load modified net
     net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
+    # Update station lane positions
+    sttn_start_pos = parkingNetGen.updateStationsLanePos(net, stations_tree)
+    stations_tree.write(cache_data_path + "/stations.add.xml")
+    for si in stations:
+        si.stop_distance = float(sttn_start_pos[si.getID()])
 #### POST STATION WRITE
     # Induction loop
     xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=cache_data_path + "/output.add.xml",
@@ -214,6 +219,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
     if CHARGE_ROUTING != StationRouting.STATIONFINDER:
         global will_need_to_charge, going_to_charge, charging
         will_need_to_charge = set()
+        cooldown = {}
         going_to_charge = {}
         charging = {}
         ev_ntc_charge = {}
@@ -269,6 +275,9 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
                         vaporized.add(vehID)
                     # Check if needs to search for a charging station
                     if (vehID in will_need_to_charge) and (charge < ev_ntc_charge[vehID]): # find charging station
+                        # Check if already checked while on this edge
+                        if vehID in cooldown and cooldown[vehID] == cur_edge: continue;
+                        # Proceed
                         route = traci.vehicle.getRoute(vehID);
                         cur_index = traci.vehicle.getRouteIndex(vehID);
                         next_dest_index_r = traciutil.getNextDestIndexInRoute(vehID, trips[vehID], route, cur_index)
@@ -289,6 +298,13 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
                                                                         wait_coef=WAIT_QUEUE_COEFF,
                                                                         route=route, cur_index=cur_index,
                                                                         next_dest_index=next_dest_index_r)
+                        # If not found
+                        if data[0] == None:
+                            cooldown[vehID] = cur_edge
+                            continue;
+                        else:
+                            if vehID in cooldown:
+                                cooldown.pop(vehID);
                         target_sttn_id, station_trip, station_route = data
                         target_si_index = stations.getIndexByID(target_sttn_id)
                         target_si = stations[target_si_index]
@@ -303,7 +319,8 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
                         # > Stop and wait in front of the charging spots; creates jam at the entrance if too many vehicles in queue
                         else:
                             #try: -> sometimes error happens because the vehicle is too close to the stop?
-                            traci.vehicle.setStop(vehID, target_si.redge_id, pos=STOP_DISTANCE); #parkingNetGen.calcVehicleQueueLength(EV_len, min_gap, params["station.waitQueue"]));
+                            traci.vehicle.setStop(vehID, target_si.redge_id,
+                                                  pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
                             #except Exception as e: print("Failed to stop."); raise Exception(e);
                         #target_si.addToWaiting(vehID); -> add when they reach the waiting spot
                         target_si.addIncoming(vehID);
@@ -501,7 +518,8 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
     results.setTripData(trip_stats)
     
     ## Get flow at edges
-    edge_stats = xmlOut.getEdgeLoopStats(cache_output_path + "/loop.out.xml",
+    edge_stats = xmlOut.getEdgeLoopStats(base_net,
+                                         cache_output_path + "/loop.out.xml",
                                          max_flow=True)
     edge_data = xmlOut.getEdgeDataStats(cache_output_path + "/edgeData.out.xml")
     results.setEdgeData(edge_stats, edge_data)

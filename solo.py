@@ -45,7 +45,7 @@ os.chdir(MAIN_DIR)
 
 RANDOM_STATIONS = False
 def stationDistribution(G, base_G_d, k, output_path, debug=False):
-    G_d = base_G_d.copy()
+    G_d = copy.deepcopy(base_G_d)
     candidates = graphing.calcCandidates(G_d, detailed_graph=True)
     ## Charging stations
     print("-- Station distribution algorithm (" +
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     translator = GraphTranslator(base_G)
     ## Other
     global network_diameter
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
@@ -171,10 +171,18 @@ if __name__ == "__main__":
     # Save used charge data
     writeChargeData(charge_data, output_path + "/charge_data.xml")
     ## Station distribution
-    stations = []; dist_radius = 0.0;
-    stations, dist_radius = stationDistribution(base_G, base_G_d, K, output_path)
+    stations_d, dist_radius = stationDistribution(base_G, base_G_d, K, output_path)
     # Station info from detailed edges
-    stations = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
+    stations_ids = []
+    for st_d in stations_d:
+        from_node, to_node = graphutil.getNodesOfDetailedRoad(st_d)
+        if base_G.has_edge(from_node, to_node):
+            edge_id = base_G[from_node][to_node]["id"]
+        else:
+            edge_id = base_G[to_node][from_node]["id"]
+        stations_ids.append(edge_id)
+    #stations = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
+    stations = StationInfoDataset([StationInfo(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations_ids])
     print("-- stations:", stations.printEdges())
     # Prepare results
     results = Evaluation(translator)

@@ -368,7 +368,7 @@ if __name__ == "__main__":
     gnnutil.applyBaseGraphEdgeAttributes(graph, base_G, translator, ["travelTime"])
     ## Other
     global network_diameter, coverage_radius_target, charge_max_eval
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     coverage_radius_target = network_diameter / np.sqrt(K)
     visutil.setMaxCoverageRadius(network_diameter)
     if MIN_DISTANCE < 0:

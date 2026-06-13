@@ -23,8 +23,10 @@ class StationInfo:
     # incoming          (set) cars going to the station
     # price             price per kWh for this station
     # suffix            id suffix
+    # stop_distance      where to stop
     
-    def __init__(self, edge_id, total_capacity : float, price : float, dedge_id=None, redge_id=None, suffix=""):
+    def __init__(self, edge_id, total_capacity : float, price : float,
+                 dedge_id=None, redge_id=None, suffix=""):
         self.edge_id = edge_id
         self.name_id = parkingNetGen.getStationID(edge_id, suffix=suffix, with_index=False)
         #self.ids =(parkingNetGen.getStationID(edge_id, suffix=suffix), parkingNetGen.getStationID(edge_id, suffix=suffix, reverse=True))
@@ -46,6 +48,7 @@ class StationInfo:
         self.redge_id = redge_id
         self.dnode_id = None
         self.suffix = suffix
+        self.stop_distance = None
     def setDetailedNode(self, net):
         net_edge = net.getEdge(self.edge_id)
         node_f = net_edge.getFromNode().getID(); node_t = net_edge.getToNode().getID();
@@ -54,7 +57,7 @@ class StationInfo:
         else:
             self.dnode_id = graphutil.getRoadIDFromNodes(node_t, node_f)
     @staticmethod
-    def fromDetailedEdge(dedge_id, total_capacity, price, suffix=""):
+    def fromDetailedEdge(net, dedge_id, total_capacity, price, suffix=""):
         edge_id = graphutil.translateDetailedRoad(dedge_id, as_tuple=False)
         s = StationInfo(edge_id, total_capacity, price, dedge_id=dedge_id, suffix=suffix);
         return s

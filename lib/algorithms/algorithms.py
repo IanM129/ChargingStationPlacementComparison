@@ -54,7 +54,7 @@ def farthestFirstCoverageBased(G, G_d, candidates, k, radius, first_station=None
     stations = [None] * k
     # First station: select random in periphery, execute 2.- 4.
     if first_station == None:
-        periphery = nx.periphery(G_d, weight="length")
+        periphery = graphutil.periphery(G_d, weight="length")
         peri_choice = random.choice(periphery)
         stations[0], covered = coverAlgs.nodeDegreesClosest_Nodes(G_d, peri_choice, candidates, radius)
     else:
@@ -65,7 +65,7 @@ def farthestFirstCoverageBased(G, G_d, candidates, k, radius, first_station=None
     if len(remaining_cands) == 0: return [st for st in stations if st != None];
     dis_to_centers = [None]; dis_to_centers[0] = [];
     for o in remaining_nodes:
-        path_len = nx.shortest_path_length(G_d, stations[0], o, weight="length");
+        path_len = graphutil.shortest_path_length(G_d, stations[0], o, weight="length");
         dis_to_centers[0].append((o, path_len));
     for i in range(1, k):
         farthest = chooseFarthestFromCenters(G, remaining_nodes, dis_to_centers)
@@ -101,7 +101,7 @@ def farthestFirstCoverageBased(G, G_d, candidates, k, radius, first_station=None
         if len(remaining_cands) == 0: break;
         dis_to_centers.append([]);
         for o in remaining_nodes:
-            path_len = nx.shortest_path_length(G_d, stations[i], o, weight="length");
+            path_len = graphutil.shortest_path_length(G_d, stations[i], o, weight="length");
             dis_to_centers[i].append((o, path_len));
     if (debug): print("\n\n---- final stations:", stations);
     return [st for st in stations if st != None]
@@ -115,7 +115,7 @@ def farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius, edge_v
     stations = [None] * k
     # First station: select random in periphery, execute 2.- 4.
     if first_station == None:
-        periphery = nx.periphery(G_d, weight="length")
+        periphery = graphutil.periphery(G_d, weight="length")
         peri_choice = random.choice(periphery)
         stations[0], covered = coverAlgs.nodeDegreesClosest_Nodes(G_d, peri_choice, candidates, radius)
     else:
@@ -126,7 +126,7 @@ def farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius, edge_v
     if len(remaining_cands) == 0: return [st for st in stations if st != None];
     dis_to_centers = [None]; dis_to_centers[0] = [];
     for o in remaining_nodes:
-        path_len = nx.shortest_path_length(G_d, stations[0], o, weight="length");
+        path_len = graphutil.shortest_path_length(G_d, stations[0], o, weight="length");
         dis_to_centers[0].append((o, path_len));
     for i in range(1, k):
         farthest = chooseFarthestFromCenters(G, remaining_nodes, dis_to_centers)
@@ -164,7 +164,7 @@ def farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius, edge_v
         if len(remaining_cands) == 0: break;
         dis_to_centers.append([]);
         for o in remaining_nodes:
-            path_len = nx.shortest_path_length(G_d, stations[i], o, weight="length");
+            path_len = graphutil.shortest_path_length(G_d, stations[i], o, weight="length");
             dis_to_centers[i].append((o, path_len));
     if (debug): print("\n\n---- final stations:", stations);
     return [st for st in stations if st != None]
@@ -185,7 +185,7 @@ def closestFirstCoverageBased(G, G_d, candidates, k, radius, debug=False):
     if len(remaining_cands) == 0: return [st for st in stations if st != None];
     dis_to_centers = [None]; dis_to_centers[0] = [];
     for o in remaining_nodes:
-        path_len = nx.shortest_path_length(G_d, stations[0], o, weight="length");
+        path_len = graphutil.shortest_path_length(G_d, stations[0], o, weight="length");
         dis_to_centers[0].append((o, path_len));
     #dis_to_centers[0].sort(reverse=True, key=lambda e: e[1])
     for i in range(1, k):
@@ -221,7 +221,7 @@ def closestFirstCoverageBased(G, G_d, candidates, k, radius, debug=False):
         if len(remaining_cands) == 0: break;
         dis_to_centers.append([]);
         for o in remaining_nodes:
-            path_len = nx.shortest_path_length(G_d, stations[i], o, weight="length");
+            path_len = graphutil.shortest_path_length(G_d, stations[i], o, weight="length");
             dis_to_centers[i].append((o, path_len));
         #dis_to_centers[i].sort(reverse=True, key=lambda e: e[1])
     if (debug): print("\n\n---- final stations:", stations);
@@ -233,7 +233,7 @@ def closestFirstCoverageBased(G, G_d, candidates, k, radius, debug=False):
 def radiusBinarySearch(G, G_d, candidates, k, epsilon=50, distribution_alg=None, debug=False) -> tuple[float,list]:
     if distribution_alg == None:
         distribution_alg = farthestFirstCoverageBased;
-    max_radius = float(nx.diameter(G_d, weight="length")) / (math.ceil(k / 2))
+    max_radius = float(graphutil.diameter(G_d, weight="length"))# / (math.ceil(k / 2))
     a = 0; b = max_radius; radius = 0; centers = [];
     while (b - a > epsilon):
         radius = (b + a) / 2
@@ -247,7 +247,7 @@ def radiusBinarySearch(G, G_d, candidates, k, epsilon=50, distribution_alg=None,
     return (radius, centers)
 def radiusBinarySearch_EdgeWeights(G, G_d, candidates, k, edge_value_weights,
                                    first_station=None, epsilon=50, default_edge_weight=1, debug=False):
-    max_radius = float(nx.diameter(G_d, weight="length")) / (math.ceil(k / 2))
+    max_radius = float(graphutil.diameter(G_d, weight="length"))# / (math.ceil(k / 2))
     a = 0; b = max_radius; radius = 0; centers = [];
     while (b - a > epsilon):
         radius = (b + a) / 2

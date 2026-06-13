@@ -95,17 +95,17 @@ def fixTripEdges(base_net, net, stations_edges, output_filepath, trips=None,
         for out_edge in to_node.getOutgoing():
             if (out_edge.getToNode().getID() == from_id):
                 rev_st_edge = out_edge.getID(); break;
-        if rev_st_edge == None:
-            raise Exception(f"No reverse edge found for edge '{st_edge}'")
-        #print(f"--  REVERSE: {rev_st_edge}")
-        rev_edge = base_net.getEdge(rev_st_edge)
-        #rev_edge_len = float(rev_edge.getLength())
-        first_id = graphutil.getRoadIDFromNodes(to_id, entry_id)
-        #first_len = float(net.getEdge(first_id).getLength())
-        #second_id = graphutil.getRoadIDFromNodes(entry_id, from_id)
-        #second_len = float(net.getEdge(second_id).getLength())
-        #len_dif = edge_len - (first_len + second_len)
-        targets[rev_st_edge] = first_id
+        #if rev_st_edge == None:
+            #raise Exception(f"No reverse edge found for edge '{st_edge}'")
+        if rev_st_edge is not None:
+            rev_edge = base_net.getEdge(rev_st_edge)
+            #rev_edge_len = float(rev_edge.getLength())
+            first_id = graphutil.getRoadIDFromNodes(to_id, entry_id)
+            #first_len = float(net.getEdge(first_id).getLength())
+            #second_id = graphutil.getRoadIDFromNodes(entry_id, from_id)
+            #second_len = float(net.getEdge(second_id).getLength())
+            #len_dif = edge_len - (first_len + second_len)
+            targets[rev_st_edge] = first_id
     ## Replace
     if trips.xml_tree != None: tree = trips.xml_tree;
     elif routes_tree != None: tree = routes_tree;

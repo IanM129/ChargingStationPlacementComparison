@@ -44,8 +44,11 @@ os.chdir(MAIN_DIR)
 
 
 RANDOM_STATIONS = False
-def stationDistribution(G, G_d, k, output_path, debug=False):
+def stationDistribution(G, base_G_d, k, output_path, debug=False, already_chosen=None):
+    G_d = copy.deepcopy(base_G_d)
     candidates = graphing.calcCandidates(G_d, detailed_graph=True)
+    if already_chosen is not None and len(already_chosen) > 0:
+        candidates = candidates - already_chosen
     ## Charging stations
     print("-- Station distribution algorithm (" +
           ("random" if RANDOM_STATIONS else "binary search") +
@@ -150,7 +153,7 @@ if __name__ == "__main__":
     translator = GraphTranslator(base_G)
     ## Other
     global network_diameter
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     suffixes = [("_" + n) for n in agent_colors]
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
@@ -188,10 +191,22 @@ if __name__ == "__main__":
     writeChargeData(charge_data, output_path + "/charge_data.xml")
     ## Station distribution
     stations = []; dist_radius = []; all_stations = [];
+    already_chosen = set();
     for a in range(AGENT_COUNT):
-        st, dr = stationDistribution(base_G, base_G_d, K, output_path)
+        st, dr = stationDistribution(base_G, base_G_d, K, output_path, already_chosen=already_chosen)
+        already_chosen.update(st)
         # Station info from detailed edges
-        st = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, prices[a], suffix=suffixes[a]) for s in st])
+        stations_ids = []
+        for st_d in st:
+            from_node, to_node = graphutil.getNodesOfDetailedRoad(st_d)
+            if base_G.has_edge(from_node, to_node):
+                edge_id = base_G[from_node][to_node]["id"]
+            else:
+                edge_id = base_G[to_node][from_node]["id"]
+            stations_ids.append(edge_id)        
+        # Station info from detailed edges
+        #st = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, prices[a], suffix=suffixes[a]) for s in st])
+        st = StationInfoDataset([StationInfo(s, STATION_CAPACITY, prices[a], suffix=suffixes[a]) for s in stations_ids])
         stations.append(st); dist_radius.append(dr);
         all_stations.extend(st.arr)
         print("-- " + str(agent_colors[a].capitalize()) + " stations:", stations[a].printEdges())

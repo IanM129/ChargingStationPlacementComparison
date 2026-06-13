@@ -78,6 +78,13 @@ def calcStationStopDistance(wait_queue_size, vehicle_length, min_gap, queue_park
     offset = approach_padding;
     if wait_queue_size > 0: offset += calcVehicleQueueLength(vehicle_length, min_gap, wait_queue_size)
     return offset
+def getStationStopDistance(station_info, default, approach_padding=None):
+    if approach_padding is None:
+        global approach_padding_g; approach_padding = approach_padding_g;
+    distance = approach_padding
+    if station_info.stop_distance is None: distance += default;
+    else: distance += station_info.stop_distance;
+    return distance
 
 def getReverseEdge(edge_id):
     if '+' in edge_id:
@@ -338,8 +345,7 @@ def addStationsToNetwork(net, stations_dataset, #: StationInfoDataset,
         stations_tree.write(output_path + "/stations.add.xml")
         writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
                    temp_folder=output_path)
-    else:
-        return (nodes_tree, edges_tree, stations_tree)
+    return (nodes_tree, edges_tree, stations_tree)
 def appendStationsToNetwork(net, stations_dataset, # : StationInfoDataset,
                             nodes_tree, edges_tree, stations_tree,
                             output_path="", write=True,
@@ -377,8 +383,7 @@ def appendStationsToNetwork(net, stations_dataset, # : StationInfoDataset,
         stations_tree.write(output_path + "/stations.add.xml")
         writeToXML(nodes_tree, edges_tree, output_path + "/net.net.xml",
                    temp_folder=output_path)
-    else:
-        return (nodes_tree, edges_tree, stations_tree)
+    return (nodes_tree, edges_tree, stations_tree)
 
 
 def removeStationLeftTurns_connXML(net_xml_filepath, filepath, stations, write=True, delete=True):
@@ -403,6 +408,37 @@ def removeStationLeftTurns_connXML(net_xml_filepath, filepath, stations, write=T
         result = call(cmnd, stdout=DEVNULL, stderr=DEVNULL)
         if delete: os.remove(filepath);
         
+
+def updateStationsLanePos(net, stations_tree):
+    station_start_pos = {}
+    for el in stations_tree.getroot().findall("chargingStation"):
+        lane_id = el.get("lane")
+        length = net.getLane(lane_id).getLength()
+        sttn_id = el.get("id")
+        startPos = float(el.get("startPos"))
+        endPos = float(el.get("endPos"))
+        if endPos > length:
+            # Adjust endPos and startPos
+            delta = endPos - length;
+            endPos = length;
+            startPos = float(el.get("startPos"))
+            startPos -= delta
+            el.set("endPos", str(endPos));
+            el.set("startPos", str(startPos));
+            # Adjust pos for parking area
+            park_id = el.get("parkingArea")
+            park_el = stations_tree.getroot().find(f"parkingArea[@id='{park_id}']")
+            park_el.set("endPos", str(endPos))
+            park_el.set("startPos", str(startPos))
+            # Adjust pos for wait queue area
+            wait_id = "pcsWait_" + park_id[11:-2]
+            wait_el = stations_tree.getroot().find(f"parkingArea[@id='{wait_id}']")
+            if wait_el is not None:
+                wait_endPos = float(wait_el.get("endPos")) - delta
+                wait_el.set("endPos", str(wait_endPos))
+        station_start_pos[sttn_id] = startPos
+    return station_start_pos
+            
 
 """
 #### OBSOLETE
