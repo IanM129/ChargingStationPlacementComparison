@@ -285,7 +285,7 @@ def nodesConnected(G, a, b):
 
 ## Insert node
 def insertNode(G, start_id, end_id, name="", bidirectional=True,
-               offset=0.5, absolute_offset=-1, calc_pos=True):
+               offset=0.5, absolute_offset=-1, calc_pos=True, calc_internal=False):
     if not nodesConnected(G, start_id, end_id):
         raise Exception(f"Nodes ({start_id}, {end_id}) are not directly connected (aren't neighbors).")
     # Name
@@ -298,26 +298,69 @@ def insertNode(G, start_id, end_id, name="", bidirectional=True,
         len_a = absolute_offset; len_b = full_length - absolute_offset;
     else:
         len_a = full_length * offset; len_b = full_length - len_a;
+    attrs = {name:{}}
+    # Save edge id
+    edge_id = G[start_id][end_id]["id"]
+    attrs[name]["edge_id"] = edge_id
     # Positions
     if calc_pos:
         start_x, start_y = G.nodes[start_id]["pos"]; end_x, end_y = G.nodes[end_id]["pos"];
         dif = (end_x - start_x, end_y - start_y)
         ratio = (dif[0] / full_length, dif[1] / full_length)
         pos = (start_x + (len_a * ratio[0]), start_y + (len_a * ratio[1]))
-
+        if name not in attrs: attrs[name] = {};
+        attrs[name]["pos"] = pos
+    # Internal
+    if calc_internal:
+        int_lens = {}; int_lens[start_id] = {};
+        int_lens[start_id][end_id] = 0.0;
+        if bidirectional:
+            int_lens[end_id] = {};
+            int_lens[end_id][start_id] = 0.0
+        if name not in attrs: attrs[name] = {};
+        attrs[name]["intLens"] = int_lens;
+        # Update existing
+        for prev_node in G.nodes[start_id]["intLens"]:
+            if end_id in G.nodes[start_id]["intLens"][prev_node]:
+                last_val = G.nodes[start_id]["intLens"][prev_node][end_id]
+                G.nodes[start_id]["intLens"][prev_node][name] = last_val
+                del G.nodes[start_id]["intLens"][prev_node][end_id]
+        G.nodes[end_id]["intLens"][name] = {}
+        next_nodes = set(G.nodes[end_id]["intLens"][start_id].keys())
+        for next_node in next_nodes:
+            last_val = G.nodes[end_id]["intLens"][start_id][next_node]
+            G.nodes[end_id]["intLens"][name][next_node] = last_val
+            del G.nodes[end_id]["intLens"][start_id][next_node]
+        del G.nodes[end_id]["intLens"][start_id]
+        if bidirectional:
+            for prev_node in G.nodes[end_id]["intLens"]:
+                if start_id in G.nodes[end_id]["intLens"][prev_node]:
+                    last_val = G.nodes[end_id]["intLens"][prev_node][start_id]
+                    G.nodes[end_id]["intLens"][prev_node][name] = last_val
+                    del G.nodes[end_id]["intLens"][prev_node][start_id]
+            G.nodes[start_id]["intLens"][name] = {}
+            next_nodes = set(G.nodes[start_id]["intLens"][end_id].keys())
+            for next_node in next_nodes:
+                last_val = G.nodes[start_id]["intLens"][end_id][next_node]
+                G.nodes[start_id]["intLens"][name][next_node] = last_val
+                del G.nodes[start_id]["intLens"][end_id][next_node]
+            del G.nodes[start_id]["intLens"][end_id]
     # --
-    if calc_pos: G.add_node(name, pos=pos)
-    else: G.add_node(name)
+    G.add_node(name)
+    nx.set_node_attributes(G, attrs)
     G.remove_edge(start_id, end_id)
-    G.add_edge(start_id, name, length=len_a)
-    G.add_edge(name, end_id, length=len_b)
+    G.add_edge(start_id, name, length=len_a, id=edge_id + "_0")
+    G.add_edge(name, end_id, length=len_b, id=edge_id + "_1")
+    ## Backwards
     if (bidirectional) and (G.has_edge(end_id, start_id)):
+        edge_id = G[end_id][start_id]["id"]
         G.remove_edge(end_id, start_id)
-        G.add_edge(end_id, name, length=len_b)
-        G.add_edge(name, start_id, length=len_a)
+        G.add_edge(end_id, name, length=len_b, id=edge_id + "_0")
+        G.add_edge(name, start_id, length=len_a, id=edge_id + "_1")
     return
 def insertNodes(G, start_id, end_id, count, name="", bidirectional=True,
-                relative_lengths : list=None, absolute_lengths : list=None, length=None, calc_pos=True):
+                relative_lengths : list=None, absolute_lengths : list=None, length=None,
+                calc_pos=True):  #calc_internal=False
     if count < 2: return;
     if not nodesConnected(G, start_id, end_id):
         raise Exception(f"Nodes ({start_id}, {end_id}) are not directly connected (aren't neighbors).")

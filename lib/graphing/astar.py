@@ -88,7 +88,15 @@ def edgePath(G, start, target, weight="length", use_internal=True):
             data = G.get_edge_data(to_node, n)
             cost = float(data[weight])
             if use_internal:
-                if n not in int_lens[to_node][from_node]: continue;
+                try:
+                    if n not in int_lens[to_node][from_node]: continue;
+                except Exception as e:
+                    print("n:", n)
+                    print("to_node:", to_node)
+                    print("from_node:", from_node)
+                    print(from_node,"->",to_node,"->",n)
+                    print(int_lens)
+                    raise e
                 cost += float(int_lens[to_node][from_node][n])
             yield ((to_node, n), cost)
     def spatial_heuristic(edge_a, edge_b):

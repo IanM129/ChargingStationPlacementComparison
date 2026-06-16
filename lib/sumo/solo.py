@@ -168,7 +168,7 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
                                                                network_filepath=cache_data_path + "/base_net.net.xml",
                                                                vehicle_length=EV_len, min_gap=min_gap,
                                                                wait_queue_size=WAIT_QUEUE_SIZE,
-                                                                wait_queue_parking=QUEUE_PARKING)
+                                                               wait_queue_parking=QUEUE_PARKING)
     #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
     parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
                                                  cache_data_path + "/del_left_turns.con.xml",
@@ -409,7 +409,8 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
             # Update dict (found spot/started charging)
             for vehID in start_charging_this_step:
                 going_to_charge.pop(vehID, None)
-                charge_target = min(max(traciutil.calcNeededChargeLeft(vehID, trips[vehID]), charging_min[vehID]), max_charge) # padding so it doesn't need to go recharge
+                charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
+                charge_target = min(max(traciutil.calcNeededChargeLeft(vehID, trips[vehID]), charge + charging_min[vehID]), max_charge)
                 charging[vehID] = (start_charging_this_step[vehID], charge_target)
 
         ## Newly added

@@ -85,7 +85,7 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
 
 
 ####
-def removeFromSimulationVars(vehicles : set, stations, params):
+def removeFromSimulationVars(vehicles : set):
     global sim_EVs
     sim_EVs -= vehicles;
     global not_charged, charging
@@ -96,8 +96,8 @@ def removeFromSimulationVars(vehicles : set, stations, params):
             target_si.releaseSpot(park_side)
             charging.pop(vehID, None);
 #### Sumo
-def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts, stations, chosen_station,
-                results, output_path, output_subfolder="solo", coverage_G_d=None,
+def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chosen_station,
+                results, output_path, output_subfolder="solo", charge_data=None, coverage_G_d=None,
                 params=None, add_stations_to_net=True, debug=False):
     if not params: params = Parameters.default();
     CPU_THREADS = params["sim.cpuThreads"]
@@ -142,21 +142,28 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
 #### STATION WRITE
     if add_stations_to_net:
         ## Write stations to XML
-        parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
-                                           write=True, output_path=cache_data_path,
-                                           network_filepath=cache_data_path + "/base_net.net.xml",
-                                           vehicle_length=EV_len, min_gap=min_gap,
-                                           wait_queue_size=WAIT_QUEUE_SIZE,
-                                            wait_queue_parking=QUEUE_PARKING)
+        _, _, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
+                                                       write=True, output_path=cache_data_path,
+                                                       network_filepath=cache_data_path + "/base_net.net.xml",
+                                                       vehicle_length=EV_len, min_gap=min_gap,
+                                                       wait_queue_size=WAIT_QUEUE_SIZE,
+                                                        wait_queue_parking=QUEUE_PARKING)
         #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
         parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
                                                      cache_data_path + "/del_left_turns.con.xml",
                                                      stations,
                                                      delete=False)
+    else:
+        stations_tree = ET.parse(cache_data_path + "/stations.add.xml")
     STOP_DISTANCE = parkingNetGen.calcStationStopDistance(WAIT_QUEUE_SIZE, EV_len, min_gap, QUEUE_PARKING)
     SEARCH_REVERSE = params["station.fillReverse"]
     # Load modified net
     net = sumolib.net.readNet(cache_data_path + "/net.net.xml")
+    # Update station lane positions
+    sttn_start_pos = parkingNetGen.updateStationsLanePos(net, stations_tree)
+    stations_tree.write(cache_data_path + "/stations.add.xml")
+    for si in stations:
+        si.stop_distance = float(sttn_start_pos[si.getID()])
 #### POST STATION WRITE
     # Induction loop
     xmlOut.config_createInductionLoopOutputFile(net.getEdges(), xml_filepath=cache_data_path + "/output.add.xml",
@@ -190,11 +197,13 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
     global sim_EVs
     sim_EVs = set(); manually_added_last_step = set();
     EVs_count = 0; total_veh_count = 0;
+    vaporized = set();
     set_need_to_charge_cnt = 0;
     sttn_util_rate = {}
     global not_charged, charging
     not_charged = {}; charging = {};
     ev_ntc_charge = {};
+    charging_min = {}
     if VISUALIZE:
         veh_colors = {}
     for sttn_edge_id, _ in stations.listIDss():
@@ -226,7 +235,7 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
         ## Arrived
         # -> remove arrived EVs
         arrived = set(data_sim.get(tc.VAR_ARRIVED_VEHICLES_IDS, []))
-        removeFromSimulationVars(arrived, stations, params)
+        removeFromSimulationVars(arrived)
 
         #################### VEHICLE STEP
         start_charging_this_step = {};
@@ -252,7 +261,14 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
                         traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
                     # > Stop and wait in front of the charging spots; creates jam at the entrance if too many vehicles in queue
                     else:
-                        traci.vehicle.setStop(vehID, target_si.redge_id, pos=STOP_DISTANCE);
+                        try:
+                            traci.vehicle.setStop(vehID, target_si.redge_id,
+                                                  pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
+                        except Exception as e:
+                            removeFromSimulationVars({vehID})
+                            vaporized.add(vehID)
+                            traci.vehicle.remove(vehID)
+                            continue;
                     target_si.addToWaiting(vehID);
                     arrived_to_station_this_step.add(vehID);
         # Update sets and dicts
@@ -263,8 +279,9 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
         for vehID in charging:
             if traci.vehicle.isStopped(vehID):
                 charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
-                if charge >= ev_ntc_charge[vehID]:
-                    target_si, park_side = charging[vehID]
+                charge_target = charging[vehID][1]
+                if charge >= charge_target and charge >= ev_ntc_charge[vehID]:
+                    target_si, park_side = charging[vehID][0]
                     target_si.releaseSpot(park_side)
                     traci.vehicle.resume(vehID)
                     done_charging_this_step.add(vehID)
@@ -300,7 +317,9 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
         # Update dict (found spot/started charging)
         for vehID in start_charging_this_step:
             not_charged.pop(vehID, None);
-            charging[vehID] = start_charging_this_step[vehID]
+            charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"));
+            charge_target = min(charge + charging_min[vehID], max_charge)
+            charging[vehID] = (start_charging_this_step[vehID], charge_target)
 
         ## Newly added
         departed = set(data_sim.get(tc.VAR_DEPARTED_VEHICLES_IDS, []))
@@ -310,17 +329,21 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
             if vehID in chosen_station.keys():
                 sim_EVs.add(vehID); EVs_count += 1;
                 ## Set charge and amount to charge
-                if vehID in charge_amounts:
-                    ev_ntc_charge[vehID] = charge_amounts[vehID]
+                if charge_data is not None and vehID in charge_data:
+                    need_to_charge_level, set_charge, charge_min = charge_data[vehID]
+                    ev_ntc_charge[vehID] = float(need_to_charge_level * max_charge)
                 else:
                     # Set amount to charge (starts with 50% and needs to charge to 50% + [250,750]
                     need_to_charge_amount = random.uniform(0.25, 0.75) * 1000.0
                     ev_ntc_charge[vehID] = float(min((0.5 * max_charge) + need_to_charge_amount, max_charge))
+                    set_charge = str(0.5 * max_charge)
+                    charge_min = need_to_charge_amount
                 # Set battery charge on start
+                charging_min[vehID] = float(charge_min)
+                traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(set_charge))
                 set_need_to_charge_cnt += 1
-                traci.vehicle.setParameter(vehID, "device.battery.chargeLevel", str(0.5 * max_charge))
                 ## Charging setup
-                target_si = stations.getByEdgeID(chosen_station[vehID])
+                target_si = chosen_station[vehID]
                 # Set stop at charging station (first stop at the wait queue, charge when spot available)
                 #if QUEUE_PARKING:
                 #    # > Stop at the waiting queue parking
@@ -405,7 +428,8 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, charge_amounts,
     results.setTripData(trip_stats)
     
     ## Get flow at edges
-    edge_stats = xmlOut.getEdgeLoopStats(cache_output_path + "/loop.out.xml",
+    edge_stats = xmlOut.getEdgeLoopStats(base_net,
+                                         cache_output_path + "/loop.out.xml",
                                          max_flow=True)
     edge_data = xmlOut.getEdgeDataStats(cache_output_path + "/edgeData.out.xml")
     results.setEdgeData(edge_stats, edge_data)

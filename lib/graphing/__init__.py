@@ -127,7 +127,8 @@ def lineGraph(G):
     
 
 #### Graph utility
-def discretizeGraph(G, max_distance, add_min=0, add_max=-1, roads_only=False):
+def discretizeGraph(G, max_distance, add_min=0, add_max=-1,
+                    roads_only=False, add_internal=False):
     edges = set()
     for edge in G.edges():
         rev_edge = edge[::-1]
@@ -144,7 +145,7 @@ def discretizeGraph(G, max_distance, add_min=0, add_max=-1, roads_only=False):
         node_count = max(math.floor(length / max_distance), add_min)
         if add_max > 0: node_count = min(node_count, add_max)
         if node_count == 1:
-            util.insertNode(G, edge[0], edge[1])
+            util.insertNode(G, edge[0], edge[1], calc_internal=add_internal)
         elif node_count > 1:
             util.insertNodes(G, edge[0], edge[1], node_count, length=length)
     return
@@ -195,14 +196,15 @@ def calcGraphSpaceRadius(G, start_node, radius, nodes_only=False) -> list[EdgePo
 ## -> vertices + edge interior points where distances balance
 ## ----> for now add vertices created on edges as candidates
 ##       (so we dont place stations on intersections)
-def calcCandidates(G, detailed_graph=True):
+def calcCandidates(G, detailed_graph=True, add_internal=False):
     candidates = []
     # Add vertices
     #for node in G.nodes():
     #    candidates.append(node)
     og_verts = set(G.nodes())
     # Add points on edges
-    discretizeGraph(G, 50, add_min=1, add_max=1, roads_only=detailed_graph)
+    discretizeGraph(G, 50, add_min=1, add_max=1,
+                    roads_only=detailed_graph, add_internal=add_internal)
     candidates = set(G.nodes()) - og_verts
     return candidates
 

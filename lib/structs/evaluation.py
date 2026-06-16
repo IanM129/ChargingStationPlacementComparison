@@ -374,8 +374,11 @@ class EvaluationDataset:
             for stat in stats:
                 if stat == "simDuration": continue;
                 # Normalize
-                if stat == "totalCoverage": val = float(vals[stat]) / float(res.networkDiameter);  # [0, 1]
-                else: val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
+                if stat == "totalCoverage":
+                    val = float(vals[stat]) / float(res.networkDiameter);  # [0, 1]
+                else:
+                    if max_vals[stat] > 0.0:
+                        val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
                 coeff = float(params["reward." + stat])
                 # Invert if minimizing or coefficient is negative
                 if (isMinOrMax(stat) == -1) or (coeff < 0):

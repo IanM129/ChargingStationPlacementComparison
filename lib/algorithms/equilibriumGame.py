@@ -92,7 +92,7 @@ def preprocess(base_G, data_path, network_name, output_path, trips, k, params=No
 
 
 ####
-def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDataset, charge_amounts, stations, cost_function,
+def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDataset, charge_data, stations, cost_function,
                        results, output_path, output_subfolder="solo", params=None, debug=False):
     if not params: params = Parameters.default();
     CPU_THREADS = params["sim.cpuThreads"]
@@ -147,7 +147,7 @@ def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDa
                               trips=trips)
     for trip in trips.values():
         for i in range(len(trip.destinations)):
-            trip.destinations[i] = translator.IDToEdge(trip.destinations[i]); #graphutil.TupleEdge(*(translator.IDToEdge(trip.destinations[i])))
+            trip.destinations[i] = translator.IDToEdge(trip.destinations[i]);
     trips_nx = TripNXDataset.fromTripDataset(G, trips)
     
 #### EQUILIBRIUM LOOP
@@ -156,12 +156,14 @@ def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDa
     congestion = {}
     trip_dict = copy.deepcopy(trips_nx.dict)
     history = deque(); check_back = 3;
-    for st in stations: congestion[st.edge_id] = 0;
+    for st in stations:
+        congestion[st.edge_id] = 0;
     for i in range(10000):
         update = {};
         ## Users select best station
         for vehID in EVs:
             chosen, new_trip = cost_function(G, vehID, trips_nx[vehID], stations, congestion, translator);  # cost function
+            chosen = chosen
             if (vehID not in chosen_station) or (chosen_station[vehID] != chosen):
                 update[vehID] = (chosen, new_trip);
         ## Check if equilibrium
@@ -169,9 +171,9 @@ def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDa
         ## Update congestion
         for vehID in update:
             if vehID in chosen_station:
-                congestion[chosen_station[vehID]] -= 1;
+                congestion[chosen_station[vehID].edge_id] -= 1;
             chosen_station[vehID] = update[vehID][0];
-            congestion[update[vehID][0]] += 1;
+            congestion[update[vehID][0].edge_id] += 1;
             trip_dict[vehID] = update[vehID][1];
         ## Check if done
         h = hash(tuple(chosen_station.values()))
@@ -199,12 +201,19 @@ def equilibriumGameRun(base_net, base_G, data_path, network_name, trips : TripDa
     for vehID in trip_dict:
         eval_trips[vehID] = trip_dict[vehID]
     # Run evaluation
-    results = sumoAssignedRun(base_net, G, data_path, network_name, eval_trips, charge_amounts, stations, chosen_station,
-                              results, output_path, output_subfolder="assigned",
-                              params=params, add_stations_to_net=False, debug=False)
+    for i in range(10):
+        try:
+            results = sumoAssignedRun(base_net, G, data_path, network_name, eval_trips, stations, chosen_station,
+                                      results, output_path, output_subfolder="assigned", charge_data=charge_data,
+                                      params=params, add_stations_to_net=False, debug=False)
+        except Exception as e:
+            results = None
+        if results is not None: break
+    if results is None:
+        raise Exception("Simulation failed to run 10 times in a row.")
     # Print results
     #visutil.printResults_general(results, params)
     #visutil.printResults_trips(results)
     #visutil.printResults_solo(results);
-    return results
+    return chosen_station, congestion, results
     

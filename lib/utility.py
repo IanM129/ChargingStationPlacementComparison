@@ -2,6 +2,8 @@ import math
 import random
 import xml.etree.ElementTree as ET
 
+import lib.data_management as dm
+
 
 #### Math
 def clamp(val, smallest, largest):

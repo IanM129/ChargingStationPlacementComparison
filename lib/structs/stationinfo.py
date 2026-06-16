@@ -1,3 +1,4 @@
+import sys
 import math
 from collections import deque
 
@@ -57,7 +58,7 @@ class StationInfo:
         else:
             self.dnode_id = graphutil.getRoadIDFromNodes(node_t, node_f)
     @staticmethod
-    def fromDetailedEdge(net, dedge_id, total_capacity, price, suffix=""):
+    def fromDetailedEdge(dedge_id, total_capacity, price, suffix=""):
         edge_id = graphutil.translateDetailedRoad(dedge_id, as_tuple=False)
         s = StationInfo(edge_id, total_capacity, price, dedge_id=dedge_id, suffix=suffix);
         return s
@@ -174,7 +175,8 @@ class StationInfoDataset:
     def getByEdgeID(self, edge_id):
         for si in self.arr:
             if si.edge_id == edge_id: return si;
-        print(f"ERROR: No station found with edge id '{edge_id}'", file=sys.stderr);
+        raise Exception(f"ERROR: No station found with edge id '{edge_id}'")
+        #print(f"ERROR: No station found with edge id '{edge_id}'", file=sys.stderr);
         return None;
     # Overloads
     def __iter__(self):

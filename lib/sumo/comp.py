@@ -456,7 +456,8 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
             # Update dict (found spot/started charging)
             for vehID in start_charging_this_step:
                 going_to_charge.pop(vehID, None)
-                charge_target = min(max(traciutil.calcNeededChargeLeft(vehID, trips[vehID]), charging_min[vehID]), max_charge)
+                charge = float(traci.vehicle.getParameter(vehID, "device.battery.chargeLevel"))
+                charge_target = min(max(traciutil.calcNeededChargeLeft(vehID, trips[vehID]), charge + charging_min[vehID]), max_charge)
                 charging[vehID] = (start_charging_this_step[vehID], charge_target)
 
         ## Newly added

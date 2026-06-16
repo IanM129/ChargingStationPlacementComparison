@@ -4,7 +4,7 @@ import numpy as np
 import networkx as nx
 
 from lib.globalVars import ROAD_ID_SEPARATOR
-from lib.graphing.astar import edgePath_internalWeights
+from lib.graphing.astar import edgePath
 import lib.graphing.utility as util
 
 from lib.structs.graphtranslator import GraphTranslator
@@ -35,7 +35,7 @@ class TripNX:
         path = []
         self.destinationIndeces = [0]
         for i in range(1, len(self.destinations)):
-            p = edgePath_internalWeights(self.G, self.destinations[i-1], self.destinations[i])
+            p = edgePath(self.G, self.destinations[i-1], self.destinations[i])
             path.extend(p[:-1])
             if p[-1] != self.destinations[i]: path.append(p[-1]);
             self.destinationIndeces.append(len(path))
@@ -53,10 +53,10 @@ class TripNX:
         #print("before:", path_before)
         #print("after:", path_after)
         #if idx > 0:
-        #    path_front = edgePath_internalWeights(self.G, self.destinations[idx-1], edge)
+        #    path_front = edgePath(self.G, self.destinations[idx-1], edge)
         #else: path_front = [];
         #if idx < len(self.destinations):
-        #    path_back = edgePath_internalWeights(self.G, edge, self.destinations[idx])
+        #    path_back = edgePath(self.G, edge, self.destinations[idx])
         #else: path_back = [];
         #self.path = path_before + path_front + path_back + path_after
         print(self.path)
@@ -72,8 +72,8 @@ class TripNX:
         path_after = self.path[self.destinationIndeces[idx]:]
         #print(f"before [{len(path_before) if path_before is not None else '/'}]:", path_before)
         #print(f"after [{len(path_after) if path_after is not None else '/'}]:", path_after)
-        path_front = edgePath_internalWeights(self.G, self.destinations[idx-1], edge)[:-1]
-        path_back = edgePath_internalWeights(self.G, edge, self.destinations[idx])[:-1]
+        path_front = edgePath(self.G, self.destinations[idx-1], edge)[:-1]
+        path_back = edgePath(self.G, edge, self.destinations[idx])[:-1]
         #print(f"front [{len(path_front) if path_front is not None else '/'}]:", path_front)
         #print(f"back [{len(path_back) if path_back is not None else '/'}]:", path_back)
         self.path = path_before + path_front + path_back + path_after
