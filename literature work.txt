@@ -82,6 +82,9 @@ each time the algorithm tests a set of k locations:
 	4. search for best placement configuration
 
 
+- Xiong Y. et al; Optimal Electric Vehicle Fast Charging Station Placement Based on Game Theoretical Framework
+First, the queuing condition in charging stations is considered because the queuing experience in charging stations is proven to be significant on the adoption of EVs
+
 
 
 

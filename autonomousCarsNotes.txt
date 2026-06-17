@@ -1,0 +1,502 @@
+These smart cars are au-
+tonomous in that they support features such as sensing the
+surrounding environment, making quick and timely decisions,
+navigating without human input on the road, maintaining
+safe mobility patterns, performing all kinds of maneuvers,
+and cruise control, to name a few.
+
+
+
+[] An autonomous car refers
+to a computer-controlled car that can guide itself, familiarize
+itself with surroundings, make decisions, and fully operate
+without any human interaction
+
+
+
+The primary drivers behind the
+emergence of autonomous cars include: the need for driver and
+driving safety, growth in population, expanding infrastructure,
+increase in the number of vehicles, the need for efficient time
+management, and resource utilization and optimization.As the
+human population grows and the number of cars increases, this
+creates a stressful impact on our transportation infrastructure,
+ranging from roads and parking spaces to fuel stations (for
+fuel engines vehicles) and charging stations (for electric and
+hybrid vehicles)
+
+
+
+
+> SAFETY
+To minimize human errors and
+reduce life-threatening situations on the road, alternative tech-
+nologies such as connected cars and autonomous cars are being
+explored.
+Autonomous cars are poised to reduce traffic accidents that
+may occur due to inattentive drivers. However, an attentive
+human driver will have strong capabilities of driving safely
+in unforeseen environments as compared to a "machine."
+Therefore, consumers may seem reluctant to put their faith in
+a "machine" when deciding on circumstances where their lives
+are at stake
+ For instance, a human driver can become drowsy
+during a long drive, whereas software does not. On the other
+hand, complex software has its own traditional shortcomings
+such as code defects, and non-traditional shortcomings such
+as vulnerabilities and/or exploits
+However, even with the use of
+advanced technologies, human behavior and driving patterns
+continue to play a pivotal role in safe driving
+
+
+
+[] The idea of autonomous
+cars started with "phantom autos" in the 1920s, where the
+car was controlled through a remote control device [3]
+
+[] It is important to draw a clear line between two conflicting
+terms: the automated car and the autonomous car
+
+
+> COMMUNICATION
+ For instance,
+the connected car uses a vehicular ad hoc network (VANET)
+technology where an on-board unit (OBU) is installed on the
+vehicle; and through the dedicated short-range communication
+(DSRC) standard protocol [7], [8], vehicles can communicate
+with each other when they are within their communication
+range.
+The applications and services provided by the VANET
+technology and its successor VANET-based clouds [9], [10]
+include, but are not limited to, accident warning, crash notifica-
+tion, road construction, traffic signals, ambulance approaching
+notification, excessive speed, black ice on the pavement, fog
+warning, traffic information, Internet-on-the-move, movies-on-
+demand, location-based services, cooperative cruise control,
+and maneuver control
+ According to the IEEE 802.11p
+standard, vehicles share their location information such as
+position, speed, acceleration, and other control information
+with their neighbors. Therefore, inter-vehicular communica-
+tion requires fine-grained input from other technologies such
+as an accurate positioning mechanism, vehicular sensory infor-
+mation, and efficient and accurate navigation. In this context,
+world-leading auto manufacturers (along with academic re-
+search efforts) have been developing and incorporating a wide
+range of new features in their high-end cars.
+In addition to environmental awareness, the autonomous car
+communicates to several other entities that include roadside
+infrastructure, neighbors (autonomous cars and contacted ve-
+hicles), registration and management authorities, and service
+providers
+Connected car
+technology is realized through Vehicular Ad hoc NETworks
+(VANETs) where vehicles on the road communicate with
+each other, with the infrastructure and with the environment
+through different underlying communication technologies such
+as, but not limited to, IEEE 802.11p, WiFi, LTE, visible light
+communication (VLC), and so on.
+We note that traditional
+cars use the Controller Area Network (CAN) technology for
+communication among different ECUs.
+On the other hand, with the removal of human involvement,
+autonomous cars have to make autonomous decisions based on
+what is best in a particular circumstance. This characteristic
+also requires the autonomous car to be more connected to the
+surrounding environment and draw as much data as it can from
+neighbors, infrastructure, and the Internet to make the best de-
+cision. Therefore, communication is of pivotal importance for
+the autonomous car
+Connected vehicles and autonomous car technologies are
+often considered as separate technologies but in fact they are
+orthogonal to each other. Efficient coupling between these two
+technologies reinforce their synergies towards better realiza-
+tion of the intelligent transportation system. Vehicle-to-Vehicle
+(V2V) and Vehicle-to-Infrastructure (V2I) communications
+enable cars to cooperatively communicate with each other and
+with infrastructure hardware devices such as RSUs to support
+a plethora of applications [73], [74], [75]. The cooperation
+among vehicles and infrastructure can be extended to different
+applications such as cooperative platooning applications [76]
+where cars exchange their mobility data to enable platoon-
+ing, and cooperative traffic information system where cars
+share their scheduled beacons to construct traffic views [77].
+ For in-
+stance, cooperative state estimation with trajectory information
+sharing among autonomous cars can make navigation more
+effective and smoother as well as help autonomous cars if
+one of its subsystems fails. Other applications of cooperative
+communication among autonomous cars include cooperative
+localization through optimized sensor configuration and mo-
+tion coordination [78]
+This work considered LTE instead of other exist-
+ing technologies to reduce the communication delay among
+vehicles
+ Visible Light Communication
+(VLC) is also used in connected car environment with perfect
+line of sight where transmitters and receivers are installed in
+the headlights and tail lights of the cars [80]. VLC uses visible
+light for both illumination and transmission of data in wireless
+networks. However, VLC is still in its infancy and efficient
+channel modeling is essential for it to meet the requirements of
+connected car and autonomous car applications.
+!!!!
+In essence, connected cars lever-
+age both cars and infrastructure as communication entities.
+Furthermore, recently the integration of connected car with
+cloud infrastructures has also resulted in new applications that
+use cloud services [9].
+!!!!
+It is imperative that the autonomous car
+leverages the benefits of cloud in different ways such as the ex-
+ecution of sensor fusion algorithms, generating detailed map,
+system diagnostics, history catalog, and other resource-hungry
+machine and deep learning algorithms [14], [93]. However, the
+communication delay incurred by the communication between
+the autonomous car and the RSU and/or cloud infrastructure
+make this approach less attractive for critical functions of
+the autonomous car.
+Therefore, the role of
+the cloud infrastructure, at least at the moment, is limited
+to value-added services and long-term behavior analysis of
+the autonomous car whereas decision-making is carried out
+locally at autonomous car in real time. In addition to cloud
+computing, fog computing that extends the cloud paradigm to
+the edges of the network, may be leveraged to provide real-
+time services requiring low delays [94].
+
+
+
+
+> POLLUTION
+However,
+this rate of adoption of vehicles also increases environmental
+pollution and traffic congestion [14]. In 2010, our planet
+was host to 1 billion vehicles, and this number is expected
+to double by 2030; this creates an urgent need for more
+resources and infrastructure support to host this vast increase
+in the number of vehicles [15]. According to the World Health
+Organization (WHO), around 1.25 million people die every
+year due to road accidents [16], and WHO has projected that
+the death toll could rise to 1.8 million by 2030 [15].
+
+
+
+In contrast, the automatic transmission
+system in cars took a long span of five decades for market
+penetration, because of its high cost. After almost five decades,
+the automatic transmission system’s quality was improved and
+the cost reduced to such an extent that it became viable to use
+in most automobiles. The same arguments hold for electric and
+hybrid vehicles [21].
+
+
+
+However, at the core of the autonomous car design is the major
+requirement of being able to function autonomously. In other
+words, the autonomous car requires features that will enable
+it to foresee, decide, and move safely and reliably according
+to some plan
+
+
+For an autonomous car to move from point A to point B, it
+needs to perform a series of steps: the car needs to perceive
+and make itself aware of the surrounding environment, plan
+the trip, navigate, and make controlled movements on the road.
+The primary steps responsible for executing the aforemen-
+tioned tasks in an autonomous car include:
+1) situational and environmental awareness;
+2) navigation and path planning; and
+3) maneuver control.
+
+
+
+
+
+
+
+
+> NAVIGATION / GUIDANCE
+Navigation or guidance is of paramount importance in an
+autonomous car, because its primary function is to enable the
+car to travel on the desired path. When the autonomous car is
+aware of its environment then it needs to plan its path based
+on the destination. With the help of navigation hardware such
+as the well-known global positioning system (GPS) module,
+the car generates a path between the current position and
+destination as a function of time
+. Finally, the car moves based on the
+path on the map that it has generated.
+Furthermore, the path is dynamically re-calculated in case
+of certain events such as road block, diversion, and so forth.
+Road networks are physically pre-defined
+and the autonomous car’s guidance system regularly checks
+the car’s movement against the calculated path
+During the course of its journey, the au-
+tonomous car must maintain different kinds of maneuvers such
+as lane keeping, bumper-to-bumper distance, sudden brakes,
+overtaking, and stopping at traffic lights. 
+The maps used by autonomous cars are different from the
+maps generated by traditional GPS systems. These maps use
+a lot of road details such as lane dimensions, distance from
+pedestrians, and curb height. To store all these details, an au-
+tonomous car needs enormous memory and processing power
+(the memory and power needed also are directly proportional
+to the length of the road)
+
+
+
+
+AUTONOMIC CARS’ MAJOR BENEFITS
+I. Improved Safety
+II. Increasing Revenue
+III. Ease of Use and Convenience
+IV. Improving traffic conditions
+V. Autonomous parking
+VI. Consumer centric experience
+
+Mobility-as-a-Service (MaaS) and car sharing are two
+of the promising applications made possible through au-
+tonomous cars without redundant human interactions. The
+MaaS paradigm [36] will save many consumer resources,
+including money, time, space, and even human resources
+(such as drivers). Autonomous cars can be used as a resource
+instead of owning a car, which will require not only a large
+sum of money upfront but also a driver and a space to
+park it. Furthermore, car sharing is a popular application
+among consumers today. However, with the emergence of
+autonomous cars, carpooling can become more efficient by
+utilizing autonomous car resources more effectively
+
+ By using
+autonomous cars for carpooling services, we can eliminate
+such costs. This change in perspective will not only create
+economic advantages, but also decrease air pollution caused
+by traffic situations in global metropolitan cities. It also creates
+enormous business opportunities and transforms the mindset
+of both consumers and service providers.
+
+
+
+> TRAFFIC CONDITIONS
+ Autonomous cars will increase per-vehicle
+occupancy and decrease the number of vehicles on the road,
+thereby improving traffic conditions. Furthermore, with human
+drivers, inter-vehicle distance is a strict parameter to maintain
+for safe driving. However, with autonomous cars, this distance
+will potentially decrease, thereby providing more space on
+the road. By carefully communicating with their counterparts,
+autonomous cars could perform intelligent fleet management,
+leading to reduced traffic jams on the roads. Additionally,
+autonomous cars can also help in adhering to traffic laws more
+accurately, thereby reducing the need for traffic police officers
+on the road.
+
+
+
+> FUEL EFFICIENCY
+!!!!!!!!
+From a different perspective, autonomous cars will also
+improve fuel efficiency by selecting the best routes [37], which
+will also decrease air pollution. Fuel efficiency is directly
+proportional to the way people drive. Different drivers behave
+differently behind the wheel. Some common driving behaviors
+include over-speeding, irregular driving, starting and stopping,
+and sudden braking that decrease fuel efficiency. In this case,
+the autonomous car can be programmed to use a fuel-efficient
+mode and avoid erratic driving behaviors that cause fuel ineffi-
+ciency. Coordination and communication among autonomous
+and connected cars will also help eliminate tailgating on the
+road and unnecessary braking situations.
+!!!!!!!
+
+
+
+
+
+
+
+
+
+> SOCIAL ACCEPTANCE
+othenbucher et al.
+[83] designed a social experiment where they hid the driver
+with a costume and installed fake LIDAR and other necessary
+equipment on the car to look like a real autonomous car. The
+experiment revealed that about 80% of the participants in the
+experiment believed that the car was driving itself. The goal of
+the study was to obtain data on user reaction to autonomous
+car which will eventually help autonomous car designers to
+design better interaction systems for users.
+
+
+Control in autonomous car is different from conventional
+control system. In case of autonomous car, different control
+systems must interact in autonomous car to deal with the un-
+predictable environment and thus-forth reaction of autonomous
+car to the environment [86]. In other words, the central
+control system of autonomous car depends on the context
+which advocates for an adaptive control system. However,
+knowledge of the context is essential for the control system
+to act accordingly.
+
+ Although this work only
+focuses on connected cars, such joint control-communication
+mechanism can enable the autonomous cars to react and adapt
+to different road environments in both platoons and individual
+autonomous cars.
+
+
+!!!!
+Cars that
+usually focus only on their local environment and do not take
+into account, what is going on around them, are referred to
+as "ego-vehicles" as they consider only their current status,
+speed, direction, and destination and so on [88
+!!!!
+. It is also
+worth noting that with the advancements in vehicular net-
+works and autonomous cars, the concept of ego-vehicle is
+slowly fading away because of the need of communication
+among autonomous cars and the environment
+
+
+Existing decision-making mechanisms in autonomous cars
+can be categorized into machine learning, deep learning, arti-
+ficial intelligence, multi-policy decision making, and Markov
+decision process [89], [90], [91], [92]. Although efforts
+have been made to make the decision-making process of
+autonomous cars reliable but there are too many external
+factors to address all the issues. Therefore, decision making
+needs to be addressed in a holistic way by the research
+community by taking into consideration the potential of inter-
+vehicular communication. As mentioned before, ego-motion
+of autonomous cars will hinder the growth of autonomous car
+technology. Therefore, inter-vehicle communication can play
+a crucial role for cooperative crowdsensing, crowd-perception,
+and neighbors’ behavior. In this context, the communicating
+nodes (autonomous cars, ordinary cars, and other entities such
+as pedestrians) will not only share information with each
+other, but also the perception and driving decision which will
+strengthen the capabilities of the decision-making process.
+The decisions made in such a cooperative manner will have
+global impact on the surrounding traffic rather than making
+the individual trip of an autonomous car secure
+
+
+
+
+
+Design and implementation issues:
+A. Cost
+B. Maps
+C. Software Complexity
+D. Simulation
+
+
+
+
+
+
+> SIMULATION
+One of the cheapest means of validation of a technology
+and/or design is simulation. Autonomous car designers are
+particularly interested in improving self-driving technology
+because after rolling out the technology, there is no margin
+for errors.
+However,
+reasonable efforts have been made to test autonomous cars’
+functionality through existing simulator tools that simulate
+different aspects of the autonomous cars, including mobility
+dynamics, path testing, fuel economy, path planning, and so
+forth [106], [107], [108], [109], [110], [111], [89], [112],
+[113].
+In essence, traffic simulators are used to test various aspects
+of driving including mobility, behavior, traffic scenarios, and
+lane keeping. Traffic simulations can be divided mainly into
+two classes: macroscopic and microscopic simulations [114],
+[115]. Macroscopic simulation models cover the abstract level
+of details about the traffic situation derived from most of
+the vehicles in use. In contrast, microscopic traffic simulators
+model the individual vehicles’ behaviors. Both models have
+their pros and cons. For instance, macroscopic models are fast
+and require fewer resources, whereas microscopic simulation
+models require more resources but provide better granularity
+in terms of understanding the behavior of individual vehicles.
+Furthermore, because microscopic simulation deals with in-
+dividual vehicles, the simulation must be run many times to
+obtain the required accuracy.
+ We note that in the simulation
+environment, real-world scenarios are oversimplified to cope
+with computers’ resource constraints. It is difficult for the
+simulators to capture all the details of actual, large, complex
+road networks. Simulating kinematic behavior, sensors’ data
+processing, and motion behavior of the autonomous car is still
+a challenge for current state-of-the-art simulation tools
+---SUMO
+SUMO is free, and it was developed by the German
+Aerospace Center (DLR). SUMO is based on two mobility
+models: Krauss and Gipps models [127] [115]. The functional
+architecture of SUMO is based on a continuous time-discrete
+approach and it also allows the modeling of the intermodal
+traffic system, including vehicles, public transport, and pedes-
+trians. SUMO is a rich tool that supports route finding, network
+import, and emission calculation in addition to the possibility
+of enhancement with custom models. SUMO also provides
+various application programming interfaces (APIs) to integrate
+with different systems, and it can import road networks in dif-
+ferent formats from map databases such as OpenStreetMap13
+and other simulators such as Visum14, Vissim15, and NavTeq16
+----
+
+
+
+At the very basic level, the au-
+tonomous car is operated by complex and sophisticated soft-
+ware. The degree of complexity that goes into the software of
+the autonomous car must be able to mimic the human brain
+and/or behavior. The seriousness of a situation can be, at least
+in part, compared with airplane manufacturers that build a safe
+or at least fail-safe software for the airplane, although airplanes
+are still somehow operated by human pilots.
+
+
+The idea of self-driving cars is appealing but
+equally alarming from security and privacy perspectives. In
+September 2014, a consumer advocacy organization in the
+United States warned that the legislation of the "robot car" in
+California does not guarantee user privacy. The data collected
+from autonomous cars contains personal data that may be
+shared intentionally or unintentionally with others, putting the
+user’s privacy at stake. When it comes to privacy, the following
+five important questions should be answered with regard to
+consumer satisfaction [24] in mind.
+1) Who should control the data?
+2) What type of data must be stored?
+3) With whom will the collected data be shared?
+4) In what form will the data be available?
+5) For how long will the data be stored?
+
+
+
+
+The autonomous car technology brings significant benefits
+such as improved safety, traffic management, time manage-
+ment, ease of access and so on
+
+
+
+
+ An autonomous car’s overall
+functional cycle falls into the following abstract categories:
+situational awareness, planning, control, and actuation. The
+major benefits of autonomous cars include, but not limited to,
+improving safety for both passengers and outsiders (pedes-
+trians and other vehicles), new business opportunities, ease
+of use and convenience for people who cannot or do not
+want to drive, improved traffic conditions, and creating a
+consumer-centric experience.However, despite these benefits,
+there are still design and implementation issues that need to
+be addressed before commercial autonomous cars are fully
+deployed on the road
