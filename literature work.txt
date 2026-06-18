@@ -88,3 +88,31 @@ First, the queuing condition in charging stations is considered because the queu
 
 
 
+
+
+- Zhou, G.: Location optimization of electric vehicle charging stations: Based on cost model and genetic algorithm
+Takes 
+
+
+
+
+
+
+- Optimal Location of Charging Stations for Electric Vehicles in a Neighborhood in Lisbon, Portugal
+Analyses the Avenidas Novas neighbourhood in Lisbon, Portugal
+estimates daytime (workplaces) and night time demand (residences)
+estimates that from the 406 total stations planned to be installed in Lisbon, 43 will be located in the neighbourhood
+estimated 2-10 supply points per station
+defines the coverage area of a station
+	gradual coverage: 400m maximum desirable walking distance, 600 m maximum acceptable
+	rectilinear (L1) distances were used, so these are reduced by 50 m
+	mixed integer optimization model for coverage
+MIP:
+	11 - maximizes demand coverage, distinguishing between day time and night time demand
+	12 - demand doesnt exceed 100%
+	13 - level of coverage provided by stations
+	14 - max num of stations
+	16 - enough capacity to accomodate day and night
+	17 - number of supply points; 18 is min and max
+	19, 20 - domains
+difficulties for good enough estimation
