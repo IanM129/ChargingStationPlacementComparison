@@ -81,8 +81,6 @@ def preprocess(G, data_path, network_name, output_path, trips, k, params=None):
     prep.enableBattery(vTypes_tree, True)
     prep.enableStationFinder(vTypes_tree, False)
     vTypes_tree.write(cache_data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
-    
-
 
 ####
 def removeFromSimulationVars(vehicles : set):
@@ -97,7 +95,8 @@ def removeFromSimulationVars(vehicles : set):
             charging.pop(vehID, None);
 #### Sumo
 def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chosen_station,
-                results, output_path, output_subfolder="solo", charge_data=None, coverage_G_d=None,
+                results, output_path, output_subfolder="assigned", charge_data=None, coverage_G_d=None,
+                agent_stations=None, prices=None, agent_colors=None,
                 params=None, add_stations_to_net=True, debug=False):
     if not params: params = Parameters.default();
     CPU_THREADS = params["sim.cpuThreads"]
@@ -108,27 +107,31 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     MONEY_PER_KWH = params["station.moneyPerKWh"]
     QUEUE_PARKING = params["station.routing.waitParking"]
+    AGENT_COUNT = len(agent_stations) if agent_stations is not None else 1
     # Traci switching
     #if VISUALIZE: import traci;
     #else: import libsumo as traci;
     traciutil.initialize(not VISUALIZE)
     traci = traciutil.traci
 #### PREPROCESS
-    k = len(stations)
+    if AGENT_COUNT > 1:
+        if agent_stations is None or len(agent_stations) == 1:
+            AGENT_COUNT = 1;
+        else:
+            k = len(agent_stations[0]);
+            K = len(stations)
+            if agent_colors is None: agent_colors = visutil.getAgentColors();
+            suffixes = [("_" + n) for n in agent_colors]
+    else:
+        k = len(stations)
     if params["saveLog"] or params["saveInputs"]:# or params["saveOutputs"]:
         output_path += "/" + output_subfolder
     if params["prep.preprocess"]:
         preprocess(G, data_path, network_name, output_path, trips, k, params)
-    if add_stations_to_net:
-        output_path_full = str(MAIN_DIR) + "/" + output_path
-        cache_data_path = output_path_full + "/_cache/"
-        cache_output_path = cache_data_path + "/output/"
-        sumo_filepath = cache_data_path + "/" + network_name + ".sumocfg"
-    else:
-        output_path_full = str(MAIN_DIR) + "/" + output_path
-        cache_data_path = output_path_full + "/_cache/"
-        cache_output_path = cache_data_path + "/output/"
-        sumo_filepath = cache_data_path + "/" + network_name + ".sumocfg"
+    output_path_full = str(MAIN_DIR) + "/" + output_path
+    cache_data_path = output_path_full + "/_cache/"
+    cache_output_path = cache_data_path + "/output/"
+    sumo_filepath = cache_data_path + "/" + network_name + ".sumocfg"
     # Side vars
     global network_diameter, EV_len, min_gap, max_charge
     network_diameter = float(nx.diameter(G, weight="length"))
@@ -142,13 +145,38 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
 #### STATION WRITE
     if add_stations_to_net:
         ## Write stations to XML
-        _, _, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
-                                                       write=True, output_path=cache_data_path,
-                                                       network_filepath=cache_data_path + "/base_net.net.xml",
-                                                       vehicle_length=EV_len, min_gap=min_gap,
-                                                       wait_queue_size=WAIT_QUEUE_SIZE,
-                                                        wait_queue_parking=QUEUE_PARKING)
-        #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", stations);
+        if AGENT_COUNT > 1:
+            basenet_tree = ET.parse(cache_data_path + "/base_net.net.xml")
+            nodes_tree, edges_tree, stations_tree = parkingNetGen.addStationsToNetwork(base_net, agent_stations[0],
+                                                            cache_data_path, write=False, output_path=cache_data_path,
+                                                            network_tree=basenet_tree,
+                                                            #network_filepath=cache_data_path + "/base_net.net.xml",
+                                                            vehicle_length=EV_len, min_gap=min_gap,
+                                                            wait_queue_size=WAIT_QUEUE_SIZE,
+                                                            wait_queue_parking=QUEUE_PARKING,
+                                                            suffix=suffixes[0])
+            #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", agent_stations[0]);
+            for a in range(1, AGENT_COUNT):
+                _, _, stations_tree = parkingNetGen.appendStationsToNetwork(base_net, agent_stations[a],
+                                                                            nodes_tree, edges_tree, stations_tree,
+                                                                            output_path=cache_data_path, write=True,
+                                                                            vehicle_length=EV_len, min_gap=min_gap,
+                                                                            wait_queue_size=WAIT_QUEUE_SIZE,
+                                                                            wait_queue_parking=QUEUE_PARKING,
+                                                                            suffix=suffixes[a], reverse_angle=True);
+            # DEBUG -> Show POIs for stations
+            if VISUALIZE:
+                for a in range(AGENT_COUNT):
+                    parkingNetGen.addStationPOIs(cache_data_path + "/net.net.xml", cache_data_path + "/stations.add.xml",
+                                                 agent_stations[a].listEdges(), suffix=suffixes[a])
+
+        else:
+            _, _, stations_tree = parkingNetGen.addStationsToNetwork(base_net, stations, data_path,
+                                                           write=True, output_path=cache_data_path,
+                                                           network_filepath=cache_data_path + "/base_net.net.xml",
+                                                           vehicle_length=EV_len, min_gap=min_gap,
+                                                           wait_queue_size=WAIT_QUEUE_SIZE,
+                                                           wait_queue_parking=QUEUE_PARKING)
         parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
                                                      cache_data_path + "/del_left_turns.con.xml",
                                                      stations,
@@ -389,39 +417,91 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
         sttn_util_rate[st_id] = (float(sttn_util_rate[st_id][0] / steps_processed),
                                  float(sttn_util_rate[st_id][1] / (steps_processed * st_cap)));
 
-    ## Total charge from station
-    if params["printResults"]:
-        print("Total charge used per station | utlization rate:")
-    stations_charges_data = xmlOut.getAllStationCharges(cache_data_path)
-    station_charges = {}
-    veh_charges = {}
-    sttn_vehicle_count = {}
-    total_charge = 0
-    for si in stations:
-        station_ids = si.getIDs()
-        total = 0.0;
-        sttn_vehicle_count[si.getID()] = 0
-        for station_id in station_ids:
-            if station_id in stations_charges_data:
-                charges = stations_charges_data[station_id];
-                sttn_vehicle_count[si.getID()] += len(charges)
-                for vehID in charges.keys():
-                    for charge in charges[vehID]:
-                        total += float(charge["totalEnergy"])
-                    if vehID not in veh_charges: veh_charges[vehID] = set();
-                    veh_charges[vehID].add(si.getID())
+    if AGENT_COUNT > 1:
+        ## Total charge from station
+        if PRINT_RESULTS:
+            print("Total charge used per station | utlization rate:")
+        stations_charges_data = xmlOut.getAllStationCharges(cache_data_path)
+        station_charges = {}
+        veh_charges = {}
+        sttn_vehicle_count = {}
+        total_charge = 0
+        for si in stations:
+            station_ids = si.getIDs()
+            total = 0.0;
+            sttn_vehicle_count[si.getID()] = 0
+            for station_id in station_ids:
+                if station_id in stations_charges_data:
+                    charges = stations_charges_data[station_id];
+                    sttn_vehicle_count[si.getID()] += len(charges)
+                    for vehID in charges.keys():
+                        for charge in charges[vehID]:
+                            total += float(charge["totalEnergy"])
+                        if vehID not in veh_charges: veh_charges[vehID] = set();
+                        veh_charges[vehID].add(si.getID())
+            station_charges[si.getID()] = total
+            EVs_charged = len(veh_charges.keys()); EVs_charged_ratio = EVs_charged / set_need_to_charge_cnt;
+            total_charge += total
+        #money_earned = (total_charge * float(params["station.moneyPerKWH"])) / 1000.0
+        ## Color specific stats
+        if PRINT_RESULTS:
+            print("---- Station stats:")
+            print("     <station edge ID>: <energy recharged> | <utilization per step>, <utilization normalized by total parking capacity>")
+        charge = []; money_earned = [];
+        total_money_earned = 0.0;
+        for a in range(AGENT_COUNT):
+            clr_name = agent_colors[a].capitalize()
+            charge.append(0.0); money_earned.append(0.0);
+            if PRINT_RESULTS: print(f"-- {clr_name}:");
+            for si in agent_stations[a]:
+                val = station_charges[si.getID()]
+                if PRINT_RESULTS:
+                    print(f"  {si.edge_id:10s}: {round(val, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                          f"(util: {round(sttn_util_rate[si.getID()][0] * 100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1] * 100.0, 2):4.2f} %)")
+                charge[a] += val
+            money_earned[a] = (charge[a] * prices[a]) / 1000.0
+            total_money_earned += money_earned[a]
+            if PRINT_RESULTS:
+                print(f"  > total charge: {round(total_charge[a] / 1000.0, 2)} KWh")
+                print(f"  > money earned: {round(money_earned[a], 2)}€ ({round(prices[a],2)}€ per KWh)")
+        if PRINT_RESULTS: print();
+        results.setStationDataComp(agent_stations, prices, station_charges, sttn_util_rate, sttn_vehicle_count,
+                                   total_charge, total_money_earned, charge, money_earned,
+                                   suffixes)
+    else:
+        ## Total charge from station
         if params["printResults"]:
-            print(f"  {si.edge_id:12s}: {round(total, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
-                  f"(util: {round(sttn_util_rate[si.getID()][0]*100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1]*100.0,2):5.2f} %)")
-        station_charges[si.getID()] = total
-        EVs_charged = len(veh_charges.keys()); EVs_charged_ratio = EVs_charged / set_need_to_charge_cnt;
-        total_charge += total
-    money_earned = (total_charge * MONEY_PER_KWH) / 1000.0
-    if params["printResults"]:
-        print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
-        print(f"  > money earned: {round(money_earned, 2)}€ ({round(MONEY_PER_KWH,2)}€ per KWh)")
-        print()
-    results.setStationData(stations, MONEY_PER_KWH, station_charges, sttn_util_rate, sttn_vehicle_count, total_charge, money_earned)
+            print("Total charge used per station | utlization rate:")
+        stations_charges_data = xmlOut.getAllStationCharges(cache_data_path)
+        station_charges = {}
+        veh_charges = {}
+        sttn_vehicle_count = {}
+        total_charge = 0
+        for si in stations:
+            station_ids = si.getIDs()
+            total = 0.0;
+            sttn_vehicle_count[si.getID()] = 0
+            for station_id in station_ids:
+                if station_id in stations_charges_data:
+                    charges = stations_charges_data[station_id];
+                    sttn_vehicle_count[si.getID()] += len(charges)
+                    for vehID in charges.keys():
+                        for charge in charges[vehID]:
+                            total += float(charge["totalEnergy"])
+                        if vehID not in veh_charges: veh_charges[vehID] = set();
+                        veh_charges[vehID].add(si.getID())
+            if params["printResults"]:
+                print(f"  {si.edge_id:12s}: {round(total, 2):9.2f} | {sttn_vehicle_count[si.getID()]:4d}",
+                      f"(util: {round(sttn_util_rate[si.getID()][0]*100.0,2):5.2f} %, {round(sttn_util_rate[si.getID()][1]*100.0,2):5.2f} %)")
+            station_charges[si.getID()] = total
+            EVs_charged = len(veh_charges.keys()); EVs_charged_ratio = EVs_charged / set_need_to_charge_cnt;
+            total_charge += total
+        money_earned = (total_charge * MONEY_PER_KWH) / 1000.0
+        if params["printResults"]:
+            print(f"  > total charge: {round(total_charge / 1000.0, 2)} KWh")
+            print(f"  > money earned: {round(money_earned, 2)}€ ({round(MONEY_PER_KWH,2)}€ per KWh)")
+            print()
+        results.setStationData(stations, MONEY_PER_KWH, station_charges, sttn_util_rate, sttn_vehicle_count, total_charge, money_earned)
 
     ## Trip stats/info
     trip_stats = xmlOut.getTripStats(cache_output_path)

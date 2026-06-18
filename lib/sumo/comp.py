@@ -199,7 +199,6 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
                                                     wait_queue_size=WAIT_QUEUE_SIZE,
                                                     wait_queue_parking=QUEUE_PARKING,
                                                     suffix=suffixes[0])
-    #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", agent_stations[0]);
     for a in range(1, AGENT_COUNT):
         _, _, stations_tree = parkingNetGen.appendStationsToNetwork(base_net, agent_stations[a],
                                                                     nodes_tree, edges_tree, stations_tree,
@@ -208,7 +207,6 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
                                                                     wait_queue_size=WAIT_QUEUE_SIZE,
                                                                     wait_queue_parking=QUEUE_PARKING,
                                                                     suffix=suffixes[a], reverse_angle=True);
-    #parkingNetGen.removeStationLeftTurns_netXML(cache_data_path + "/net.net.xml", all_stations);
     parkingNetGen.removeStationLeftTurns_connXML(cache_data_path + "/net.net.xml",
                                                  cache_data_path + "/del_left_turns.con.xml",
                                                  all_stations,
@@ -613,6 +611,15 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
                                                                 epsilon=50,
                                                                 max_radius=network_diameter))
     results.setCoverageData(coverage_radius, network_diameter)
-
+    """
+    results = sumoutil.postprocessComp(base_net, coverage_G_d,
+                                       data_path, cache_data_path, cache_output_path,
+                                       results, agent_stations, all_stations, prices,
+                                       fully_completed, sim_time, exec_duration, steps_processed,
+                                       EVs_count, total_veh_count, set_need_to_charge_cnt,
+                                       sttn_util_rate,
+                                       agent_colors, suffixes,
+                                       params)
+    """
     return results
         

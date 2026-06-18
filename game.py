@@ -218,6 +218,10 @@ def findEquilibrium(network_name, base_net, base_G, stations, base_trips, charge
                                  params=params, debug=debug)
     return results
 
+
+
+LIMIT_CANDIDATES = False
+
 ###### MAIN
 if __name__ == "__main__":
     # Parse arguments
@@ -246,12 +250,6 @@ if __name__ == "__main__":
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     QUEUE_PARKING = params["station.routing.waitParking"]
     print(params.groupPrint())
-    # Charge routing info
-    if params["station.routing.useStationFinder"]:
-        print("INFO: Using StationFinder for vehicle charging and station routing.")
-    else:
-        charge_routing_str = "centralized" if (params["station.routing.centralized"]) else "selfish";
-        print("INFO: Using " + charge_routing_str + " policy for station routing.")
     # Get price
     print(f"INFO: Using price: {MONEY_PER_KWH} € per kWh.")
 
@@ -316,10 +314,6 @@ if __name__ == "__main__":
     writeChargeData(charge_data, output_path + "/charge_data.xml")
     ## Station distribution
     # Discretize graph and get candidates
-    #G_cov = base_G.copy()
-    #print(G_cov)
-    #candidates = list(graphing.calcCandidates(G_cov, detailed_graph=False,
-    #                                          add_internal=True))
     candidates = set()
     for edge in base_G.edges():
         candidates.add(edge)
@@ -360,7 +354,7 @@ if __name__ == "__main__":
     #import matplotlib.pyplot as plt
     #plt.show()
     ## Modify candidates
-    if False:
+    if LIMIT_CANDIDATES:
         perm = np.random.permutation(len(candidates))[:10]
         candidates = [all_candidates[i] for i in perm]
         candidates_eid = [candidates_eid[i] for i in perm]

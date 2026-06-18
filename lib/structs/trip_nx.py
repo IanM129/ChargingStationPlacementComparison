@@ -21,13 +21,12 @@ class TripNX:
 
     # distance
     # travelTime
-    # electric
 
     def __init__(self, G, destinations, is_electric : bool):
         self.G = G
         self.destinations = destinations
         self.electric = bool(is_electric)
-        self.path = self.calcPath()
+        self.calcPath()
     @staticmethod
     def fromTrip(G, other_trip):
         return TripNX(G, other_trip.destinations, other_trip.electric)
@@ -41,7 +40,10 @@ class TripNX:
             self.destinationIndeces.append(len(path))
         path.append(self.destinations[-1])
         self.path = path
-        return path
+        self.total_distance = None
+        self.travel_time = None
+    def calcDistance(self, weight="length"):
+        return util.edgePathLength(self.G, self.path, weight=weight, use_internal=True)
     def __getitem__(self, idx):
         return self.destinations[idx];
     def __setitem__(self, idx, value):
@@ -65,6 +67,14 @@ class TripNX:
         for p in self.path:
             node_path.append(str(p[0]))
         return node_path
+    def getTotalDistance(self):
+        if self.total_distance is None:
+            self.total_distance = self.calcDistance(weight="length")
+        return self.total_distance
+    def getTravelTime(self):
+        if self.travel_time is None:
+            self.travel_time = self.calcDistance(weight="travelTime")
+        return self.travel_time
     def insert(self, edge, idx):
         #print("edge:", edge)
         #print("idx:", idx)
@@ -87,6 +97,8 @@ class TripNX:
         #print("delta:", delta)
         for i in range(idx+1, len(self.destinationIndeces)):
             self.destinationIndeces[i] += delta
+        self.total_distance = None
+        self.travel_time = None
     def __repr__(self):
         s = "Trip("
         s += str(self.destinations[0]) + " -> " + str(self.destinations[-1])

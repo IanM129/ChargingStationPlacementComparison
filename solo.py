@@ -89,7 +89,9 @@ def runSimulation(network_name, G, stations, base_trips, charge_data, params, re
 ###### MAIN
 if __name__ == "__main__":
     # Parse arguments
-    if len(sys.argv) < 2: network_name = "manhattan";
+    if len(sys.argv) < 2:
+        network_name = "manhattan";
+        args = {}
     else:
         network_name = sys.argv[1]
         args = parseArgs(sys.argv[2:])

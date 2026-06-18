@@ -43,7 +43,7 @@ os.chdir(MAIN_DIR)
 
 
 
-RANDOM_STATIONS = False
+RANDOM_STATIONS = True
 def stationDistribution(G, base_G_d, k, output_path, debug=False, already_chosen=None):
     G_d = copy.deepcopy(base_G_d)
     candidates = graphing.calcCandidates(G_d, detailed_graph=True)
@@ -91,13 +91,14 @@ agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "c
 
 if __name__ == "__main__":
     # Parse arguments
-    if len(sys.argv) < 2: network_name = "manhattan";
+    if len(sys.argv) < 2:
+        network_name = "manhattan";
+        args = []
     else:
         network_name = sys.argv[1]
         args = parseArgs(sys.argv[2:])
     # Adjust params
     params = Parameters.config()
-    print(params.groupPrint())
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
     MIN_DISTANCE = params["sim.minDistance"]

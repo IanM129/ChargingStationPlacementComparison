@@ -300,8 +300,10 @@ def insertNode(G, start_id, end_id, name="", bidirectional=True,
         len_a = full_length * offset; len_b = full_length - len_a;
     attrs = {name:{}}
     # Save edge id
-    edge_id = G[start_id][end_id]["id"]
-    attrs[name]["edge_id"] = edge_id
+    if "id" in G[start_id][end_id]:
+        edge_id = G[start_id][end_id]["id"]
+        attrs[name]["edge_id"] = edge_id
+    else: edge_id = None
     # Positions
     if calc_pos:
         start_x, start_y = G.nodes[start_id]["pos"]; end_x, end_y = G.nodes[end_id]["pos"];
@@ -349,14 +351,16 @@ def insertNode(G, start_id, end_id, name="", bidirectional=True,
     G.add_node(name)
     nx.set_node_attributes(G, attrs)
     G.remove_edge(start_id, end_id)
-    G.add_edge(start_id, name, length=len_a, id=edge_id + "_0")
-    G.add_edge(name, end_id, length=len_b, id=edge_id + "_1")
+    G.add_edge(start_id, name, length=len_a, id=edge_id + "_0" if edge_id is not None else None)
+    G.add_edge(name, end_id, length=len_b, id=edge_id + "_1" if edge_id is not None else None)
     ## Backwards
     if (bidirectional) and (G.has_edge(end_id, start_id)):
-        edge_id = G[end_id][start_id]["id"]
+        if "id" in G[end_id][start_id]:
+            edge_id = G[end_id][start_id]["id"]
+        else: edge_id = None
         G.remove_edge(end_id, start_id)
-        G.add_edge(end_id, name, length=len_b, id=edge_id + "_0")
-        G.add_edge(name, start_id, length=len_a, id=edge_id + "_1")
+        G.add_edge(end_id, name, length=len_b, id=edge_id + "_0" if edge_id is not None else None)
+        G.add_edge(name, start_id, length=len_a, id=edge_id + "_1" if edge_id is not None else None)
     return
 def insertNodes(G, start_id, end_id, count, name="", bidirectional=True,
                 relative_lengths : list=None, absolute_lengths : list=None, length=None,
