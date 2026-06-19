@@ -1,0 +1,51 @@
+flowchart TD
+
+    A[Početna raspodjela stanica i cijene]
+
+    B[Izračun ravnoteže preferencija korisnika]
+
+    C[Izračun profita agenata]
+
+    D1[(Agent A)<br>Generiranje potencijalnih cijena]
+    D2[(Agent B)<br>Generiranje potencijalnih cijena]
+
+    E1[(Agent A)<br>Simulacija ravnoteže za svaku potencijalnu cijenu]
+    E2[(Agent B)<br>Simulacija ravnoteže za svaku potencijalnu cijenu]
+
+    F1[(Agent A)<br>Odabir optimalne cijene među ispitanima]
+    F2[(Agent B)<br>Odabir optimalne cijene među ispitanima]
+
+    G1[(Agent A)<br>Ažuriranje cijena]
+    G2[(Agent B)<br>Ažuriranje cijena]
+
+    H[Ponovni izračun ravnoteže preferencija korisnika]
+
+    I1[(Agent A)<br>Izračun nove optimalne raspodjele stanica]
+    I2[(Agent B)<br>Izračun nove optimalne raspodjele stanica]
+
+    J[Evaluacija]
+
+    K{Dosegnut<br/>kriterij zaustavljanja?}
+
+    L[Konačna raspodjela stanica i cijene]
+
+    A --> B
+    B --> C
+    C --> D1
+    D1 --> E1
+    C --> D2
+    D2 --> E2
+    E1 --> F1
+    E2 --> F2
+    F1 --> G1
+    F2 --> G2
+    G1 --> H
+    G2 --> H
+    H --> I1
+    H --> I2
+    I1 --> J
+    I2 --> J
+
+    J --> K
+    K -- Ne --> B
+    K -- Da --> L
