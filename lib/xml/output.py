@@ -352,6 +352,11 @@ def saveTrainResults_csv(train_results, folder_path):
                     f.write(s)
         else:
             np.savetxt(filepath + ".csv", train_results[stat], delimiter=',')
+def saveTotalDuration_txt(duration, folder_path):
+    pathlib.Path(folder_path).mkdir(parents=True, exist_ok=True)
+    filepath = folder_path + "/duration.txt"
+    with open(filepath, "w") as f:
+        f.write(str(duration))
 def writeMetadata(filepath, network_name, datetime_str, sess_type, network_diameter=0.0):
     tree = ET.ElementTree(ET.fromstring("<metadata></metadata>"))
     root = tree.getroot()
@@ -366,6 +371,7 @@ def writeMetadata(filepath, network_name, datetime_str, sess_type, network_diame
     type_el.text = str(sess_type)
     dm_el = ET.SubElement(root, "networkDiameter")
     dm_el.text = str(network_diameter)
+    ET.indent(tree, space="    ")
     tree.write(filepath)
 
 
@@ -380,6 +386,12 @@ def loadTrainResults_numpy(filepath):
             else:
                 train_results[stat] = np.load(filepath + "/" + f)
     return train_results;
+def loadTotalDuration_txt(folder_path):
+    duration = None
+    f = open(folder_path + "/duration.txt", "r")
+    duration = float(f.read())
+    f.close();
+    return duration
 
 
 

@@ -59,6 +59,15 @@ def fixTripsForAllCandidatesGraph(base_net, G_all, trips):
     trips_nx_cov = TripNXDataset.fromTripDataset(G_all, trips)
     return trips_nx_cov
 
+def getStationUsers(chosen_station, stations):
+    station_users = {}
+    for si in stations:
+        station_users[si.edge_id] = set()
+    for vehID, si in chosen_station.items():
+        station_users[si.edge_id].add(vehID);
+    return station_users
+
+
 
 ########## BOOKKEEPING
 def initializeResultsDict(params, iteration_count, K):
@@ -75,7 +84,7 @@ def updateResultsDict(train_results, stations, results, iteration):
         else:
             train_results[p][iteration] = getStatFromResult(results, p)
 
-
+########## COST
 def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
     # Check if in matrix
     global sttn_cand_index, detour_matrix
@@ -107,7 +116,7 @@ def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
         detour_matrix[int(vehID)][cand_index][0] = chosen_insert_index
         detour_matrix[int(vehID)][cand_index][1] = min_cost
         return chosen_insert_index, min_cost
-def costFunction(G, vehID, trip : TripNX, stations, congestion, translator):
+def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, translator, return_cost=False):
     # Coefficients
     congestion_c = 10.0;
     # Return vars
@@ -119,7 +128,9 @@ def costFunction(G, vehID, trip : TripNX, stations, congestion, translator):
         trip_st = None
         insertIndex, cost = detourCost(G, vehID, trip, redge_tuple, chosen_trip=trip_st)
         # Add congestion
-        cost += congestion[si.edge_id] * congestion_c
+        cong = congestion[si.edge_id]
+        if cur_chosen is None or si != cur_chosen: cong += 1;
+        cost += cong * congestion_c
         # Recreate trip if not set
         if (trip_st is None):
             trip_st = copy.deepcopy(trip)
@@ -133,9 +144,10 @@ def costFunction(G, vehID, trip : TripNX, stations, congestion, translator):
         trip_st = copy.deepcopy(trip)
         trip_st.insert(translator.IDToEdge(chosen_sttn.redge_id), chosen_trip)
         chosen_trip = trip_st
+    if return_cost: return chosen_sttn, chosen_trip, cost
     return chosen_sttn, chosen_trip
 
-
+########## STATION DISTRIBUTION
 def startingStationDistribution(candidates, k, detailed=True):
     # Random for first distribution
     stations = alg.pickRandom(candidates, k)
@@ -163,7 +175,6 @@ def stationDistribution_detourCost_thread(G, cand_inds, candidates_eid, candidat
             best_ci = ci; min_cost = cost;
         #print(f"{ci+1} / {len(candidates_eid)}")
     stations[stations_index] = best_ci
-    
 def stationDistribution_detourCost(G, candidates_eid, candidates_tup, trips_cov_nx,
                                    k, station_users):
     cand_inds = [i for i in range(len(candidates_eid))]
@@ -207,16 +218,17 @@ def stationDistribution_detourCost(G, candidates_eid, candidates_tup, trips_cov_
     stations = StationInfoDataset([StationInfo(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
     return stations
 
-
+########## EUQILIBRIUM
 def findEquilibrium(network_name, base_net, base_G, stations, base_trips, charge_data,
                     params, results, iteration=None, debug=False):
     trips = copy.deepcopy(base_trips)
-    output_subfolder = "game";
+    output_subfolder = "game1";
     if iteration != None: output_subfolder += "_" + str(iteration);
-    results = equilibriumGameRun(base_net, base_G, data_path, network_name, trips, charge_data, stations, costFunction,
-                                 results, output_path=output_path, output_subfolder=output_subfolder,
-                                 params=params, debug=debug)
-    return results
+    return equilibriumGameRun(base_net, base_G, data_path, network_name,
+                              trips, charge_data, stations, costFunction,
+                              results, output_path=output_path, output_subfolder=output_subfolder,
+                              add_stations_to_net=True, evaluate=True,
+                              params=params, debug=debug)
 
 
 
@@ -233,7 +245,6 @@ if __name__ == "__main__":
         args = parseArgs(sys.argv[2:])
     # Adjust params
     params = Parameters.config()
-    params["agents"] = 1
     # Load params
     VEHICLE_COUNT = params["sim.vehicleCount"]
     DESTINATION_COUNT_DIST = params["sim.destinationCountDistribution"]
@@ -246,10 +257,18 @@ if __name__ == "__main__":
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
+    ITERATIONS = params["training.iterations"]
+    if "iterations" in args:
+        ITERATIONS = int(args["iterations"])
+        params["training.iterations"] = ITERATIONS
+    params["training.agents"] = 1
     MONEY_PER_KWH = params["station.moneyPerKWh"]
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     QUEUE_PARKING = params["station.routing.waitParking"]
     print(params.groupPrint())
+    # Inform about arg changes
+    if "iterations" in args:
+        print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
     # Get price
     print(f"INFO: Using price: {MONEY_PER_KWH} € per kWh.")
 
@@ -280,7 +299,7 @@ if __name__ == "__main__":
         
 ###### PRE-RUN
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = network_name + "_game_" + start_datetime_str
+    output_folder = network_name + "_game1_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
@@ -291,7 +310,8 @@ if __name__ == "__main__":
     pathlib.Path(cache_output_path).mkdir(parents=True, exist_ok=True)
     # Save params and metadata
     params.write(output_path + "/config.xml")
-    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "solo")
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "game",
+                         network_diameter=network_diameter)
     ## Vehicle data
     if "vehicle-data" in args:
         # Load
@@ -359,7 +379,6 @@ if __name__ == "__main__":
         candidates = [all_candidates[i] for i in perm]
         candidates_eid = [candidates_eid[i] for i in perm]
         candidates_tup = [candidates_tup[i] for i in perm]
-        print(candidates_eid)
     ## Update trips
     trips_cov_nx = copy.deepcopy(trips)
     trips_cov_nx = fixTripsForAllCandidatesGraph(base_net, G_all, trips_cov_nx)
@@ -379,7 +398,6 @@ if __name__ == "__main__":
     print("")
 
 ###### RUN
-    ITERATIONS = params["training.iterations"]
     pbar = tqdm(total=ITERATIONS)
     best = None; train_results = initializeResultsDict(params, ITERATIONS, K);
     loop_stime = time.perf_counter();
@@ -390,11 +408,7 @@ if __name__ == "__main__":
                                                                  stations, trips, charge_data,
                                                                  params, results, iteration=None, debug=False)
         updateResultsDict(train_results, stations, results, i)
-        station_users = {}
-        for si in stations:
-            station_users[si.edge_id] = set()
-        for vehID, si in chosen_station.items():
-            station_users[si.edge_id].add(vehID);
+        station_users = getStationUsers(chosen_station, stations)
         #print(f" >  {i+1:4d} equilibrium found")
         # Update best
         if best is None:
@@ -415,17 +429,27 @@ if __name__ == "__main__":
     pbar.close()
     loop_etime = time.perf_counter();
     time_diff = loop_etime - loop_stime
-    #### Finish and save
+    
+
+###### FINISH AND SAVE
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     # Save loop results data
     xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
     xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
+    xmlOut.saveTotalDuration_txt(time_diff, output_path + "/results")
     # Write plot figures
     figs = visutil.plotTrainingResults_figs(train_results, ITERATIONS)
     for stat in figs:
         fig, ax = figs[stat]
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
+    # Save best
+    res_dict = best.getFullDict(include_edge_data=True)
+    res_tree = ET.ElementTree(ET.fromstring('<results></results>'))
+    xmlOut.dictToElement_recursive(res_dict, res_tree.getroot())
+    ET.indent(res_tree, space="    ")
+    res_tree.write(output_path + "/training/best.xml");
+    res_tree.write(output_path + "/results/best.xml");
     # Clean up files
     if params["sim.deleteCache"]:
         xmlOut.cleanCache(output_path + "/_cache", network_name)

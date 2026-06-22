@@ -1,6 +1,7 @@
 import random
 
 import sumolib
+import numpy as np
 import networkx as nx
 import xml.etree.ElementTree as ET
 
@@ -16,28 +17,49 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
     start_edge = net.getEdge(start_edge_id)
     start_fn_id = start_edge.getFromNode().getID(); start_tn_id = start_edge.getToNode().getID();
     start_edge_t = (start_fn_id, start_tn_id)
+    lens = nx.get_edge_attributes(G, "length")
     ## Get valid edges
     valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
-    # Get edges outside of min_distance range
-    if min_distance > 0:
-        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, min_distance, use_internal=True,
-                                                        include_reverse=False, include_reached=True)
+    # Get only edges with length >= 1.0
+    length_check = set()
+    for e in valid_end_edges:
+        if lens[e] >= 1.0: length_check.add(e);
+    valid_end_edges = length_check
+    # If min or max is set
+    if min_distance > 0 or max_distance > 0:
+        # Get edges outside of min_distance range
+        if min_distance > 0:
+            edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, min_distance, use_internal=True,
+                                                            include_reverse=False, include_reached=True)
+            valid_end_edges -= edges_in_range #(G.edges() - edges_in_range).intersection(valid_end_edges)
+            #print("MIN: " + str(min_distance) + ": " + str(len(edges_in_range)) + " / " + str(len(G.edges())) +
+            #      " -> " + str(len(valid_end_edges)))
+            if len(valid_end_edges) == 0:
+                #print(f"WARNING: No edges detected outside of given min distance ({min_distance:8.2f}).")
+                if return_length: return (None, -1)
+                return None
+                #print(f"WARNING: No edges detected outside of given min distance ({min_distance:8.2f}), reverting to all edges.")
+                #valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
+        # Get edges inside of max_distance range
+        if max_distance > 0:
+            edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, max_distance, use_internal=True,
+                                                            include_reverse=False, include_reached=True)
+            valid_end_edges = edges_in_range.intersection(valid_end_edges)
+            #print("MAX: " + str(max_distance) + ": " + str(len(edges_in_range)) + " / " + str(len(G.edges())) +
+            #      " -> " + str(len(valid_end_edges)))
+            if len(valid_end_edges) == 0:
+                #print(f"WARNING: No edges detected inside of given max distance ({max_distance:8.2f}).")
+                if return_length: return (None, 1);
+                return None
+                #print(f"WARNING: No edges detected inside of given max distance ({max_distance:8.2f}), reverting to all edges.")
+                #valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
+    # Otherwise infinity range
+    else:
+        print("Checing graph for all reachable edges...")
+        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, np.inf, use_internal=True,
+                                                            include_reverse=False, include_reached=True)
         valid_end_edges = (G.edges() - edges_in_range).intersection(valid_end_edges)
-        if len(valid_end_edges) == 0:
-            if return_length: return (None, -1)
-            return None
-            #print(f"WARNING: No edges detected outside of given min distance ({min_distance:8.2f}), reverting to all edges.")
-            #valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
-    # Get edges inside of max_distance range
-    if max_distance > 0:
-        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, max_distance, use_internal=True,
-                                                        include_reverse=False, include_reached=True)
-        valid_end_edges = edges_in_range.intersection(valid_end_edges)
-        if len(valid_end_edges) == 0:
-            if return_length: return (None, 1);
-            return None
-            #print(f"WARNING: No edges detected inside of given max distance ({max_distance:8.2f}), reverting to all edges.")
-            #valid_end_edges = G.edges() - (start_fn_id, start_tn_id)
+    ## Choose
     # Choose random
     end_gedge = random.choice(list(valid_end_edges))
     # Get edge ID from net
@@ -56,12 +78,11 @@ def getRandomEdge(net, G, start_edge_id, min_distance=0, max_distance=0, return_
                                                          end_gedge)
     #if nodes_path_len < min_distance: print("YO MIN (", min_distance - nodes_path_len, ")");
     #if nodes_path_len > max_distance: print("YO MAX");
+    if nodes_path_len is None: print("Failed to get shortest edge path.");
     if return_length: return (end_edge.getID(), nodes_path_len)
     return end_edge.getID()
 
 def genRandomRoute(net, G, destination_count=1, min_distance=0.0, min_distance_per_des=0.0, max_distance=0.0, return_len=False, return_len_arr=False):
-    #print("min_distance:", min_distance)
-    #print("max_distance:", max_distance)
     ## Choose start point
     # Filter out nodes whose maximum distance is less than minimum distance
     start_max_distance = max_distance
@@ -79,10 +100,18 @@ def genRandomRoute(net, G, destination_count=1, min_distance=0.0, min_distance_p
     if len(valid_nodes) == 0:
         raise Exception(f"No valid nodes with eccentricity (maximum distance) > given (min_distance / destination_count) ({min_ecc_distance})")
     # Choose an edge of a randomly chosen valid node
+    edge_lens = nx.get_edge_attributes(G, "length")
     while len(valid_nodes) > 0:
         start_from_node = random.choice(valid_nodes)
         valid_nodes.remove(start_from_node)
         candidate_edges = list(start_from_node.getOutgoing())
+        # Remove edges with length < 1.0
+        length_check = set()
+        for ce in candidate_edges:
+            ce_tuple = (ce.getFromNode().getID(), ce.getToNode().getID())
+            if edge_lens[ce_tuple] >= 1.0: length_check.add(ce);
+        candidate_edges = list(length_check)
+        # Generate path
         while len(candidate_edges) > 0:
             route = []
             start_edge = candidate_edges.pop(random.randrange(len(candidate_edges)))

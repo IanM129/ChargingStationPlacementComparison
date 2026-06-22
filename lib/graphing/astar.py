@@ -80,12 +80,12 @@ def detailedEdgePoint(G, start : EdgePoint = None, target : EdgePoint = None, le
 
 # Graph with junction weights
 def edgePath(G, start, target, weight="length", use_internal=True):
+    if (len(start) > 2): start = (start[0], start[1]);
+    if (len(target) > 2): target = (target[0], target[1]);
     import heapq
     def neighbors(edge):
         from_node, to_node = edge
-        for n in G.successors(to_node):#neighbors(to_node):
-            #if n == from_node: continue;
-            data = G.get_edge_data(to_node, n)
+        for _, n, data in G.out_edges(to_node, data=True):
             cost = float(data[weight])
             if use_internal:
                 try:
@@ -140,6 +140,11 @@ def edgePath(G, start, target, weight="length", use_internal=True):
                     open_heap,
                     (f_score, tentative_g, next_state)
                 )
+    start_id = G[start[0]][start[1]].get("id", "/")
+    start_len = float(G.get_edge_data(start[0], start[1])[weight])
+    target_id = G[target[0]][target[1]].get("id", "/")
+    target_len = float(G.get_edge_data(target[0], target[1])[weight])
+    print(f"ERROR: No A* path found from {start} ({start_id}) [{start_len}] -> {target} ({target_id}) [{target_len}].")
     return None
 
 

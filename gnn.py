@@ -244,8 +244,11 @@ if __name__ == "__main__":
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
-    MONEY_PER_KWH = params["station.moneyPerKWh"]
     ITERATIONS = params["training.iterations"]
+    if "iterations" in args:
+        ITERATIONS = int(args["iterations"])
+        params["training.iterations"] = ITERATIONS
+    MONEY_PER_KWH = params["station.moneyPerKWh"]
     EMA_ALPHA = params["training.coefficients.emaAlpha"];
     TEMPERATURE = float(params["training.coefficients.temperature"])
     EFFECT_ON_RUN_REWARD = float(params["training.coefficients.momentum"]);
@@ -258,6 +261,9 @@ if __name__ == "__main__":
     PROGRESS_DRAW = params["training.drawProgress"]
     params["training.agents"] = 1
     print(params.groupPrint())
+    # Inform about arg changes
+    if "iterations" in args:
+        print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
     # Charge routing info
     if params["station.routing.useStationFinder"]:
         print("INFO: Using StationFinder for vehicle charging and station routing.")
@@ -322,7 +328,8 @@ if __name__ == "__main__":
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Save params and metadata
     params.write(output_path + "/config.xml")
-    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "GNN", network_diameter)
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "gnn",
+                         network_diameter=network_diameter)
     ## Vehicle data
     if "vehicle-data" in args:
         # Load
@@ -545,7 +552,9 @@ if __name__ == "__main__":
                     fig.savefig(output_path + f"/training/coverage_{(iteration + 1)}.jpg")
     pbar.close()
     training_etime = time.perf_counter();
-    #### Finish and save
+    time_diff = training_etime - training_stime
+    
+#### FINISH AND SAVE
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     ## Save model
     torch.save(model.state_dict(), output_path + "/results/model.pt")
@@ -559,6 +568,7 @@ if __name__ == "__main__":
     xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
     xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
+    xmlOut.saveTotalDuration_txt(time_diff, output_path + "/results")
     # Write plot figures
     figs = visutil.plotTrainingResults_figs(train_results, ITERATIONS)
     for stat in figs:
@@ -569,7 +579,6 @@ if __name__ == "__main__":
         xmlOut.cleanCache(output_path + "/_cache", network_name)
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()
-    time_diff = training_etime - training_stime
     print(f"Training finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")
     # Show training results
     plt.show()

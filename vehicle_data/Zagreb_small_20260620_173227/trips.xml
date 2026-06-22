@@ -1,0 +1,102 @@
+<routes>
+  <trip id="0" from="-144125184#7" to="141134977#6" depart="0" type="electric" via="188462275 141134977#3" />
+  <trip id="1" from="283171874#2" to="-1132985815#2" depart="0" type="electric" via="1239119902#2 -29101305#3" />
+  <trip id="2" from="288364241#0" to="29101360" depart="0" type="conventional" via="-142434707#3 288366484#0 -29101366#2" />
+  <trip id="3" from="822657635" to="41242000#0" depart="0" type="electric" via="-195589986#2 51249184#0 1324204571#0" />
+  <trip id="4" from="-167499560#6" to="43921540#1" depart="0" type="electric" via="283171880#1" />
+  <trip id="5" from="1347592613" to="141835765#4" depart="0" type="electric" via="-27220625#1 127005774#2 -849053594#1" />
+  <trip id="6" from="142434700#7" to="1420963066#0" depart="0" type="electric" via="1347592612#1 29101361" />
+  <trip id="7" from="157411290" to="141134977#6" depart="0" type="conventional" via="-144125186 141134977#2" />
+  <trip id="8" from="142434703#0" to="144125184#0" depart="0" type="electric" via="144125184#0 34928268#0" />
+  <trip id="9" from="141140966" to="29101362#2" depart="0" type="electric" via="29101364#1" />
+  <trip id="10" from="-142952854#11" to="141134977#4" depart="0" type="electric" via="165309535#0" />
+  <trip id="11" from="849053593#0" to="1324204579#0" depart="0" type="electric" via="-43530933#1 779283872#0" />
+  <trip id="12" from="-43921540#2" to="182927781#5" depart="0" type="electric" via="182927781#4 141140966 142952854#0" />
+  <trip id="13" from="141140970#2" to="283171861#0" depart="0" type="electric" via="288365426" />
+  <trip id="14" from="1324204572" to="147219412" depart="0" type="electric" via="188462275 147219451" />
+  <trip id="15" from="142434706#1" to="420531566#0" depart="0" type="electric" via="29029224#0 29029224#2" />
+  <trip id="16" from="165309538#0" to="29029224#8" depart="0" type="conventional" via="-142434717#5 29029224#0" />
+  <trip id="17" from="-225572184" to="141134977#5" depart="0" type="electric" via="1324204565 1085287477#2" />
+  <trip id="18" from="1239119901" to="29101365#0" depart="0" type="electric" via="119429957 29101360" />
+  <trip id="19" from="157516358" to="-934424357" depart="0" type="conventional" via="44702733#2 154240107" />
+  <trip id="20" from="-141835762#0" to="141131387#0" depart="0" type="electric" via="-43921540#2" />
+  <trip id="21" from="41241997#0" to="157405572#0" depart="0" type="electric" via="85685707#2 1302569787" />
+  <trip id="22" from="-27220625#4" to="1239119902#2" depart="0" type="electric" via="-43921541#1 27220625#4" />
+  <trip id="23" from="142434703#11" to="141134977#9" depart="0" type="electric" via="1324204571#0 41242000#0 141134977#8" />
+  <trip id="24" from="166868617" to="-142433811#7" depart="0" type="electric" via="-144125190#10 1085287477#2" />
+  <trip id="25" from="43921540#2" to="141134977#5" depart="0" type="electric" via="43530938#0 -142433811#7 141134977#4" />
+  <trip id="26" from="-142952854#3" to="-142433808#3" depart="0" type="electric" via="-41241999#2 147219451" />
+  <trip id="27" from="141134977#6" to="141134977#9" depart="0" type="electric" via="141134977#8" />
+  <trip id="28" from="131696913" to="-1134677944#1" depart="0" type="electric" via="-1085287477#2 29029255#0" />
+  <trip id="29" from="141134977#0" to="849053594#2" depart="0" type="electric" via="-142433810#2" />
+  <trip id="30" from="-1134677944#1" to="141134977#6" depart="0" type="electric" via="141136056#0 165309535#0 141134977#4" />
+  <trip id="31" from="1324204566#0" to="141134977#4" depart="0" type="electric" via="141134977#0 284821001" />
+  <trip id="32" from="43921540#1" to="29101362#2" depart="0" type="electric" via="119429957 29101362#1" />
+  <trip id="33" from="171793108#3" to="141134977#7" depart="0" type="conventional" via="8130796#0 -142433808#0" />
+  <trip id="34" from="34928269#0" to="1324204570" depart="0" type="electric" via="142434702#4" />
+  <trip id="35" from="-142434717#5" to="1302569787" depart="0" type="electric" via="85685707#1" />
+  <trip id="36" from="142434702#4" to="29101365#0" depart="0" type="conventional" via="197695691#0" />
+  <trip id="37" from="142434707#5" to="-934424357" depart="0" type="electric" via="1239119913" />
+  <trip id="38" from="-29228798#3" to="-1085287477#1" depart="0" type="electric" via="-372867967" />
+  <trip id="39" from="1347592612#0" to="147219451" depart="0" type="electric" via="-143275563#0 41242000#1 1085287477#2" />
+  <trip id="40" from="-225572184" to="849053594#2" depart="0" type="electric" via="127005774#2 1052294681#0" />
+  <trip id="41" from="846870175#2" to="142434754#1" depart="0" type="conventional" via="142434707#5 288364241#0" />
+  <trip id="42" from="-171793108#2" to="142433810#3" depart="0" type="conventional" via="285819809" />
+  <trip id="43" from="141140970#1" to="165309538#0" depart="0" type="electric" via="283171880#0" />
+  <trip id="44" from="285819808#1" to="141134977#9" depart="0" type="electric" via="1324204579#0 188462275 141134977#7" />
+  <trip id="45" from="142952854#0" to="-29101364#0" depart="0" type="electric" via="283171874#0 822657634" />
+  <trip id="46" from="288365430#1" to="141134977#8" depart="0" type="electric" via="142434700#0 141134977#2 141134977#7" />
+  <trip id="47" from="-142434754#1" to="157405572#0" depart="0" type="electric" via="-142434703#9 1004714435#0" />
+  <trip id="48" from="85685708#0" to="29029224#7" depart="0" type="conventional" via="44702733#2 822657635" />
+  <trip id="49" from="1347592612#0" to="147219412" depart="0" type="electric" via="283171882#1 197695691#1 849053594#3" />
+  <trip id="50" from="85685707#1" to="157405572#0" depart="0" type="electric" via="85685707#2 1302569787" />
+  <trip id="51" from="-1420963066#1" to="-79569399" depart="0" type="electric" via="-29101366#0 1420963066#0" />
+  <trip id="52" from="-326942554#1" to="141134977#0" depart="0" type="electric" via="283171874#2 1324204570" />
+  <trip id="53" from="142434700#9" to="-142433808#0" depart="0" type="electric" via="51249184#0 141134977#0" />
+  <trip id="54" from="-1324204570" to="141134977#9" depart="0" type="electric" via="285819808#0 141134977#2" />
+  <trip id="55" from="141835765#3" to="147219412" depart="0" type="conventional" via="-144125190#10 -1324204565 849053594#2" />
+  <trip id="56" from="142434707#8" to="141134977#9" depart="0" type="conventional" via="34928269#1 141134977#2" />
+  <trip id="57" from="-157957602" to="-1132985815#2" depart="0" type="conventional" via="-1041493124#2 -29101305#5" />
+  <trip id="58" from="129118788#0" to="141134977#8" depart="0" type="electric" via="1306402496#0 141134977#6" />
+  <trip id="59" from="142434702#4" to="1306402496#0" depart="0" type="electric" via="822657635 1324204577" />
+  <trip id="60" from="34928268#2" to="144125184#0" depart="0" type="electric" via="-143275563#4 779283872#0" />
+  <trip id="61" from="283171869" to="141134977#4" depart="0" type="electric" via="490505844 1324204577 -142433808#0" />
+  <trip id="62" from="-1284172740#4" to="-144125190#10" depart="0" type="conventional" via="141131134" />
+  <trip id="63" from="167499560#0" to="157957602" depart="0" type="electric" via="-142434707#4 283171856 490505844" />
+  <trip id="64" from="-141835765#6" to="-29101366#3" depart="0" type="electric" via="-29101366#0 29101365#2" />
+  <trip id="65" from="1443729992" to="849053594#2" depart="0" type="conventional" via="849053594#0" />
+  <trip id="66" from="50544706#2" to="141134977#2" depart="0" type="electric" via="34928268#0 1324204566#0 779283872#0" />
+  <trip id="67" from="141132623#0" to="-29101366#3" depart="0" type="conventional" via="1239119902#1" />
+  <trip id="68" from="165309536#1" to="142433808#1" depart="0" type="electric" via="142434706#1 1324204579#0" />
+  <trip id="69" from="1324204566#0" to="51249184#1" depart="0" type="electric" via="1324204571#0 285819808#0 779283872#0" />
+  <trip id="70" from="410098318#0" to="284821001" depart="0" type="electric" via="779283872#0 141134977#0" />
+  <trip id="71" from="-141141633#1" to="-29101366#0" depart="0" type="conventional" via="295385582#0 -934424357 29101360" />
+  <trip id="72" from="-295326437" to="141134977#5" depart="0" type="electric" via="142433810#3" />
+  <trip id="73" from="-142434717#7" to="141134977#3" depart="0" type="electric" via="142434717#9 1324204571#0" />
+  <trip id="74" from="-119558944#2" to="105877522#0" depart="0" type="electric" via="-1085049766#1 141835765#0" />
+  <trip id="75" from="846870175#0" to="288364240" depart="0" type="electric" via="141136056#0" />
+  <trip id="76" from="165309535#1" to="34928268#0" depart="0" type="electric" via="-143275563#0" />
+  <trip id="77" from="157407580#0" to="141134977#5" depart="0" type="conventional" via="285819809" />
+  <trip id="78" from="105877528" to="1324025067#0" depart="0" type="electric" via="163286030#0 147219451" />
+  <trip id="79" from="1004714508#0" to="29101364#1" depart="0" type="electric" via="-43921540#3 29101360" />
+  <trip id="80" from="-142434703#10" to="849053594#3" depart="0" type="electric" via="165309535#1 163286030#0 147219451" />
+  <trip id="81" from="165309536#2" to="157957602" depart="0" type="electric" via="41241997#0 34928268#2" />
+  <trip id="82" from="-41241999#2" to="141134977#9" depart="0" type="conventional" via="142433808#1" />
+  <trip id="83" from="283171880#0" to="29101362#2" depart="0" type="electric" via="142434701#4 -29101364#0 29101362#1" />
+  <trip id="84" from="1239119903#0" to="-144125186" depart="0" type="conventional" via="-147219411#2 141136056#0" />
+  <trip id="85" from="1239119909" to="141134977#7" depart="0" type="electric" via="157407573 141134977#3" />
+  <trip id="86" from="-142952854#1" to="-29101364#0" depart="0" type="electric" via="1004714435#0 -142434700#6" />
+  <trip id="87" from="846870175#0" to="283171882#1" depart="0" type="electric" via="-43921541#1" />
+  <trip id="88" from="129118788#0" to="142433808#1" depart="0" type="electric" via="285819809" />
+  <trip id="89" from="34928268#0" to="141134977#8" depart="0" type="conventional" via="141134977#0 147219451 141134977#6" />
+  <trip id="90" from="846870175#0" to="1324204577" depart="0" type="electric" via="41242000#1" />
+  <trip id="91" from="-29029224#11" to="1324025067#0" depart="0" type="electric" via="141131134" />
+  <trip id="92" from="50544706#2" to="141134977#8" depart="0" type="conventional" via="165309535#1 141134977#7" />
+  <trip id="93" from="157411290" to="225572184" depart="0" type="electric" via="44702733#2 225572185" />
+  <trip id="94" from="-1004714508#1" to="142433810#3" depart="0" type="conventional" via="490505844 41241997#0 1324204577" />
+  <trip id="95" from="-1085049766#1" to="29228798#4" depart="0" type="electric" via="34928269#0 -142434707#1 1375630640#0" />
+  <trip id="96" from="-144125184#7" to="1306402496#0" depart="0" type="electric" via="285819809" />
+  <trip id="97" from="41242000#1" to="141134977#8" depart="0" type="electric" via="-144125190#4 142433808#1 141134977#7" />
+  <trip id="98" from="-147219303#2" to="147219412" depart="0" type="electric" via="1239119902#1 285819809 849053594#3" />
+  <trip id="99" from="128872865#0" to="1302569787" depart="0" type="conventional" via="171793346#0 157407589#1" />
+</routes>

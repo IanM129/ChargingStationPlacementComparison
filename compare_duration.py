@@ -47,70 +47,34 @@ def getBestResults(filepath, params=None):
 
 def parseArgs():
     filepaths = [];
-    args = {"stats": None}
     i = 1
     while i < len(sys.argv):
-        if sys.argv[i] == "-stats":
-            args["stats"] = sys.argv[i+1].split(',')
-            i += 2
-        elif sys.argv[i] == "--no-values":
-            args["no-values"] = True
-            i += 1
-        elif sys.argv[i] == "--no-legend":
-            args["no-legend"] = True
-            i += 1
-        elif sys.argv[i] == "--centerize":
-            args["centerize"] = True
-            i += 1
-        else:
-            filepaths.append(sys.argv[i])
-            i += 1
-    return filepaths, args
+        filepaths.append(sys.argv[i])
+        i += 1
+    return filepaths
 
 PRINT_RESULTS = False
 
 if __name__ == "__main__":
     # Parse filepaths from args
-    filepaths, args = parseArgs();
-    if "stats" in args: stats = args["stats"];
-    else: stats = None;
-    print("Comparing by best:", filepaths, "\n")
-    # Rerun and compare
+    filepaths = parseArgs();
+    print("Comparing by duration:", filepaths, "\n")
+    # Gather info and compare
     stime = time.perf_counter()
-    results_ds = []
-    params_arr = []
+    durations = []
+    per_iteration = []
     i = 0
     for filepath in filepaths:
+        dur = float(xmlOut.loadTotalDuration_txt(filepath + "/results"))
+        durations.append(round(dur, 2))
         params = Parameters.load(filepath + "/config.xml")
-        res = getBestResults(filepath, params=params)
-        #print(f"{i:2d}:", res)
-        results_ds.append(res)
-        params_arr.append(params)
+        iterations = float(params["training.iterations"])
+        per_iteration.append(round((dur / iterations), 2))
         i += 1
-    results_ds = EvaluationDataset(results_ds)
-    scores = results_ds.calcScores(params_arr)
     sess_names = [filepath.rsplit('/', 1)[1] for filepath in filepaths]
-    rank_prec = len(str(len(scores)))
-    name_prec = len(max(sess_names, key=len)) + 4
-    ranked_indeces = list(np.argsort(scores))
-    ranked_indeces.reverse()
-    print("Final scores:")
-    for rank in range(len(ranked_indeces)):
-        i = ranked_indeces[rank]
-        filepath = filepaths[i]
-        print(f"  {(rank+1):{rank_prec}}. {sess_names[i]:{name_prec}s}: {scores[i]}")
-    print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
     # Plot
-    fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr, stat_list=stats,
-                                     legend=("no-legend" not in args),
-                                     value_labels=("no-values" not in args),
-                                     centerize=("centerize" in args))
-    # Round to 2
-    for i in range(len(scores)):
-        scores[i] = round(scores[i], 2)
-    fig2 = visutil.plotScores(scores, sess_names,
-                              legend=("no-legend" not in args),
-                              value_labels=("no-values" not in args))
+    fig1 = visutil.plotScores(durations, sess_names, title="Total duration", ylabel="Seconds")
+    fig2 = visutil.plotScores(per_iteration, sess_names, title="Duration per iteration", ylabel="Seconds")
     plt.show()

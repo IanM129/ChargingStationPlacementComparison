@@ -298,7 +298,13 @@ if __name__ == "__main__":
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
     ITERATIONS = params["training.iterations"]
+    if "iterations" in args:
+        ITERATIONS = int(args["iterations"])
+        params["training.iterations"] = ITERATIONS
     AGENT_COUNT = params["training.agents"]
+    if "agent-count" in args:
+        AGENT_COUNT = int(args["agent-count"])
+        params["training.agents"] = AGENT_COUNT
     MIN_PRICE = params["training.minPrice"]
     MAX_PRICE = params["training.maxPrice"]
     PRICE_LAMBDA = params["training.coefficients.priceLambda"]
@@ -313,6 +319,12 @@ if __name__ == "__main__":
     PROGRESS_WRITE = params["training.writeProgress"]
     PROGRESS_DRAW = params["training.drawProgress"]
     print(params.groupPrint())
+    # Inform about arg changes
+    if "iterations" in args:
+        print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
+    if "agent-count" in args:
+        print(f"INFO: Set AGENT_COUNT to {AGENT_COUNT} by received argument.")
+    # Check agent count
     if AGENT_COUNT < 2:
         print("ERROR: Agent count is less than 2, aborting.")
         exit()
@@ -379,13 +391,14 @@ if __name__ == "__main__":
 ###### PRE-RUN
     # Datetime now (file organization)
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = network_name + "_marl_" + start_datetime_str
+    output_folder = network_name + "_marl" + str(AGENT_COUNT) + "_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
     # Save params and metadata
     params.write(output_path + "/config.xml")
-    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "MARL", network_diameter)
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "marl",
+                         network_diameter=network_diameter)
     ## Vehicle data
     if "vehicle-data" in args:
         # Load
@@ -558,8 +571,8 @@ if __name__ == "__main__":
         # Running reward/advantage
         if EFFECT_ON_RUN_REWARD > 0.0:
             if run_reward_general == None:
-                run_reward_general = reward_general.copy();
-                run_rewards = rewards.copy();
+                run_reward_general = copy.deepcopy(reward_general)
+                run_rewards = copy.deepcopy(rewards)
             advantage_general = float(reward_general - run_reward_general);
             run_reward_general = ((1 - EFFECT_ON_RUN_REWARD) * run_reward_general) +\
                                  (EFFECT_ON_RUN_REWARD * reward_general)
@@ -672,7 +685,9 @@ if __name__ == "__main__":
             """
     pbar.close()
     training_etime = time.perf_counter();
-    #### Finish and save
+    time_diff = training_etime - training_stime
+    
+#### FINISH AND SAVE
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     ## Save models
     for a in range(AGENT_COUNT):
@@ -687,6 +702,7 @@ if __name__ == "__main__":
     xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
     xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
+    xmlOut.saveTotalDuration_txt(time_diff, output_path + "/results")
     # Write plot figures
     figs = visutil.plotMARL(train_results, iterations=ITERATIONS, agent_colors=agent_colors);
     for stat in figs:
@@ -697,7 +713,6 @@ if __name__ == "__main__":
         xmlOut.cleanCache(output_path + "/_cache", network_name)
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()
-    time_diff = training_etime - training_stime
     print(f"\nTraining finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")
     # Show training results
     plt.show()

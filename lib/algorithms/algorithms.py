@@ -120,8 +120,8 @@ def farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius, edge_v
         stations[0], covered = coverAlgs.nodeDegreesClosest_Nodes(G_d, peri_choice, candidates, radius)
     else:
         stations[0] = first_station;
-        covered = graphutil.getNodesInRadius(G, first_station, radius);
-        remaining_cands = candidates - covered;
+        covered = graphutil.getNodesInRadius(G_d, first_station, radius);
+    remaining_cands = candidates - covered;
     remaining_nodes = remaining_cands.union(non_candidates - covered)
     if len(remaining_cands) == 0: return [st for st in stations if st != None];
     dis_to_centers = [None]; dis_to_centers[0] = [];
@@ -166,7 +166,7 @@ def farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius, edge_v
         for o in remaining_nodes:
             path_len = graphutil.shortest_path_length(G_d, stations[i], o, weight="length");
             dis_to_centers[i].append((o, path_len));
-    if (debug): print("\n\n---- final stations:", stations);
+    if (False): print("\n\n---- final stations:", stations);
     return [st for st in stations if st != None]
 
 def closestFirstCoverageBased(G, G_d, candidates, k, radius, debug=False):
@@ -245,18 +245,31 @@ def radiusBinarySearch(G, G_d, candidates, k, epsilon=50, distribution_alg=None,
         graphdraw.drawCenters(G_d, centers, radius, node_labels=False, edge_labels=False)
         plt.show()
     return (radius, centers)
-def radiusBinarySearch_EdgeWeights(G, G_d, candidates, k, edge_value_weights,
-                                   first_station=None, epsilon=50, default_edge_weight=1, debug=False):
+def radiusBinarySearch_EdgeWeights(G, G_d, candidates, k, edge_value_weights:dict,
+                                   first_station=None, epsilon=50, distribution_alg=None,
+                                   default_edge_weight=1, debug=False):
+    if distribution_alg == None:
+        distribution_alg = farthestFirstCoverageBased_EdgeWeights;
+    # Adjust first station
+    if isinstance(first_station, tuple):
+        first_station = graphutil.translateEdgeToDetailedEdgeID(first_station, alphabetical=True)
+    #else:
+    #    first_station = graphutil.translateNetEdgeToDetailedEdgeID(first_station)
     max_radius = float(graphutil.diameter(G_d, weight="length"))# / (math.ceil(k / 2))
     a = 0; b = max_radius; radius = 0; centers = [];
-    while (b - a > epsilon):
+    while (b - a > epsilon) and len(centers) < k:
         radius = (b + a) / 2
-        centers = farthestFirstCoverageBased_EdgeWeights(G, G_d, candidates, k, radius,
-                                                         edge_value_weights=edge_value_weights, first_station=first_station,
-                                                         default_edge_weight=default_edge_weight, debug=False)
-        feasible = len(centers) < k or coverAlgs.isGraphCovered(G_d, centers, radius);
-        if feasible: b = radius;
-        else: a = radius;
+        centers = distribution_alg(G, G_d, candidates, k, radius,
+                                   edge_value_weights=edge_value_weights, first_station=first_station,
+                                   default_edge_weight=default_edge_weight, debug=False)
+        if len(centers) < k:
+            delta = b - radius
+            b = radius
+            a = max(0, a - delta)
+        else:
+            feasible = coverAlgs.isGraphCovered(G_d, centers, radius);
+            if feasible: b = radius;
+            else: a = radius;
     if debug:
         graphdraw.drawCenters(G_d, centers, radius, node_labels=False, edge_labels=False)
         plt.show()

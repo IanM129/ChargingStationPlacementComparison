@@ -1,5 +1,6 @@
 import math
 import random
+import numpy as np
 import xml.etree.ElementTree as ET
 
 import lib.data_management as dm
@@ -77,7 +78,7 @@ def ema_welford(x, mean, var, alpha=0.01):
 
 #### CLI
 def parseArgs(args_str):
-    args = {}
+    args_dict = {}
     i = 0
     while i < len(args_str):
         if args_str[i] == "-v" or args_str[i] == "-vd" or args_str[i] == "--vehicles" or args_str[i] == "--vehicle-data":
@@ -90,17 +91,69 @@ def parseArgs(args_str):
                     if index < 0:
                         raise Exception("ERROR: Indexing starts from 1.")
                     if index >= len(data_list):
-                        raise Exception("ERROR: Out of range index given for '{args_str[i]}'.")
+                        raise Exception(f"ERROR: Out of range index given for '{args_str[i]}'.")
                     value = data_list[index][1]
                 else:
                     if not any(e[0] == value for e in data_list):
-                        raise Exception("ERROR: Vehicle data folder '{value}' not found in 'vehicle_data' folder.")
+                        raise Exception(f"ERROR: Vehicle data folder '{value}' not found in 'vehicle_data' folder.")
                     value = "vehicle_data/" + value;
-            args["vehicle-data"] = value
+            args_dict["vehicle-data"] = value
+            i += 2
+        elif args_str[i] == "-a" or args_str[i] == "-ac" or args_str[i] == "--agents" or args_str[i] == "--agents-count":
+            value = int(args_str[i+1])
+            args_dict["agent-count"] = value
+            i += 2
+        elif args_str[i] == "-i" or args_str[i] == "-it" or args_str[i] == "--iterations":
+            value = int(args_str[i+1])
+            args_dict["iterations"] = value
             i += 2
         else: i += 1;
-    return args
+    return args_dict
+def stringifyArgs(args_dict):
+    args_str = ""
+    if "vehicle-data" in args_dict:
+        args_str += " --vehicles " + str(args_dict["vehicle-data"])
+    if "agent-count" in args_dict:
+        args_str += " --agents " + str(args_dict["agent-count"])
+    if "iterations" in args_dict:
+        args_str += " --iterations " + str(args_dict["iterations"])
+    return args_str.strip()
 
+#### Bookkeeping
+def initializeResultsDict(params, iteration_count, K, agent_count):
+    train_results = {}
+    for p in params.groups["reward"]:
+        if params["reward." + p + ".monitor"] == True:
+            train_results[p] = np.zeros(iteration_count)
+    if agent_count > 1:
+        for p in params.groups["compReward"]:
+            if params["compReward." + p + ".monitor"] == True:
+                train_results[p] = np.zeros((agent_count, iteration_count))
+        train_results["price"] = np.zeros((agent_count, iteration_count))
+        train_results["stations"] = np.empty((agent_count, iteration_count, K), dtype=np.dtypes.StringDType())
+    else:
+        train_results["stations"] = np.empty((iteration_count, K), dtype=np.dtypes.StringDType())
+    return train_results
+def updateResultsDict(train_results, stations, results, iteration, agent_count=1):
+    from lib.structs.evaluation import getStatFromResult
+    for p in train_results:
+        if p == "stations":
+            train_results[p][iteration] = stations.listEdges();
+        else:
+            train_results[p][iteration] = getStatFromResult(results, p)
+def updateResultsDict_comp(train_results, agent_stations, results, iteration):
+    from lib.structs.evaluation import getStatFromResult
+    suffixes = results.suffixes
+    for p in train_results:
+        if p == "stations":
+            for a in range(len(train_results[p])):
+                train_results[p][a][iteration] = agent_stations[a].listEdges()
+        elif len(train_results[p].shape) > 1:
+            stats = getStatFromResult(results, p)
+            for a in range(len(train_results[p])):
+                train_results[p][a][iteration] = stats[suffixes[a]];
+        else:
+            train_results[p][iteration] = getStatFromResult(results, p);
 
 #### Other
 #["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]

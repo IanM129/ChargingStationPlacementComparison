@@ -74,9 +74,16 @@ class Evaluation:
         self.fullyCompleted = fully_completed
         self.simulationTime = simulationTime
         self.executionDuration = duration
+    def setSuffixes(self, suffixes):
+        self.suffixes = suffixes
     def setCoverageData(self, coverage_radius, network_diameter):
         self.coverageRadius = coverage_radius
         self.networkDiameter = network_diameter
+    def setCoverageDataComp(self, agent_coverage_radius):
+        self.agent_data["coverage"] = {}
+        agent_count = len(agent_coverage_radius)
+        for a in range(agent_count):
+            self.agent_data["coverage"][self.suffixes[a]] = float(agent_coverage_radius[a])
     def setVehicleData(self, vehicle_count,
                        EV_count, EV_set_charge, EV_arrived, EV_charged):
         self.vehicle_data["vehicleCount"] = int(vehicle_count)
@@ -113,16 +120,15 @@ class Evaluation:
         self.station_data["totalCharge"] = float(total_charge)
         self.station_data["totalMoneyEarned"] = float(money_earned)
     def setStationDataComp(self, stations, prices, station_charges, sttn_util_rate, sttn_vehicle_count,
-                           total_charge, total_money_earned, charge, money_earned,
-                           suffixes):
+                           total_charge, total_money_earned, charge, money_earned):
         agent_count = len(stations)
         for k in Evaluation.station_comp_stats:
             self.station_data[k] = {};
             for a in range(agent_count):
-                self.station_data[k][suffixes[a]] = {};
+                self.station_data[k][self.suffixes[a]] = {};
         self.station_data["price"] = {}
         for a in range(agent_count):
-            suff = suffixes[a]
+            suff = self.suffixes[a]
             self.station_data["price"][suff] = float(prices[a]);
             for si in stations[a]:
                 sid = si.getID()
@@ -137,8 +143,8 @@ class Evaluation:
         self.agent_data["totalCharge"] = {}
         self.agent_data["moneyEarned"] = {}
         for a in range(agent_count):
-            self.agent_data["totalCharge"][suffixes[a]] = float(charge[a])
-            self.agent_data["moneyEarned"][suffixes[a]] = float(money_earned[a])
+            self.agent_data["totalCharge"][self.suffixes[a]] = float(charge[a])
+            self.agent_data["moneyEarned"][self.suffixes[a]] = float(money_earned[a])
     # Get
     def getFullDict(self, include_edge_data=True):
         d = {}
@@ -223,6 +229,15 @@ def getStatFromResult(result, stat):
             return result.trip_data["timeLoss"]
         case "energyConsumed":
             return result.trip_data["energyConsumed"]
+        # Competitive
+        case "coverage":
+            return result.agent_data["coverage"]
+        case "charge":
+            return result.agent_data["totalCharge"]
+        case "price":
+            return result.station_data["price"]
+        case "moneyEarned":
+            return result.agent_data["moneyEarned"]
     return None
 def setStatToResult(result, stat, value):
     match (stat):
@@ -244,6 +259,15 @@ def setStatToResult(result, stat, value):
             result.trip_data["timeLoss"] = value
         case "energyConsumed":
             result.trip_data["energyConsumed"] = value
+        # Competitive
+        case "coverage":
+            result.agent_data["coverage"] = value
+        case "charge":
+            result.agent_data["totalCharge"] = value
+        case "price":
+            result.station_data["price"] = value
+        case "moneyEarned":
+            result.agent_data["moneyEarned"] = value
     
 class EvaluationDataset:
     # arr

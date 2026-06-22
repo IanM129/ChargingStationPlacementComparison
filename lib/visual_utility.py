@@ -214,9 +214,11 @@ def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
             ax.plot(x, data, label=metadata["label"])
             figs[stat] = (fig, ax)
     return figs
-def plotResultDataset(results_ds, names, params, stat_list=None):
+def plotResultDataset(results_ds, names, params, stat_list=None,
+                      legend=True, value_labels=True, centerize=False):
     from lib.structs.evaluation import getStatFromResult
     from lib.utility import isMinOrMax, invertRange
+    default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     if isinstance(params, list):
         params_arr = params
         stats = params_arr[0].getGroup("reward")
@@ -248,17 +250,87 @@ def plotResultDataset(results_ds, names, params, stat_list=None):
         data[names[i]] = vals
     # Plot
     fig, ax = plt.subplots()
-    plot = ax.grouped_bar(data, tick_labels=stats, group_spacing=1)
-    for i in range(len(plot.bar_containers)):
-        container = plot.bar_containers[i]
-        labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
-        ax.bar_label(container, padding=3,labels=labels)
+    if len(stats) > 1:
+        if centerize:
+            vals = [];
+            for i in range(len(stats)):
+                vals.append([]);
+                for name in names:
+                    vals[i].append(data[name][i])
+            min_vals = []; deltas = [];
+            for i in range(len(stats)):
+                min_val = min(vals[i])
+                max_val = max(vals[i])
+                min_vals.append(min_val)
+                deltas.append(max_val - min_val)
+            for name in data:
+                for i in range(len(stats)):
+                    data[name][i] = (0.1 + ((data[name][i] - min_vals[i]) * (0.9 / deltas[i])))
+        plot = ax.grouped_bar(data, tick_labels=stats, group_spacing=1, orientation="horizontal")
+        if value_labels:
+            for i in range(len(plot.bar_containers)):
+                container = plot.bar_containers[i]
+                labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
+                ax.bar_label(container, padding=3,labels=labels)
+        ax.set_title("Result comparison")
+    else:
+        values = []
+        #for val in data.values(): values.append(val[0]);
+        for i in range(len(names)): values.append(real_vals[i][stats[0]]);
+        bars = ax.barh(names, values, color=default_colors[:len(names)])
+        if centerize:
+            min_val = min(values); max_val = max(values);
+            delta = max_val - min_val
+            ax.set_xlim(max(min_val - (0.1 * delta), 0.0), max_val + (0.1 * delta))
+        if value_labels:
+            labels = [f"{real_vals[i][stats[0]]:.2f}" for i in range(len(names))]
+            ax.bar_label(bars, labels, padding=3)
+        stat_title = ""
+        for i in range(len(stats[0])):
+            if stats[0][i].isupper():
+                stat_title += " ";
+            stat_title += stats[0][i].lower()
+        ax.set_title(stat_title.capitalize() + " comparison")
     ax.set_ylabel("Normalized score")
-    ax.set_title("Score comparison")
-    ax.legend(loc="best")
+    if legend: ax.legend(loc="best");
+    return fig
+def plotScores(scores, names, title="Score comparison", ylabel="Score",
+               legend=True, value_labels=True):
+    default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    # Plot
+    fig, ax = plt.subplots()
+    bars = ax.bar(names, scores, color=default_colors[:len(scores)])
+    if value_labels: ax.bar_label(bars, padding=3);
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    #if legend: ax.legend(names, loc="best");
     return fig
     
 ## High
+def plotSolo(train_results, iterations=None):
+    if iterations is None:
+        iterations = int(train_results["simDuration"].shape[0])
+    figs = plotTrainingResults_figs(train_results, iterations)
+    return figs
+def plotComp(train_results, iterations=None, agent_colors=None):
+    if iterations is None:
+        iterations = int(train_results["simDuration"].shape[0])
+    if agent_colors is None:
+        agent_colors = getAgentColors();
+    # Write plot figures
+    figs = plotTrainingResults_figs(train_results, iterations, agent_colors=agent_colors)
+    # Combine similar
+    # coverage
+    metadata = getPlotMetadata("coverage");
+    temp_title = metadata["title"].split('[', 1)
+    if len(temp_title) > 1:
+        metadata["title"] = temp_title[0] + " (Combined) [" + temp_title[1];
+    figs["coverageCombined"] = combineFigures([figs["totalCoverage"][1], figs["coverage"][1]], metadata)
+    # charge
+    metadata = getPlotMetadata("charge");
+    metadata["title"] += " (Combined)";
+    figs["chargeCombined"] = combineFigures([figs["totalCharge"][1], figs["charge"][1]], metadata)
+    return figs
 def plotGNN(train_results, iterations=None):
     if iterations is None:
         iterations = int(train_results["simDuration"].shape[0])

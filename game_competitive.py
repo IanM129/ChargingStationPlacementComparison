@@ -18,7 +18,7 @@ import threading
 import preprocess as prep
 
 import lib.visual_utility as visutil
-from lib.utility import parseArgs
+from lib.utility import parseArgs, initializeResultsDict, updateResultsDict_comp
 from lib.data_management import generateRandomChargeData, writeChargeData, loadChargeData
 
 import lib.graphing as graphing  #= lib/graphing/__init__.py
@@ -105,23 +105,6 @@ def runEvaluation(base_net, G, network_name, data_path, output_path,
         raise Exception("Simulation failed to run 10 times in a row.")
     return results
 
-
-########## BOOKKEEPING
-def initializeResultsDict(params, iteration_count, K, AGENT_COUNT):
-    train_results = {}
-    for p in params.groups["reward"]:
-        if params["reward." + p + ".monitor"] == True:
-            train_results[p] = np.zeros(iteration_count)
-    train_results["stations"] = np.empty((iteration_count, AGENT_COUNT, K), dtype=np.dtypes.StringDType())
-    return train_results
-def updateResultsDict(train_results, agent_stations, results, iteration):
-    for p in train_results:
-        if p == "stations":
-            for a in range(len(agent_stations)):
-                train_results[p][iteration][a] = agent_stations[a].listEdges();
-        else:
-            train_results[p][iteration] = getStatFromResult(results, p)
-
 ########## COST
 def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
     st_redge_tup_nosuffix = (st_redge_tup[0], st_redge_tup[1].rsplit('_', 1)[0])
@@ -158,10 +141,10 @@ def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
         detour_matrix[int(vehID)][cand_index][1] = min_cost
         return chosen_insert_index, min_cost
 def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, translator, return_cost=False):
-    congestion_empty = True
-    for key in congestion:
-        if congestion[key] > 0:
-            congestion_empty = False; break;
+    #congestion_empty = True
+    #for key in congestion:
+    #    if congestion[key] > 0:
+    #        congestion_empty = False; break;
     # Coefficients
     congestion_c = 10.0; price_c = 0.2;
     # Return vars
@@ -275,7 +258,7 @@ def stationDistribution_detourCost(G, candidates_eid, candidates_tup,
     #stations = StationInfoDataset([StationInfo(s, STATION_CAPACITY) for s in stations])
     return stations
 
-## Profit
+########## PRICE + PROFIT
 def calculateProfit(station_users : dict, price : float, trips):
     charged = 0.0
     for users in station_users.values():
@@ -290,21 +273,6 @@ def calculateProfitPerAgent(agent_users : list[set], prices : list[float], trips
             charged += trips[vehID].getTotalDistance()
         agent_profits.append(charged * prices[a])
     return agent_profits
-
-
-def findEquilibrium(network_name, net, G,
-                    agent_stations, stations, base_trips, charge_data, prices,
-                    params, results, iteration=None, evaluate=True, add_stations_to_net=True,
-                    debug=False, return_sim_data=False):
-    trips = copy.deepcopy(base_trips)
-    output_subfolder = "game";
-    if iteration != None: output_subfolder += "_" + str(iteration);
-    return equilibriumGameRun(net, G, data_path, network_name,
-                              trips, charge_data, stations, costFunction,
-                              results, output_path=output_path, output_subfolder=output_subfolder,
-                              agent_stations=agent_stations, prices=prices, agent_colors=agent_colors,
-                              params=params, add_stations_to_net=add_stations_to_net, evaluate=evaluate,
-                              debug=debug, return_sim_data=return_sim_data)
 def priceLocalSearch_thread(network_name, net, G,
                     agent_stations, stations, base_trips, charge_data, prices,
                     params, results,
@@ -316,7 +284,7 @@ def priceLocalSearch_thread(network_name, net, G,
     for sds in agent_stations: stations.extend(sds.arr);
     stations = StationInfoDataset(stations)
     trips = copy.deepcopy(base_trips)
-    output_subfolder = "game";
+    output_subfolder = "game" + str(len(agent_stations));
     chosen, _, _ = equilibriumGameRun(net, G, data_path, network_name,
                                       trips, charge_data, stations, costFunction,
                                       results, output_path=output_path, output_subfolder=output_subfolder,
@@ -326,9 +294,20 @@ def priceLocalSearch_thread(network_name, net, G,
     new_chosen_station[index] = chosen
     return
 
-
-
-
+########## EUQILIBRIUM
+def findEquilibrium(network_name, net, G,
+                    agent_stations, stations, base_trips, charge_data, prices,
+                    params, results, iteration=None, evaluate=True, add_stations_to_net=True,
+                    debug=False, return_sim_data=False):
+    trips = copy.deepcopy(base_trips)
+    output_subfolder = "game" + str(len(agent_stations));
+    if iteration != None: output_subfolder += "_" + str(iteration);
+    return equilibriumGameRun(net, G, data_path, network_name,
+                              trips, charge_data, stations, costFunction,
+                              results, output_path=output_path, output_subfolder=output_subfolder,
+                              agent_stations=agent_stations, prices=prices, agent_colors=agent_colors,
+                              params=params, add_stations_to_net=add_stations_to_net, evaluate=evaluate,
+                              debug=debug, return_sim_data=return_sim_data)
 
 LIMIT_CANDIDATES = False
 
@@ -357,12 +336,25 @@ if __name__ == "__main__":
     EV_PEN = params["electric.penetration"]
     STATION_CAPACITY = params["station.capacity"]
     K = params["station.k"]
+    ITERATIONS = params["training.iterations"]
+    if "iterations" in args:
+        ITERATIONS = int(args["iterations"])
+        params["training.iterations"] = ITERATIONS
     MIN_PRICE = params["training.minPrice"]
     MAX_PRICE = params["training.maxPrice"]
     AGENT_COUNT = params["training.agents"]
+    if "agent-count" in args:
+        AGENT_COUNT = int(args["agent-count"])
+        params["training.agents"] = AGENT_COUNT
+    PROGRESS_PRINT = params["training.printProgress"]
     WAIT_QUEUE_SIZE = params["station.waitQueue"]
     QUEUE_PARKING = params["station.routing.waitParking"]
     print(params.groupPrint())
+    # Inform about arg changes
+    if "iterations" in args:
+        print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
+    if "agent-count" in args:
+        print(f"INFO: Set AGENT_COUNT to {AGENT_COUNT} by received argument.")
     # Divide K
     if K % AGENT_COUNT == 0:
         K = int(K / AGENT_COUNT); params["station.k"] = K;
@@ -411,7 +403,7 @@ if __name__ == "__main__":
         
 ###### PRE-RUN
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
-    output_folder = network_name + "_game_" + start_datetime_str
+    output_folder = network_name + "_game" + str(AGENT_COUNT) + "_" + start_datetime_str
     output_path = output_path + "/" + output_folder
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(output_path + "/training").mkdir(parents=True, exist_ok=True)
@@ -422,7 +414,8 @@ if __name__ == "__main__":
     pathlib.Path(cache_output_path).mkdir(parents=True, exist_ok=True)
     # Save params and metadata
     params.write(output_path + "/config.xml")
-    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "solo")
+    xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "game",
+                         network_diameter=network_diameter)
     ## Vehicle data
     if "vehicle-data" in args:
         # Load
@@ -487,7 +480,6 @@ if __name__ == "__main__":
         candidates = [all_candidates[i] for i in perm]
         candidates_eid = [candidates_eid[i] for i in perm]
         candidates_tup = [candidates_tup[i] for i in perm]
-        print(candidates_eid)
     #graphdraw.drawGraph(G_all)
     #import matplotlib.pyplot as plt
     #plt.show()
@@ -508,15 +500,14 @@ if __name__ == "__main__":
     for i in range(len(agent_stations)):
         stations.extend(agent_stations[i].arr)
     stations = StationInfoDataset(stations)
-    print("-- starting stations:")
-    for a in range(AGENT_COUNT):
-        print(f"  {agent_colors[a].capitalize():6s}: {agent_stations[a].listEdges()}")
+    #print("-- starting stations:")
+    #for a in range(AGENT_COUNT):
+    #    print(f"  {agent_colors[a].capitalize():6s}: {agent_stations[a].listEdges()}")
     # Prepare results
     results = Evaluation(translator)
     print("")
 
 ###### RUN
-    ITERATIONS = params["training.iterations"]
     pbar = tqdm(total=ITERATIONS)
     best = None; train_results = initializeResultsDict(params, ITERATIONS, K, AGENT_COUNT);
     price_delta = []
@@ -535,12 +526,13 @@ if __name__ == "__main__":
         # Load modified net
         net, G, translator, trips_nx, chosen_trips = sim_data
         ## Local search price through equilibrium
-        print("\nStarting decisions:")
-        for a in range(AGENT_COUNT):
-            station_users_a = getStationUsers(chosen_station, agent_stations[a])
-            start_profit = calculateProfit(station_users_a, prices[a], trips_nx)
-            user_count = sum(len(v) for v in station_users_a.values())
-            print(f"  {agent_colors[a].capitalize():6s} ({prices[a]} €): {user_count} | {round(start_profit/1000.0, 2)} €")
+        if PROGRESS_PRINT:
+            print("\nStarting decisions:")
+            for a in range(AGENT_COUNT):
+                station_users_a = getStationUsers(chosen_station, agent_stations[a])
+                start_profit = calculateProfit(station_users_a, prices[a], trips_nx)
+                user_count = sum(len(v) for v in station_users_a.values())
+                print(f"  {agent_colors[a].capitalize():6s} ({prices[a]} €): {user_count} | {round(start_profit/1000.0, 2)} €")
         # Multithreading loop
         opp_profits = [];
         og_chosen_station = chosen_station
@@ -551,15 +543,16 @@ if __name__ == "__main__":
         agent_users = getAgentUsers(chosen_station, agent_stations)
         og_profits = calculateProfitPerAgent(agent_users, prices, trips_nx)
         for a in range(AGENT_COUNT):
-            print(f"-- {agent_colors[a].capitalize()}:")
             opp_profit = 0.0
             for p in range(len(og_profits)):
                 if p != a: opp_profit += og_profits[p]
             opp_profits.append(opp_profit)
             profit_delta = og_profits[a] - opp_profit
-            print(f"  normal profit ({prices[a]} €, |{len(agent_users[a])}|): " +
-                  f"{round(og_profits[a]/1000.0, 2)} | {round(opp_profit/1000.0, 2)}" +
-                  f" => {round(profit_delta/1000.0, 2)}")
+            if PROGRESS_PRINT:
+                print(f"-- {agent_colors[a].capitalize()}:")
+                print(f"  normal profit ({prices[a]} €, |{len(agent_users[a])}|): " +
+                      f"{round(og_profits[a]/1000.0, 2)} | {round(opp_profit/1000.0, 2)}" +
+                      f" => {round(profit_delta/1000.0, 2)}")
             # Small -> medium -> large search
             # Define vars
             #PRICE_RANGE = MAX_PRICE - MIN_PRICE
@@ -597,7 +590,7 @@ if __name__ == "__main__":
         # Check resulting prices
         best_prices = []
         for a in range(AGENT_COUNT):
-            print(f"-- {agent_colors[a].capitalize()}:")
+            if PROGRESS_PRINT: print(f"-- {agent_colors[a].capitalize()}:")
             #indeces = range(a * deltas_size * 2, ((a + 1) * deltas_size * 2) - 1)
             best_profit = (og_profits[a], opp_profits[a]);
             best_price = prices[a];
@@ -616,9 +609,10 @@ if __name__ == "__main__":
                 opp_gain = opp_profit - best_profit[1]
                 best_delta = best_profit[0] - best_profit[1]    # own advantage
                 cur_delta = new_profit - opp_profit             # opp advantage
-                print(f"  [{a}] new profit ({new_price} €, |{len(agent_users[a])}|): " +
-                      f"{round(new_profit/1000.0, 2)} | {round(opp_profit/1000.0, 2)}" +
-                      f" => {round(cur_delta/1000.0,2)}")
+                if PROGRESS_PRINT:
+                    print(f"  [{a}] new profit ({new_price} €, |{len(agent_users[a])}|): " +
+                          f"{round(new_profit/1000.0, 2)} | {round(opp_profit/1000.0, 2)}" +
+                          f" => {round(cur_delta/1000.0,2)}")
                 #if new_profit > (best_profit[0] * random.uniform(0.9, 1.0)) and \
                 #   opp_profit <= (best_profit[1] * random.uniform(0.5, 1.0)):
                 #if cur_delta > (best_delta * random.uniform(0.9, 1.0)):
@@ -645,12 +639,13 @@ if __name__ == "__main__":
                                                         iteration=None, debug=False)
         ## Gather users for each station
         station_users = getStationUsers(chosen_station, stations)
-        print("Final decisions:")
-        for a in range(AGENT_COUNT):
-            station_users_a = getStationUsers(chosen_station, agent_stations[a])
-            final_profit = calculateProfit(station_users_a, prices[a], trips_nx)
-            user_count = sum(len(v) for v in station_users_a.values())
-            print(f"  {agent_colors[a].capitalize():6s} ({prices[a]:0.2f} €): {user_count} | {round(final_profit/1000.0, 2)} €")
+        if PROGRESS_PRINT:
+            print("Final decisions:")
+            for a in range(AGENT_COUNT):
+                station_users_a = getStationUsers(chosen_station, agent_stations[a])
+                final_profit = calculateProfit(station_users_a, prices[a], trips_nx)
+                user_count = sum(len(v) for v in station_users_a.values())
+                print(f"  {agent_colors[a].capitalize():6s} ({prices[a]:0.2f} €): {user_count} | {round(final_profit/1000.0, 2)} €")
         ## Bookkeeping
         # Update best
         if best is None:
@@ -663,7 +658,8 @@ if __name__ == "__main__":
             if scores[0] > scores[1]:
                 best = copy.deepcopy(results);
                 #print("> best updated!")
-        updateResultsDict(train_results, agent_stations, results, iteration)
+        # Update training results
+        updateResultsDict_comp(train_results, agent_stations, results, iteration)
         # Calculate new stations
         st_edges = stationDistribution_detourCost(G_all, candidates_eid, candidates_tup,
                                                   trips_cov_nx, K * AGENT_COUNT, station_users)
@@ -676,7 +672,7 @@ if __name__ == "__main__":
         stations = []
         for ds in agent_stations: stations.extend(ds.arr);
         stations = StationInfoDataset(stations)
-        if True:
+        if PROGRESS_PRINT:
             #print(f" > {iteration+1:4d}: done, new stations:", stations.listEdges())
             for a in range(AGENT_COUNT):
                 print(f"  {agent_colors[a].capitalize():6s}: {agent_stations[a].listEdges()}")
@@ -684,17 +680,27 @@ if __name__ == "__main__":
     pbar.close()
     loop_etime = time.perf_counter();
     time_diff = loop_etime - loop_stime
-    #### Finish and save
+    
+###### FINISH AND SAVE
     pathlib.Path(output_path + "/results").mkdir(parents=True, exist_ok=True)
     # Save loop results data
     xmlOut.saveTrainResults_numpy(train_results, output_path + "/results/data")
     xmlOut.saveTrainResults_XML(train_results, output_path + "/results/data_visualize.xml")
     xmlOut.saveTrainResults_csv(train_results, output_path + "/results/data")
+    xmlOut.saveTotalDuration_txt(time_diff, output_path + "/results")
     # Write plot figures
-    figs = visutil.plotTrainingResults_figs(train_results, ITERATIONS)
+    figs = visutil.plotComp(train_results, iterations=ITERATIONS, agent_colors=agent_colors);
     for stat in figs:
         fig, ax = figs[stat]
         fig.savefig(output_path + f"/training/graph_" + stat + ".jpg")
+    # Save best
+    res_dict = best.getFullDict(include_edge_data=True)
+    Evaluation.suffixesToNames(res_dict)
+    res_tree = ET.ElementTree(ET.fromstring('<results></results>'))
+    xmlOut.dictToElement_recursive(res_dict, res_tree.getroot())
+    ET.indent(res_tree, space="    ")
+    res_tree.write(output_path + "/training/best.xml");
+    res_tree.write(output_path + "/results/best.xml");
     # Clean up files
     if params["sim.deleteCache"]:
         xmlOut.cleanCache(output_path + "/_cache", network_name)

@@ -52,9 +52,10 @@ def netToGraph(net_xml_filepath, net=None,
                 x, y = node.getCoord(); attrs[node_id]["pos"] = (float(x), float(y));
         nx.set_node_attributes(G, attrs)
     attrs = {}
-    for edge in net.getEdges():
+    for edge in sorted(net.getEdges()):
         from_id = edge.getFromNode().getID(); to_id = edge.getToNode().getID();
-        G.add_edge(from_id, to_id, id=edge.getID()) #length=length, traveltime=travel_t)
+        if ((from_id, to_id) not in G.edges()):
+            G.add_edge(from_id, to_id, id=edge.getID()) #length=length, traveltime=travel_t)
         if lengths or travel_time:
             edge_nxid = (from_id, to_id)
             attrs[edge_nxid] = {}

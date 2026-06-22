@@ -518,6 +518,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
 #### POSTPROCESS
     results.clear();
     results.setSimulationData(fully_completed, sim_time, exec_duration)
+    results.setSuffixes(suffixes)
     ## Process step data
     # Utilization rate
     for si in all_stations:
@@ -574,8 +575,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
             print(f"  > money earned: {round(money_earned[a], 2)}€ ({round(prices[a],2)}€ per KWh)")
     if PRINT_RESULTS: print();
     results.setStationDataComp(agent_stations, prices, station_charges, sttn_util_rate, sttn_vehicle_count,
-                               total_charge, total_money_earned, charge, money_earned,
-                               suffixes)
+                               total_charge, total_money_earned, charge, money_earned)
 
     ## Trip stats/info
     trip_stats = xmlOut.getTripStats(cache_output_path)
@@ -604,13 +604,24 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
                            EV_count=EVs_count, EV_set_charge=set_need_to_charge_cnt,
                            EV_arrived=arrived_EVs_cnt, EV_charged=EVs_charged)
 
-    ## Get total coverage
+    ## Get coverage
+    # Total
     if coverage_G_d is None:
         coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
     coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d, stations.listDNodes(base_net),
                                                                 epsilon=50,
                                                                 max_radius=network_diameter))
     results.setCoverageData(coverage_radius, network_diameter)
+    # Agent
+    agent_coverage = []
+    for a in range(AGENT_COUNT):
+        coverage_radius = float(coverAlg.coverageRadiusBinarySearch(coverage_G_d,
+                                                                    agent_stations[a].listDNodes(base_net),
+                                                                    epsilon=50,
+                                                                    max_radius=network_diameter))
+        agent_coverage.append(coverage_radius)
+    results.setCoverageDataComp(agent_coverage)
+    
     """
     results = sumoutil.postprocessComp(base_net, coverage_G_d,
                                        data_path, cache_data_path, cache_output_path,

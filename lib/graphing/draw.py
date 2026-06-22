@@ -133,3 +133,26 @@ def drawCircleStations(G, net, station_edges, fig, ax, circle_size=50, color="#1
         fig.legend(handles, legend_labels, loc="outside right upper")
     #if station_weights != None: return handles;
     return
+
+
+def drawVoronoiPartitions(G, partitions):
+    pos = nx.get_node_attributes(G, "pos")
+    sources = list(partitions.keys())
+    # Colors
+    colors = plt.cm.tab20.colors
+    edge_color_map = {}; edge_widths = [];
+    for i, srcs in enumerate(sources):
+        for edge in partitions[srcs]:
+            edge_color_map[edge] = colors[i % len(colors)]
+    edge_colors = []
+    for u, v in G.edges():
+        edge_colors.append(edge_color_map.get((u, v), (0.8, 0.8, 0.8)))
+        if (u, v) in sources:
+            edge_widths.append(5.0)
+        else:
+            edge_widths.append(2.0)
+    plt.figure(figsize=(10, 8))
+    nx.draw_networkx_nodes(G, pos, node_size=30, node_color="black")
+    nx.draw_networkx_edges(G, pos, edge_color=edge_colors, width=edge_widths)
+    plt.axis("off")
+    plt.show()

@@ -62,7 +62,6 @@ def diameter(G, weight="length"):
     largest_cc = max(nx.strongly_connected_components(G), key=len)
     G_cc = G.subgraph(largest_cc).copy()
     return float(nx.diameter(G_cc, weight=weight))
-
 def eccentricity(G, weight="length"):
     if nx.is_strongly_connected(G):
         return nx.eccentricity(G, weight=weight)
@@ -72,7 +71,6 @@ def eccentricity(G, weight="length"):
     largest_cc = max(nx.strongly_connected_components(G), key=len)
     G_cc = G.subgraph(largest_cc).copy()
     return nx.eccentricity(G_cc, weight=weight)
-
 def periphery(G, weight="length"):
     if nx.is_strongly_connected(G):
         return nx.periphery(G, weight=weight)
@@ -82,7 +80,6 @@ def periphery(G, weight="length"):
     largest_cc = max(nx.strongly_connected_components(G), key=len)
     G_cc = G.subgraph(largest_cc).copy()
     return nx.periphery(G_cc, weight=weight)
-
 def shortest_path_length(G, start, target, weight="length"):
     try:
         return nx.shortest_path_length(G_d, start, target, weight="length");
@@ -154,6 +151,12 @@ def getNodesOfDetailedRoad(road_d):
     return (from_node, to_node);
 
 ## Translate normal edge to detailed edge node
+def translateEdgeToDetailedEdgeID(edge, alphabetical=False):
+    from_id = edge[0]; to_id = edge[1];
+    if alphabetical and to_id < from_id:
+        temp = from_id; from_id = to_id; to_id = temp;
+    return from_id + NODE_EDGE_ID_SEPARATOR + to_id + ROAD_ID_SEPARATOR +\
+           to_id + NODE_EDGE_ID_SEPARATOR + from_id
 def translateNetEdgeToDetailedEdgeID(net_edge):
     from_id = net_edge.getFromNode().getID(); to_id = net_edge.getToNode().getID();
     return from_id + NODE_EDGE_ID_SEPARATOR + to_id + ROAD_ID_SEPARATOR +\
@@ -224,6 +227,63 @@ def extractEdgeID(base_net, edge_id) -> tuple[str, int]:
             #return (re_match, 0);
         else:
             return (edge_id, 2);
+
+####
+def resultsToEdgeAttributes(G, translator, attrs, results):
+    edges = translator.getEdges()
+    # Apply
+    for attr in attrs:
+        match (attr):
+            # Edges
+            case "vehicles":
+                vehicles_dict = results.edge_data["vehicles"]
+                nx.set_edge_attributes(G, vehicles_dict, "vehicles")
+            case "flow":
+                flow_dict = results.edge_data["flow"]
+                nx.set_edge_attributes(G, flow_dict, "flow")
+            case "vaporized":
+                vaporized_dict = results.edge_data["vaporized"]
+                nx.set_edge_attributes(G, vaporized_dict, "vaporized")
+##            # Stations
+##            case "charged":
+##                rand_key = next(iter(results.station_data["charged"].keys()))
+##                #if "_red" in results.station_data["charged"]:
+##                if rand_key[0] == '_':
+##                    data = {}
+##                    for suffix in results.station_data["charged"]:
+##                        data = data | results.station_data["charged"][suffix]
+##                    #data = results.station_data["charged"]["_red"] | results.station_data["charged"]["_blue"];
+##                else:
+##                    data = results.station_data["charged"];
+##                charged = np.zeros(len(edges), dtype=float)
+##                for edge in data:
+##                    edge_ind = translator.edgeToIndex(edge)
+##                    charged[edge_ind] = data[edge]
+##                #print("charged:", charged.shape, "\n", charged)
+##                charged = torch.from_numpy(charged).to(graph.edge_attr.device)
+##                graph.edge_attr[:, attr_i] = charged;
+##            case "price":
+##                data = {}
+##                rand_key = next(iter(results.station_data["price"].keys()))
+##                if rand_key[0] == '_':
+##                    for suffix in results.station_data["price"]:
+##                        for edge in results.station_data["charged"][suffix]:
+##                            data[edge] = results.station_data["price"][suffix]
+##                else:
+##                    for edge in results.station_data["charged"]:
+##                        data[edge] = results.station_data["price"];
+##                price = np.zeros(len(edges), dtype=float)
+##                for edge in data:
+##                    edge_ind = translator.edgeToIndex(edge)
+##                    price[edge_ind] = data[edge]
+##                #print("price:", price.shape, "\n", price)
+##                price = torch.from_numpy(price).to(graph.edge_attr.device)
+##                graph.edge_attr[:, attr_i] = price;
+            # Other
+            case _:
+                raise Exception(f"Undefined attribute '{attr}'")
+    return G
+
 
 #### Pathing
 ## Get length of defined path
@@ -414,12 +474,12 @@ def insertNodes(G, start_id, end_id, count, name="", bidirectional=True,
 
 #### Radius calculations
 ## Inside radius
-def getNodesInRadius(G, center, radius, reverse_roads=False) -> set:
+def getNodesInRadius(G, center, radius, reverse_roads=False, weight="length") -> set:
     if center not in G:
         raise Exception(f"Node {center} not in graph!")
     checked = set()
     heap = TupleMaxHeap(); heap.push((radius, center));
-    all_lens = nx.get_edge_attributes(G, "length")
+    all_lens = nx.get_edge_attributes(G, weight)
     while len(heap) > 0:
         dis_left, node = heap.pop()
         if node not in checked:
@@ -432,12 +492,12 @@ def getNodesInRadius(G, center, radius, reverse_roads=False) -> set:
                     if distance <= dis_left:
                         heap.push((dis_left - distance, next_node))
     return checked
-def getNodesInRadius_withDistance(G, center, radius, reverse_roads=False) -> dict:
+def getNodesInRadius_withDistance(G, center, radius, reverse_roads=False, weight="length") -> dict:
     if center not in G:
         raise Exception(f"Node {center} not in graph!")
     result = {};
     heap = TupleMaxHeap(); heap.push((radius, center));
-    all_lens = nx.get_edge_attributes(G, "length")
+    all_lens = nx.get_edge_attributes(G, weight)
     while len(heap) > 0:
         dis_left, node = heap.pop()
         if node not in result.keys():
@@ -563,4 +623,3 @@ def getEdgePointsAtRadius(G, start_ep, radius) -> set:
                     else:
                         result.add(EdgePoint(G, node, next_node, dis_left))
     return result
-

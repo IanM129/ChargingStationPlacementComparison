@@ -17,14 +17,32 @@ def hashChargeData(charge_data):
         data.append((vehID, tuple(charge_data[vehID])))
     return hash(tuple(data))
 ## Sessions
+def isValidSessionFolder(filepath):
+    res_path = pathlib.Path(filepath + "/results/")
+    train_path = pathlib.Path(filepath + "/training/")
+    cfg_path = pathlib.Path(filepath + "/config.xml")
+    mtdt_path = pathlib.Path(filepath + "/metadata.xml")
+    cd_path = pathlib.Path(filepath + "/charge_data.xml")
+    trps_path = pathlib.Path(filepath + "/trips.xml")
+    return res_path.exists() and train_path.exists() and\
+           cfg_path.exists() and mtdt_path.exists() and\
+           cd_path.exists() and trps_path.exists()
 def getSessionType(path, params, agentCount):
+    path = path.lower()
     sess_type = None
-    if pathlib.Path(path + "/training").exists():
+    if isValidSessionFolder(path):
         if agentCount is None:
-            if "marl" in path: sess_type = "MARL";
+            if "cover" in path:
+                sess_type = "cover";
+            if "game" in path:
+                if sess_type is None: sess_type = "game";
+                else: sess_type = "?";
             if "gnn" in path:
-                if sess_type is None: sess_type = "GNN";
-                else: sess_type = None;
+                if sess_type is None: sess_type = "gnn";
+                else: sess_type = "?";
+            if "marl" in path:
+                if sess_type is None: sess_type = "marl";
+                else: sess_type = "?";
         else:
             if agentCount > 1: sess_type = "MARL";
             else: sess_type = "GNN";
@@ -89,7 +107,13 @@ def getVehicleDataList(parent_folder="vehicle_data"):
             trips_file = os.path.join(folder_path, "trips.xml")
             charge_file = os.path.join(folder_path, "charge_data.xml")
             if os.path.isfile(trips_file) and os.path.isfile(charge_file):
-                data.append([folder, folder_path])
+                metadata_file = os.path.join(folder_path, "metadata.xml")
+                if os.path.isfile(metadata_file):
+                    tree = ET.parse(metadata_file)                    
+                    network_name = tree.getroot().find("network").text
+                else:
+                    network_name = None
+                data.append([folder, folder_path, network_name])
     return data
 def getVehicleDataHashList(parent_folder="vehicle_data"):
     data = {}
@@ -112,7 +136,7 @@ def getVehicleDataHashList(parent_folder="vehicle_data"):
 # - vehicle data (trips, charge_data)
 # - k (total), capacity, wait_queue
 # - centralized
-# - maxDuration !!!
+# - (maxDuration?)
 def getSessionGroups(parent_folder="results"):
     vd_hashlist = getVehicleDataHashList()
     vd_pathlist = getVehicleDataList()
@@ -120,24 +144,35 @@ def getSessionGroups(parent_folder="results"):
     prec = 0
     for folder in os.listdir(parent_folder):
         folder_path = os.path.join(parent_folder, folder)
-        if isValidResultsFolder(folder, parent_folder) == 0:
-            metadata = loadSessionMetadata(folder_path)
-            network_name = metadata["network"]
-            trips_hash = metadata.get("tripsHash", None)
-            cd_hash = metadata.get("chargeDataHash", None)
-            k = metadata["k"] * metadata["agentCount"]
-            centralized = metadata["centralizedRouting"]
-            key = (network_name, k, centralized)
-            if key not in groups: groups[key] = {};
-            if (trips_hash, cd_hash) in vd_hashlist:
-                vd_folder = vd_hashlist[(trips_hash, cd_hash)]
-                index = getIndexInVehicleList(vd_pathlist, vd_folder)
-                sec_key = (index, vd_folder, int(metadata["vehicleCount"]))
+        if os.path.isdir(folder_path) and folder[0] != '_':
+            if isValidSessionFolder(folder_path) and\
+                isValidResultsFolder(folder, parent_folder) == 0:
+                if parent_folder not in groups:
+                    groups[parent_folder] = {}
+                loc_groups = groups[parent_folder]
+                # Get data
+                metadata = loadSessionMetadata(folder_path)
+                network_name = metadata["network"]
+                trips_hash = metadata.get("tripsHash", None)
+                cd_hash = metadata.get("chargeDataHash", None)
+                k = metadata["k"]# * metadata["agentCount"]
+                centralized = metadata["centralizedRouting"]
+                # Update groups dict
+                key = (network_name, k, centralized)
+                if key not in loc_groups: loc_groups[key] = {};
+                if (trips_hash, cd_hash) in vd_hashlist:
+                    vd_folder = vd_hashlist[(trips_hash, cd_hash)]
+                    index = getIndexInVehicleList(vd_pathlist, vd_folder)
+                    sec_key = (index, vd_folder, int(metadata["vehicleCount"]))
+                else:
+                    sec_key = (trips_hash, cd_hash, int(metadata["vehicleCount"]))
+                if sec_key not in loc_groups[key]: loc_groups[key][sec_key] = [];
+                loc_groups[key][sec_key].append((folder, parent_folder, metadata))
+                if len(folder) > prec: prec = len(folder);
             else:
-                sec_key = (trips_hash, cd_hash, int(metadata["vehicleCount"]))
-            if sec_key not in groups[key]: groups[key][sec_key] = [];
-            groups[key][sec_key].append((folder, parent_folder, metadata))
-            if len(folder) > prec: prec = len(folder);
+                sub_groups, sub_prec = getSessionGroups(folder_path)
+                groups.update(sub_groups)
+                if sub_prec > prec: prec = sub_prec;
     return groups, prec
 
 
@@ -164,12 +199,13 @@ def loadSessionTrips(path, network_name):
     from lib.graphing import netToGraph
     G = netToGraph(net_path, lengths=True, travel_time=True,
                    internal_lengths=True, node_position=True)
+    import networkx as nx
     translator = GraphTranslator(G)
     return TripDataset.parseXML(G, translator, trips_path)
 def loadSessionMetadata(path):
     metadata = {}
     if not pathlib.Path(path).exists(): return None;
-    # Config xml
+    ## Config xml
     config_path = pathlib.Path(path + "/config.xml")
     if config_path.exists():
         config_tree = ET.parse(str(config_path))
@@ -179,13 +215,13 @@ def loadSessionMetadata(path):
         params = Parameters();
         metadata["configExists"] = False
     metadata["agentCount"] = params.tryGet("training.agents")
-    sess_type = getSessionType(path, params, metadata["agentCount"])
-    metadata["sessionType"] = sess_type if (sess_type is not None) else "?"
     metadata["centralizedRouting"] = params.tryGet("station.routing.centralized")
     if metadata["centralizedRouting"] is None: metadata["centralizedRouting"] = False;
     metadata["k"] = params.tryGet("station.k")
+    if metadata["agentCount"] is not None:
+        metadata["k"] *= metadata["agentCount"]
     metadata["vehicleCount"] = params.tryGet("sim.vehicleCount")
-    # Metadata xml
+    ## Metadata xml
     mtdt_path = pathlib.Path(path + "/metadata.xml")
     if mtdt_path.exists():
         mtdt_tree = ET.parse(str(mtdt_path));
@@ -194,11 +230,17 @@ def loadSessionMetadata(path):
         metadata["time"] = mtdt_root.find("time").text
         metadata["network"] = mtdt_root.find("network").text
         metadata["networkDiameter"] = mtdt_root.find("networkDiameter").text
-        metadata["type"] = mtdt_root.find("type").text
+        type_el = mtdt_root.find("type")
+        if type_el is not None:
+            metadata["sessionType"] = type_el.text
+        else: metadata["sessionType"] = None
         metadata["metadataExists"] = True
     else:
         metadata["metadataExists"] = False
-    # Vehicle data
+    # Check session type
+    if metadata["sessionType"] is None:
+        metadata["sessionType"] = getSessionType(path, params, metadata["agentCount"])
+    ## Vehicle data
     trips_path = pathlib.Path(path + "/trips.xml")
     if trips_path.exists():
         trips = loadSessionTrips(path, metadata["network"])
@@ -265,3 +307,18 @@ def loadModels(filepath, agent_count, graph, device):
                                                     weights_only=True))
                 model[a].to(device); model[a].eval();
     return model
+## Metadata
+def getVehicleDataMetadata(folder, parent_folder="vehicle_data"):
+    # vehicle_count, EV_count, network_name
+    metadata = {}
+    folder_path = os.path.join(parent_folder, folder)
+    if os.path.isdir(folder_path):
+        trips_file = os.path.join(folder_path, "trips.xml")
+        trips_tree = ET.parse(trips_file)
+        metadata["vehicle_count"] = len(trips_tree.getroot())
+        EV_count = 0
+        for el in trips_tree.getroot():
+            if el.get("type") == "electric": EV_count += 1;
+        metadata["EV_count"] = EV_count
+        metadata["network_name"] = ET.parse(folder_path + "/metadata.xml").find("network").text
+    return metadata
