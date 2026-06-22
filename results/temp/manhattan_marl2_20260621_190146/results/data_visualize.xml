@@ -1,0 +1,29 @@
+<results>
+    <timeLoss>[0.663  1.9672]</timeLoss>
+    <totalCharge>[45986.61 45948.36]</totalCharge>
+    <stopTime>[4.021 0.526]</stopTime>
+    <simDuration>[745.5 519.5]</simDuration>
+    <tripLength>[2686.9115 2666.3692]</tripLength>
+    <tripDuration>[346.147 297.691]</tripDuration>
+    <waitTime>[3.045 1.264]</waitTime>
+    <energyConsumed>[24.49738095 18.64583333]</energyConsumed>
+    <totalCoverage>[726.  822.8]</totalCoverage>
+    <moneyEarned>[[24.86885775 17.96632744]
+ [17.01658006 14.60332634]]</moneyEarned>
+    <coverage>[[ 822.8  822.8]
+ [1016.4  822.8]]</coverage>
+    <charge>[[28854.95 25857.18]
+ [17131.66 20091.18]]</charge>
+    <generalReward>[-0.80183713 -0.11936941]</generalReward>
+    <reward>[[-1.16482178 -1.48102585]
+ [-1.20848002 -1.45100732]]</reward>
+    <price>[[0.86185759 0.69482934]
+ [0.99328262 0.7268526 ]]</price>
+    <stations>[[['I2H2' 'J4J5' 'A6A5']
+  ['A6A5' 'H4H5' 'I7J7']]
+
+ [['I7J7' 'I2H2' 'H4H5']
+  ['A6A5' 'H4H5' 'H7H6']]]</stations>
+    <loss>[[ 0.          0.08862418]
+ [ 0.         -0.54711986]]</loss>
+</results>

@@ -1,0 +1,272 @@
+<config>
+	<group name="prep">
+		
+		<param name="preprocess" type="bool" default="True">
+			True
+		</param>
+		<param name="recreateNetwork" type="bool" default="False">
+			False
+		</param>
+		<param name="saveInputs" type="bool" default="False">
+			False
+		</param>
+	</group>
+	<group name="sim">
+		
+		<param name="cpuThreads" type="int" default="1">
+			1
+		</param>
+		<param name="stepLength" type="float" default="0.1">
+			0.1
+		</param>
+		
+		<param name="maxDuration" type="int" default="0">
+			2000
+		</param>
+		<param name="vehicleCount" type="int" default="100">
+			100
+		</param>
+		
+		<param name="destinationCountDistribution" type="list" default="[0, 0.3, 0.5, 0.2]">
+			[0, 0.3, 0.5, 0.2]
+		</param>
+		
+		<param name="minDistance" type="float" default="-0.5">
+			-0.5
+		</param>
+		
+		<param name="maxDistance" type="float" default="-2.0">
+			-2.0
+		</param>
+		<param name="saveLog" type="bool" default="True">
+			False
+		</param>
+		
+		<param name="visualize" type="bool" default="False">
+			False
+		</param>
+		<param name="frameDur" type="float" default="0.01">
+			0.01
+		</param>
+		<param name="printResults" type="bool" default="False">
+			False
+		</param>
+		<param name="printErrors" type="bool" default="False">
+			False
+		</param>
+		<param name="deleteCache" type="bool" default="True">
+			False
+		</param>
+	</group>
+	<group name="electric">
+		<param name="penetration" type="float" default="0.8">
+			0.8
+		</param>
+		<param name="needToChargeProb" type="float" default="1.0">
+			1.0
+		</param>
+		<param name="batteryEmptyThreshold" type="float" default="2.0">
+			2.0
+		</param>
+	</group>
+	<group name="station">
+		<param name="k" type="int" default="5">
+			6
+		</param>
+		<param name="capacity" type="int" default="10">
+			8
+		</param>
+		<param name="waitQueue" type="int" default="10">
+			10
+		</param>
+		<param name="fillReverse" type="bool" default="True">
+			True
+		</param>
+		<group name="routing">
+			<param name="centralized" type="bool" default="False">
+				False
+			</param>
+			
+			<param name="useStationFinder" type="bool" default="False">
+				False
+			</param>
+			
+			<param name="waitParking" type="bool" default="True">
+				False
+			</param>
+			<param name="waitQueueCoefficient" type="float" default="100.0">
+				100.0
+			</param>
+			<group name="costFunction">
+				<param name="timeCoefficient" type="float" default="1.0">
+					1.0
+				</param>
+				<param name="distanceCoefficient" type="float" default="0.1">
+					0.1
+				</param>
+				<param name="priceCoefficient" type="float" default="100.0">
+					50
+				</param>
+				
+				<param name="scalePriceByChargeNeeded" type="float" default="0.1">
+					0.1
+				</param>
+			</group>
+		</group>
+		<param name="moneyPerKWh" type="float" default="0.25"> 
+			0.25
+			
+			<param name="red" type="float" default="0.25">
+				0.4
+			</param>
+			<param name="blue" type="float" default="0.25">
+				0.5
+			</param>
+			<param name="green" type="float" default="0.25">
+				0.6
+			</param>
+			<param name="orange" type="float" default="0.25">
+				0.55
+			</param>
+		</param>
+	</group>
+	<group name="training">
+		<param name="iterations" type="int" default="1000">
+			2
+		</param>
+		
+		<param name="agents" type="int" default="2">1</param>
+		<param name="minPrice" type="float" default="0.1">
+			0.1
+		</param>
+		<param name="maxPrice" type="float" default="1.0">
+			1.0
+		</param>
+		<group name="coefficients">
+			
+			<param name="priceLambda" type="float" default="2.0">
+				0.5
+			</param>
+			<param name="emaAlpha" type="float" default="0.05">
+				0.05
+			</param>
+			<param name="temperature" type="float" default="1.0">
+				1.2
+			</param>
+			<param name="momentum" type="float" default="0.05">
+				0.1
+			</param>
+			<param name="entropyCoeff" type="float" default="0.02">
+				0.04
+			</param>
+			<param name="gradClip" type="float" default="1.0">
+				1.0
+			</param>
+		</group>
+		<param name="progressDebugs" type="int" default="10">
+			0
+		</param>
+		<param name="printProgress" type="bool" default="True">
+			False
+		</param>
+		<param name="writeProgress" type="bool" default="True">
+			True
+		</param>
+		<param name="drawProgress" type="bool" default="True">
+			True
+		</param>
+		<param name="measureTime" type="bool" default="False">
+			False
+		</param>
+	</group>
+	
+	<group name="reward">
+		
+		<param name="totalCoverage" type="float" default="1.0">
+			1.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="totalCharge" type="float" default="0.0">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="simDuration" type="float" default="0.2">
+			0.2
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="tripDuration" type="float" default="0.25">
+			0.25
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="tripLength" type="float" default="0.25">
+			0.25
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="waitTime" type="float" default="0.15">
+			0.15
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="stopTime" type="float" default="0.15">
+			0.15
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="timeLoss" type="float" default="0.0">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="energyConsumed" type="float" default="0.0">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+	</group>
+	
+	<group name="compReward">
+		
+		<param name="coverage" type="float" default="1.0">
+			0.5
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="charge" type="float" default="0.0">
+			0.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+		
+		<param name="moneyEarned" type="float" default="2.0">
+			1.0
+			<param name="monitor" type="bool" default="True">
+				True
+			</param>
+		</param>
+	</group>
+</config>

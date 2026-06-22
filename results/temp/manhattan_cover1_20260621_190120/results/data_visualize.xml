@@ -1,0 +1,13 @@
+<results>
+    <timeLoss>[1.4071 1.3332]</timeLoss>
+    <stopTime>[0.568 0.557]</stopTime>
+    <tripDuration>[282.651 290.614]</tripDuration>
+    <waitTime>[0.159 0.082]</waitTime>
+    <totalCoverage>[629.2 629.2]</totalCoverage>
+    <tripLength>[2566.1928 2568.4019]</tripLength>
+    <totalCharge>[45606.66 45518.24]</totalCharge>
+    <simDuration>[487.9 477. ]</simDuration>
+    <energyConsumed>[30.14880952 30.2275    ]</energyConsumed>
+    <stations>[['B4B5' 'A8B8' 'E7E8' 'D3E3' 'H3H4' 'I1J1']
+ ['E7E8' 'A8B8' 'D3D4' 'H3H4' 'I1J1' 'F1F2']]</stations>
+</results>

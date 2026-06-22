@@ -14,8 +14,9 @@ networks/**/new_nodes.nod.xml
 networks/**/vTypes.add.xml
 networks/**/output.add.xml
 networks/**/stations.add.xml
-results/*
-results_BACKUP/*
+#results/*/_cache
+#results_BACKUP/*/_cache
+**/_cache
 
 # Big networks
 networks/Zagreb/*.osm

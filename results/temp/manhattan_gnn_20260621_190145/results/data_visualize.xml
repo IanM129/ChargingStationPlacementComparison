@@ -1,0 +1,15 @@
+<results>
+    <tripLength>[2583.4768 2573.6241]</tripLength>
+    <totalCharge>[45464.13 45462.81]</totalCharge>
+    <totalCoverage>[726. 726.]</totalCoverage>
+    <tripDuration>[284.976 284.592]</tripDuration>
+    <simDuration>[453.4 446.2]</simDuration>
+    <waitTime>[0.188 0.046]</waitTime>
+    <stopTime>[0.51 0.41]</stopTime>
+    <energyConsumed>[27.7927381  17.48833333]</energyConsumed>
+    <timeLoss>[1.258  0.9701]</timeLoss>
+    <reward>[-0.94424424 -0.61976874]</reward>
+    <stations>[['E4F4' 'G7G6' 'C4D4' 'D2D1' 'E3F3' 'J5I5']
+ ['C4D4' 'D2D1' 'G7G6' 'E4F4' 'J5I5' 'I6H6']]</stations>
+    <loss>[0.         0.36320862]</loss>
+</results>
