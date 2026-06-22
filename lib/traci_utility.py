@@ -34,6 +34,33 @@ def getStepParkingVehicleCount(park_id):
 
 
 #### Routes and trips
+def getCandidateEdges(network_filepath):
+    # Start sim
+    sumoBinary = sumolib.checkBinary("sumo")
+    libsumo_m.start([
+        sumoBinary,
+        "-n", "net.net.xml",
+        "--start",
+        "--no-step-log",
+        "--quit-on-end"
+    ])
+    edges = libsumo_m.edge.getIDList()
+    # Compute reachable
+    reachability = {}
+    for e in edges:
+        reachable = set()
+        for target in edges:
+            if e == target:
+                continue
+            try:
+                route = libsumo_m.simulation.findRoute(e, target)
+                if len(route.edges) > 0:
+                    reachable.add(target)
+            except:
+                pass
+        reachability[e] = reachable
+    return reachability
+    
 def calculateRouteInfo(route, start_index=0, end_index=-1):
     if end_index == -1: end_index = len(route);
     t = 0.0; l = 0.0;
@@ -177,8 +204,8 @@ def findClosestChargingStation_centralized(vehID, charge, stations, cost_functio
     if route == None: route = traci.vehicle.getRoute(vehID);
     if cur_index < 0: cur_index = traci.vehicle.getRouteIndex(vehID);
     cur_edge = route[cur_index]
-    if next_dest_index < 0:
-        next_dest_index = getNextDestIndexInRoute(vehID, route, cur_index)
+    #if next_dest_index < 0:
+    #    next_dest_index = getNextDestIndexInRoute(vehID, route, cur_index)
     next_dest_edge = route[next_dest_index]
     # Get stations with an open spot
     chosen_sttn_id = None

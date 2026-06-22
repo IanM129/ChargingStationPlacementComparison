@@ -14,30 +14,23 @@ import lib.graphing.utility as graphutil
 
 
 
-def getRandomEdge(net, G, G_line_sc, start_edge_id, min_distance=0, max_distance=0, return_length=False,
-                  candidate_edges=None):
+def getRandomEdge(net, G, G_sc, start_edge_id, min_distance=0, max_distance=0, return_length=False):
     start_edge = net.getEdge(start_edge_id)
     start_fn_id = start_edge.getFromNode().getID(); start_tn_id = start_edge.getToNode().getID();
     start_edge_t = (start_fn_id, start_tn_id)
     lens = nx.get_edge_attributes(G, "length")
     ## Get valid edges
-    if candidate_edges is not None:
-        valid_end_edges = candidate_edges
-    else:
-        valid_end_edges = set(G_line_sc.nodes())
-    valid_end_edges.discard(start_edge_t)
+    valid_end_edges = G_sc.edges() - (start_fn_id, start_tn_id)
     # Get only edges with length >= 1.0
     length_check = set()
     for e in valid_end_edges:
-        if lens.get(e, -1) >= 1.0: length_check.add(e);
+        if lens[e] >= 1.0: length_check.add(e);
     valid_end_edges = length_check
     # If min or max is set
     if min_distance > 0 or max_distance > 0:
         # Get edges outside of min_distance range
         if min_distance > 0:
-            #edges_in_range = graphutil.getEdgesInEdgeRadius_lineGraph(G, G_line_sc, start_edge_t, min_distance, use_internal=True,
-            #                                                          include_reverse=False, include_reached=True)
-            edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, min_distance, use_internal=True,
+            edges_in_range = graphutil.getEdgesInEdgeRadius(G_sc, start_edge_t, min_distance, use_internal=True,
                                                             include_reverse=False, include_reached=True)
             valid_end_edges -= edges_in_range    #(G_sc.edges() - edges_in_range).intersection(valid_end_edges)
             #print("MIN: " + str(min_distance) + ": " + str(len(edges_in_range)) + " / " + str(len(G.edges())) +
@@ -46,11 +39,11 @@ def getRandomEdge(net, G, G_line_sc, start_edge_id, min_distance=0, max_distance
                 #print(f"WARNING: No edges detected outside of given min distance ({min_distance:8.2f}).")
                 if return_length: return (None, -1)
                 return None
+                #print(f"WARNING: No edges detected outside of given min distance ({min_distance:8.2f}), reverting to all edges.")
+                #valid_end_edges = G_sc.edges() - (start_fn_id, start_tn_id)
         # Get edges inside of max_distance range
         if max_distance > 0:
-            #edges_in_range = graphutil.getEdgesInEdgeRadius_lineGraph(G, G_line_sc, start_edge_t, max_distance, use_internal=True,
-            #                                                          include_reverse=False, include_reached=True)
-            edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, max_distance, use_internal=True,
+            edges_in_range = graphutil.getEdgesInEdgeRadius(G_sc, start_edge_t, max_distance, use_internal=True,
                                                             include_reverse=False, include_reached=True)
             valid_end_edges = edges_in_range.intersection(valid_end_edges)
             #print("MAX: " + str(max_distance) + ": " + str(len(edges_in_range)) + " / " + str(len(G.edges())) +
@@ -59,20 +52,20 @@ def getRandomEdge(net, G, G_line_sc, start_edge_id, min_distance=0, max_distance
                 #print(f"WARNING: No edges detected inside of given max distance ({max_distance:8.2f}).")
                 if return_length: return (None, 1);
                 return None
+                #print(f"WARNING: No edges detected inside of given max distance ({max_distance:8.2f}), reverting to all edges.")
+                #valid_end_edges = G_sc.edges() - (start_fn_id, start_tn_id)
     # Otherwise infinity range
     else:
-        #print("Checing graph for all reachable edges...")
-        #edges_in_range = graphutil.getEdgesInEdgeRadius_lineGraph(G, G_line_sc, start_edge_t, np.inf, use_internal=True,
-        #                                                          include_reverse=False, include_reached=True)
-        edges_in_range = graphutil.getEdgesInEdgeRadius(G, start_edge_t, np.inf, use_internal=True,
-                                                        include_reverse=False, include_reached=True)
-        valid_end_edges = edges_in_range.intersection(valid_end_edges)
+        print("Checing graph for all reachable edges...")
+        edges_in_range = graphutil.getEdgesInEdgeRadius(G_sc, start_edge_t, np.inf, use_internal=True,
+                                                            include_reverse=False, include_reached=True)
+        valid_end_edges = (G_sc.edges() - edges_in_range).intersection(valid_end_edges)
     ## Choose
-    if len(valid_end_edges) == 0: return (None, 0)
     # Choose random
     end_gedge = random.choice(list(valid_end_edges))
     # Get edge ID from net
-    end_fn_id, end_tn_id = end_gedge
+    end_fn_id = end_gedge[0]
+    end_tn_id = end_gedge[1]
     end_edge = None
     for e in net.getNode(end_fn_id).getOutgoing():
         if e.getToNode().getID() == end_tn_id:
@@ -90,74 +83,74 @@ def getRandomEdge(net, G, G_line_sc, start_edge_id, min_distance=0, max_distance
     if return_length: return (end_edge.getID(), nodes_path_len)
     return end_edge.getID()
 
-def genRandomRoute(net, G, G_line_sc, destination_count=1, min_distance=0.0,
-                   min_distance_per_des=0.0, max_distance=0.0,
-                   return_len=False, return_len_arr=False,
-                   candidate_edges=None):
+def genRandomRoute(net, G, G_sc, destination_count=1, min_distance=0.0, min_distance_per_des=0.0, max_distance=0.0, return_len=False, return_len_arr=False):
     ## Choose start point
     # Filter out nodes whose maximum distance is less than minimum distance
     start_max_distance = max_distance
     start_min_distance = min_distance
     if min_distance > 0:
         min_ecc_distance = min_distance / destination_count
-        eccentricity = graphutil.eccentricity(G, weight="length")
-        valid_edges = set()
-        for (u, v) in G_line_sc.nodes():
-            if eccentricity.get(v, -1) > min_ecc_distance:
-                valid_edges.add((u, v))
-        valid_edges = list(valid_edges)
-    else: valid_edges = list(G_line_sc.nodes())
-    if candidate_edges is not None:
-        valid_edges = list(set(valid_edges).intersection(set(candidate_edges)))
-    if len(valid_edges) == 0:
-        raise Exception(f"No valid edges with eccentricity (maximum distance) > given (min_distance / destination_count) ({min_ecc_distance})")
-    # Choose an randomly chosen edge
+        eccentricity = graphutil.eccentricity(G_sc, weight="length")
+        valid_nodes = set()
+        for node in net.getNodes():
+            nodeID = node.getID()
+            if nodeID in eccentricity and eccentricity[nodeID] > min_ecc_distance:
+                valid_nodes.add(node)
+        valid_nodes = list(valid_nodes)
+    else: valid_nodes = list(net.getNodes())
+    if len(valid_nodes) == 0:
+        raise Exception(f"No valid nodes with eccentricity (maximum distance) > given (min_distance / destination_count) ({min_ecc_distance})")
+    # Choose an edge of a randomly chosen valid node
     edge_lens = nx.get_edge_attributes(G, "length")
-    while len(valid_edges) > 0:
-        ## Generate path
-        # Set random depart point
-        start_edge = random.choice(valid_edges)
-        valid_edges.remove(start_edge)
-        start_edge_id = G[start_edge[0]][start_edge[1]]["id"]
-        route = []
-        route.append(start_edge_id)
-        ## Generate rest
-        # Params
-        if max_distance > 0:
-            max_distance = float(float(start_max_distance) / destination_count)
-        if min_distance > 0:
-            total_min_distance = start_min_distance
-            min_distance = float(float(start_min_distance) / destination_count)
-        total_path_len = 0;
-        path_lengths = []
-        # Generate
-        for i in range(destination_count - 1):
-            next_edge, path_length = getRandomEdge(net, G, G_line_sc, route[i],
-                                                   min_distance=max(min_distance_per_des, min_distance),
+    while len(valid_nodes) > 0:
+        start_from_node = random.choice(valid_nodes)
+        valid_nodes.remove(start_from_node)
+        candidate_edges = list(start_from_node.getOutgoing())
+        # Remove edges with length < 1.0
+        length_check = set()
+        for ce in candidate_edges:
+            ce_tuple = (ce.getFromNode().getID(), ce.getToNode().getID())
+            if edge_lens[ce_tuple] >= 1.0: length_check.add(ce);
+        candidate_edges = list(length_check)
+        # Generate path
+        while len(candidate_edges) > 0:
+            route = []
+            start_edge = candidate_edges.pop(random.randrange(len(candidate_edges)))
+            # Set random depart point
+            route.append(start_edge.getID())
+            ## Generate rest
+            if max_distance > 0:
+                max_distance = float(float(start_max_distance) / destination_count)
+            if min_distance > 0:
+                total_min_distance = start_min_distance
+                min_distance = float(float(start_min_distance) / destination_count)
+            total_path_len = 0;
+            path_lengths = []
+            for i in range(destination_count - 1):
+                next_edge, path_length = getRandomEdge(net, G, G_line_sc, route[i],
+                                                       min_distance=max(min_distance_per_des, min_distance),
+                                                       max_distance=max_distance,
+                                                       return_length=True)
+                route.append(next_edge)
+                if next_edge == None: break;
+                path_lengths.append(path_length); total_path_len += path_length;
+            if route[-1] == None: continue;
+            # Generate last
+            if min_distance > 0 and total_path_len < total_min_distance:
+                min_distance = total_min_distance - total_path_len;
+            else: min_distance = 0;
+            next_edge, path_length = getRandomEdge(net, G, G_line_sc, route[destination_count - 1],
+                                                   min_distance=max(min_distance, min_distance_per_des),
                                                    max_distance=max_distance,
-                                                   return_length=True,
-                                                   candidate_edges=candidate_edges)
+                                                   return_length=True)
+            if next_edge == None: continue;
             route.append(next_edge)
-            if next_edge == None: break;
             path_lengths.append(path_length); total_path_len += path_length;
-        if route[-1] == None: continue;
-        # Generate last
-        if min_distance > 0 and total_path_len < total_min_distance:
-            min_distance = total_min_distance - total_path_len;
-        else: min_distance = 0;
-        next_edge, path_length = getRandomEdge(net, G, G_line_sc, route[destination_count - 1],
-                                               min_distance=max(min_distance, min_distance_per_des),
-                                               max_distance=max_distance,
-                                               return_length=True,
-                                               candidate_edges=candidate_edges)
-        if next_edge == None: continue;
-        route.append(next_edge)
-        path_lengths.append(path_length); total_path_len += path_length;
-        #print("-- total path length:", total_path_len)
-        #print("    per des:", total_path_len / destination_count)
-        if return_len_arr: return route, path_lengths
-        if return_len: return route, total_path_len #sum(path_lengths)
-        return route
+            #print("-- total path length:", total_path_len)
+            #print("    per des:", total_path_len / destination_count)
+            if return_len_arr: return route, path_lengths
+            if return_len: return route, total_path_len #sum(path_lengths)
+            return route
     raise Exception(f"No valid routes found.")
     #if return_len: return (None, -1)
     #return None
@@ -205,8 +198,7 @@ def parseTripXMLElement(element, net, G):
 
 def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
          min_distance=0, min_distance_per_des=0, max_distance=0,
-         ev_pen=1, write=True,
-         candidate_edges=None):
+         ev_pen=1, write=True):
     G_line_sc = graphing.getLargestConnected(graphing.lineGraph(G))
     tree = ET.ElementTree(ET.fromstring("<routes></routes>"))
     root = tree.getroot()
@@ -226,26 +218,13 @@ def main(net, G, vehicle_count, filepath, destination_count_probs=[1],
         route, distances = genRandomRoute(net, G, G_line_sc, destination_count,
                                           min_distance=min_distance, min_distance_per_des=min_distance_per_des,
                                           max_distance=max_distance,
-                                          return_len=False, return_len_arr=True,
-                                          candidate_edges=candidate_edges)
+                                          return_len=False, return_len_arr=True)
         #print(f"[{destination_count:2d}] {route_len:8.2f} e [{min_distance:8.2f}, {max_distance:8.2f}]")
         writeTrip(root, route, trip_id=i, ev_type=vType)
         trip = Trip(route, distances, vType == "electric")
         trips[str(i)] = trip
     if write:
         ET.indent(tree); tree.write(filepath);
-
-###### TEMP CHECKS
-##    from lib.graphing.astar import edgePath
-##    from lib.structs.graphtranslator import GraphTranslator
-##    translator = GraphTranslator(G)
-##    print(route)
-##    for i in range(0, len(route)-1):
-##        start = translator.IDToEdge(route[0])
-##        end = translator.IDToEdge(route[1])
-##        print(str(i) + ":", edgePath(G, start, end))
-#####
-
     return TripDataset(trips, tree)
 
 

@@ -318,10 +318,16 @@ def sumoSoloRun(base_net, G, data_path, network_name, trips : TripDataset, stati
                             traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
                         # > Stop and wait in front of the charging spots; creates jam at the entrance if too many vehicles in queue
                         else:
-                            #try: -> sometimes error happens because the vehicle is too close to the stop?
-                            traci.vehicle.setStop(vehID, target_si.redge_id,
-                                                  pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
-                            #except Exception as e: print("Failed to stop."); raise Exception(e);
+                            # -> sometimes error happens because the vehicle is too close to the stop? (less than ~1 in 1000)
+                            # even though the getStationDistance and backup STOP_DISTANCE should always prevent that...
+                            try:
+                                traci.vehicle.setStop(vehID, target_si.redge_id,
+                                                      pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
+                            except Exception as e:
+                                removeFromSimulationVars({vehID})
+                                vaporized.add(vehID)
+                                traci.vehicle.remove(vehID)
+                                continue;
                         #target_si.addToWaiting(vehID); -> add when they reach the waiting spot
                         target_si.addIncoming(vehID);
                         # Update set

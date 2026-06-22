@@ -65,7 +65,7 @@ RANDOM_STATIONS = False
 def stationDistribution(G, base_G_d, k, output_path, edge_value_weights="length",
                         first_station=None, already_chosen=None, debug=False):
     G_d = copy.deepcopy(base_G_d)
-    candidates = graphing.calcCandidates(G_d, detailed_graph=True)
+    candidates = graphing.calcCandidates(G_d, detailed_graph=True) #candidate_edges=candidate_edges_d
     if already_chosen is not None and len(already_chosen) > 0:
         candidates = candidates - already_chosen
     ## Charging stations
@@ -210,6 +210,7 @@ if __name__ == "__main__":
     params.write(output_path + "/config.xml")
     xmlOut.writeMetadata(output_path + "/metadata.xml", network_name, start_datetime_str, "cover",
                          network_diameter=network_diameter)
+    #candidate_edges = graphing.getCandidateEdges(base_G, base_net)
     ## Vehicle data
     if "vehicle-data" in args:
         # Load
@@ -226,12 +227,20 @@ if __name__ == "__main__":
                                 min_distance=MIN_DISTANCE, #network_diameter*0.5,
                                 max_distance=MAX_DISTANCE, #network_diameter*2.0,
                                 ev_pen=EV_PEN)
+                                #candidate_edges=candidate_edges)
         # Generate charge data
         vTypes_tree = ET.parse("networks/vTypes.add.xml")
         max_charge = prep.getMaxChargeFromAddTree(vTypes_tree)
         charge_data = generateRandomChargeData(trips, max_charge)
     # Save used charge data
     writeChargeData(charge_data, output_path + "/charge_data.xml")
+    # Generate candidates
+    #candidate_edges = graphing.getCandidateEdges_trips(base_G, base_net, trips)
+    #print(candidate_edges)
+    #candidate_edges_d = []
+    #for edge_tup in candidate_edges:
+    #    edge_d = graphutil.translateEdgeToDetailedEdgeTuple(edge_tup)
+    #    candidate_edges_d.append(edge_d)
     
 ###### BLANK RUN
     G = copy.deepcopy(base_G)
@@ -240,6 +249,7 @@ if __name__ == "__main__":
                            output_path=output_path, output_subfolder="blank")
     G = graphutil.resultsToEdgeAttributes(G, translator, ["vehicles", "flow"], results)
     flow_dict = nx.get_edge_attributes(G, "flow")
+    #flow_dict = {k: v for k, v in flow_dict.items() if k in candidate_edges}
     
 ###### RUN
     pbar = tqdm(total=ITERATIONS)
@@ -314,6 +324,7 @@ if __name__ == "__main__":
                       params, results, iteration=None, debug=False)
         G = graphutil.resultsToEdgeAttributes(G, translator, ["vehicles", "flow"], results)
         flow_dict = nx.get_edge_attributes(G, "flow")
+        #flow_dict = {k: v for k, v in flow_dict.items() if k in candidate_edges}
         #### Bookkeeping
         # Update best
         if best is None:
@@ -365,6 +376,7 @@ if __name__ == "__main__":
         ET.indent(res_tree, space="    ")
         res_tree.write(output_path + "/training/best.xml");
         res_tree.write(output_path + "/results/best.xml");
+        plt.show()
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()
     print(f"\nTraining finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")

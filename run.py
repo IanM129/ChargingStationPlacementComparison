@@ -55,7 +55,7 @@ def printSessionInfo(path, parent_folder="", metadata=None, index=None, prefix="
             ac_s = "Agents: " + str(agent_count)
         k_s = "K: " + str(metadata["k"])
         cen_s = ("Centralized" if (metadata["centralizedRouting"]) else "Selfish")
-        print(prefix + (' ' * (prec + 5 + iprec)) + "[ {0:8s} | {1:10s} | {2:4s} | {3:11s}]".format(sess, ac_s, k_s, cen_s))
+        print(prefix + (' ' * (prec + 5 + iprec)) + "[ {0:8s} | {1:10s} | {2:4s} | {3:11s} ]".format(sess, ac_s, k_s, cen_s))
 def printSessionPaths(paths, prefix=""):
     prec = len(max(paths, key=len)[0]) + 4
     for i in range(len(paths)):
@@ -263,240 +263,259 @@ def compareByDuration(filepaths, args):
     if "no-legend" in args and args["no-legend"]: cmnd.append("no-legend");
     subprocess.Popen(cmnd)
 
+
+
+def inputIsExit(inp):
+    inp = inp.lower()
+    return inp == "q" or inp == "quit" or inp == "exit"
 def main(print_options=True):
-    if print_options:
-        print("Main selection:")
-        print("=" * 20)
-        print("Analysis:")
-        print("1  | gen             - generate new vehicle data in '/vehicle_data'")
-        print("2  | compare         - compare finished sessions")
-        print("3  | load            - load and visualize session results")
-        print("-" * 20)
-        print("Run options (n is number of agents or _/0 for reading from params)")
-        print("0  | blank           - run a blank example (no charging stations)")
-        print("11 | cover_solo      - run the coverage based algorithm")
-        print("1n | cover_comp      - (default) run the competitive coverage based algorithm")
-        print("21 | game_solo       - run the game theory based algorithm")
-        print("2n | game_comp       - run the competitive game theory based algorithm")
-        print("31 | gnn             - trains a solo GNN")
-        print("3n | marl            - trains n competing GNNs (MARL)")
-        print("=" * 20)
-        print("Optional arguments:")
-        print("-v | --vehicles : <filepath> | <index>       - use specific vehicle data")
-        print("-i | --iterations : <integer>                - directly set iteration count")
+    temp_print_options = print_options
+    # Reused vars
+    groups = None; prec = 0;
+    while True:
+        if temp_print_options:
+            print("Main selection:")
+            print("=" * 20)
+            print("Analysis:")
+            print("1  | gen             - generate new vehicle data in '/vehicle_data'")
+            print("2  | compare         - compare finished sessions")
+            print("3  | load            - load and visualize session results")
+            print("-" * 20)
+            print("Run options (n is number of agents or _/0 for reading from params)")
+            print("0  | blank           - run a blank example (no charging stations)")
+            print("11 | cover_solo      - run the coverage based algorithm")
+            print("1n | cover_comp      - (default) run the competitive coverage based algorithm")
+            print("21 | game_solo       - run the game theory based algorithm")
+            print("2n | game_comp       - run the competitive game theory based algorithm")
+            print("31 | gnn             - trains a solo GNN")
+            print("3n | marl            - trains n competing GNNs (MARL)")
+            print("=" * 20)
+            print("Optional arguments:")
+            print("-v | --vehicles : <filepath> | <index>       - use specific vehicle data")
+            print("-i | --iterations : <integer>                - directly set iteration count")
+        temp_print_options = True
 
-    choice = input("\n> ")
+        choice = input("\n> ")
 
-    if choice == "": choice = "comp";
+        if choice == "": choice = "comp";
 
-    command = choice.split(' ')[0]
-    args = ' '.join(choice.split(' ')[1:])
-    args = parseArgs(choice.split(' ')[1:])
+        command = choice.split(' ')[0]
+        args = ' '.join(choice.split(' ')[1:])
+        args = parseArgs(choice.split(' ')[1:])
 
-    if len(command) == 1:
-        options = {
-            "1": (None, "generateChargeData"),
-            "gen": (None, "generateChargeData"),
-            
-            "2": (None, "compare"),
-            "compare": (None, "compare"),
+        if len(command) == 1:
+            options = {
+                "1": (None, "generateChargeData"),
+                "gen": (None, "generateChargeData"),
+                
+                "2": (None, "compare"),
+                "compare": (None, "compare"),
 
-            "3": (None, "load"),
-            "load": (None, "load"),
-            
-            "0": ("blank.py", "Blank simulation"),
-            "blank": ("blank.py", "Blank simulation"),
+                "3": (None, "load"),
+                "load": (None, "load"),
+                
+                "0": ("blank.py", "Blank simulation"),
+                "blank": ("blank.py", "Blank simulation"),
 
-            "cover_solo": ("coverage_solo.py", "Coverage algorithm"),
-            "cover_comp": ("coverage_competitive.py", "Competitive coverage algorithm"),
+                "cover_solo": ("coverage_solo.py", "Coverage algorithm"),
+                "cover_comp": ("coverage_competitive.py", "Competitive coverage algorithm"),
 
-            "game_solo": ("game.py", "Equilibrium game algorithm"),
-            "game_comp": ("game_competitive.py", "Competitive equilibrium game algorithm"),
+                "game_solo": ("game.py", "Equilibrium game algorithm"),
+                "game_comp": ("game_competitive.py", "Competitive equilibrium game algorithm"),
 
-            "gnn": ("gnn.py", "Graph NN RL"),
-            "marl": ("marl.py", "Multi-Agent RL"),
+                "gnn": ("gnn.py", "Graph NN RL"),
+                "marl": ("marl.py", "Multi-Agent RL"),
 
-            "-v": (None, "listVehicleData"),
-            "v": (None, "listVehicleData"),
-            "--vehicles": (None, "listVehicleData")
-        }
-        key = command.lower()
-        if key not in options:
+                "-v": (None, "listVehicleData"),
+                "v": (None, "listVehicleData"),
+                "--vehicles": (None, "listVehicleData")
+            }
+            key = command.lower()
+            if key not in options:
+                print(f'\nERROR: Invalid choice "{choice}".')
+                input("Press Enter to continue...")
+                sys.exit(1)
+            pyfile, value = options[key]
+            AGENT_COUNT = 0
+        elif len(command) == 2:
+            if not command[1].isdigit() or int(command[1]) == 0:
+                print(f'\nERROR: Invalid number of agents "{command[1]}".')
+                input("Press Enter to continue...")
+                sys.exit(1)
+            if command[1] == "_": AGENT_COUNT = 0;
+            else: AGENT_COUNT = int(command[1])
+            match (command[0]):
+                case "1":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("coverage_solo.py", "Coverage algorithm")
+                    else:
+                        pyfile, value = ("coverage_competitive.py", "Competitive coverage algorithm")
+                case "2":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("game.py", "Equilibrium game algorithm")
+                    else:
+                        pyfile, value = ("game_competitive.py", "Competitive equilibrium game algorithm")
+                case "3":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("gnn.py", "Graph NN RL")
+                    else:
+                        pyfile, value = ("marl.py", "Multi-Agent RL")
+            if AGENT_COUNT > 1:
+                args["agent-count"] = AGENT_COUNT
+        else:
             print(f'\nERROR: Invalid choice "{choice}".')
             input("Press Enter to continue...")
             sys.exit(1)
-        pyfile, value = options[key]
-        AGENT_COUNT = 0
-    elif len(command) == 2:
-        if not command[1].isdigit() or int(command[1]) == 0:
-            print(f'\nERROR: Invalid number of agents "{command[1]}".')
+
+        # Check if file exists
+        if (pyfile is not None):
+            if (not os.path.exists(pyfile)):
+                print(f"ERROR: File not found: {pyfile}")
+                input("Press Enter to continue...")
+                sys.exit(1)
+        else:
+            if value == "listVehicleData":
+                vehicle_data = dm.getVehicleDataList()
+                printVehicleData(vehicle_data);
+                #main(print_options=False)
+                temp_print_options = False
+                continue
+            elif value == "compare":
+                # Select group
+                if groups is None:
+                    groups, prec = dm.getSessionGroups("results")
+                print("\n\n\n\nChoose sessions to compare:")
+                group_opts = printSessionGroups(groups, prefix="  ", prec=prec)
+                print("")
+                inp = ""
+                while inp == "":
+                    inp = input("Select groups: ")
+                    if inputIsExit(inp): break;
+                    filepaths = parseSessionGroupSelect(inp, group_opts, groups)
+                    if filepaths is None:
+                        inp = ""; continue;
+                    print(filepaths)
+                    print(f"Loaded {len(filepaths)} sessions.")
+                inp = [inp]
+                # Choose method
+                while inp[0] != "" and not inputIsExit(inp[0]):
+                    print("-" * 20)
+                    print("Choose method:")
+                    print("0 | rerun                            - compare by rerunning")
+                    print("1 | best                             - compare by best achieved results")
+                    print("2 | duraition                        - compare execution durations")
+                    print("-" * 20)
+                    print("Optional arguments:")
+                    print("-s | --stats : <stat>,<stat>,...     - only show for listed stats")
+                    print("-nv | --no-values                    - don't include exact value labels")
+                    print("-nl | --no-legend                    - don't include legend")
+                    print("-c | --centerize                     - center the data")
+                    inp = input("> ").split(' ')
+                    print("\n" * 1)
+                    args = parseCompare(inp)
+                    if inp[0] == "-s" or inp[0] == "s" or inp[0] == "-stats" or inp[0] == "--stats":
+                        params = Parameters.config()
+                        base_stat_list = params.getGroup("reward")
+                        print(f"Base stats:({base_stat_list})")
+                    if inp[0] == "0" or inp[0] == "rerun":
+                        rerunAndCompare(filepaths, args);
+                    elif inp[0] == "1" or inp[0] == "best":
+                        compareByBest(filepaths, args);
+                    elif inp[0] == "2" or inp[0] == "duration" or inp[0] == "time":
+                        compareByDuration(filepaths, args);
+                    print("\n" * 3)
+                print("Returning to main menu...\n\n");
+                continue; #sys.exit(0)
+
+        ## Network
+        # if vehicle data selected use the attached network
+        if "vehicle-data" in args:
+            vehicle_data_filepath = args["vehicle-data"]
+            vehicle_data_name = pathlib.Path(vehicle_data_filepath).name
+            metadata = dm.getVehicleDataMetadata(vehicle_data_name)
+            network_name = metadata["network_name"]
+            args["vehicle-data"] = vehicle_data_name
+        # else let user select
+        else:
+            networks_data, default_net = dm.getNetworkList("networks")
+            print()
+            if value == "generateChargeData":
+                print("Generate charge data for network:")
+            else:
+                print("Run on network:")
+            printNetworks(networks_data, default_net)
+
+            network_name = input("Select available: ").strip()
+
+            if not network_name:
+                network_name = "manhattan" if (default_net is None) else default_net
+            elif network_name.isdigit():
+                network_name = networks_data[int(network_name)][0]
+        # Join
+        network_filepath = os.path.join("networks", network_name)
+
+        # Check if network exists
+        if not os.path.exists(network_filepath):
+            print(
+                f'ERROR: Network folder not found: "{network_name}" '
+                f'(path: "{network_filepath}")'
+            )
             input("Press Enter to continue...")
-            sys.exit(1)
-        if command[1] == "_": AGENT_COUNT = 0;
-        else: AGENT_COUNT = int(command[1])
-        match (command[0]):
-            case "1":
-                if AGENT_COUNT == 1:
-                    pyfile, value = ("coverage_solo.py", "Coverage algorithm")
-                else:
-                    pyfile, value = ("coverage_competitive.py", "Competitive coverage algorithm")
-            case "2":
-                if AGENT_COUNT == 1:
-                    pyfile, value = ("game.py", "Equilibrium game algorithm")
-                else:
-                    pyfile, value = ("game_competitive.py", "Competitive equilibrium game algorithm")
-            case "3":
-                if AGENT_COUNT == 1:
-                    pyfile, value = ("gnn.py", "Graph NN RL")
-                else:
-                    pyfile, value = ("marl.py", "Multi-Agent RL")
+            continue; #main()
+
+        # Confirm
+        params = Parameters.config()
+        print(f"\n{value}")
         if AGENT_COUNT > 1:
-            args["agent-count"] = AGENT_COUNT
-    else:
-        print(f'\nERROR: Invalid choice "{choice}".')
-        input("Press Enter to continue...")
-        sys.exit(1)
-
-    # Check if file exists
-    if (pyfile is not None):
-        if (not os.path.exists(pyfile)):
-            print(f"ERROR: File not found: {pyfile}")
-            input("Press Enter to continue...")
-            sys.exit(1)
-    else:
-        if value == "listVehicleData":
-            vehicle_data = dm.getVehicleDataList()
-            printVehicleData(vehicle_data);
-            main(print_options=False)
-        elif value == "compare":
-            global groups, prec, group_opts
-            # Select group
-            groups, prec = dm.getSessionGroups("results")
-            print("\n\n\n\nChoose sessions to compare:")
-            group_opts = printSessionGroups(groups, prefix="  ", prec=prec)
-            print("")
-            inp = input("Select groups: ")
-            filepaths = parseSessionGroupSelect(inp, group_opts, groups)
-            print(filepaths)
-            print(f"Loaded {len(filepaths)} sessions.")
-            # Choose method
-            while inp != "" and inp != "q" and inp != "quit" and inp != "exit":
-                print("-" * 20)
-                print("Choose method:")
-                print("0 | rerun                            - compare by rerunning")
-                print("1 | best                             - compare by best achieved results")
-                print("2 | duraition                        - compare execution durations")
-                print("-" * 20)
-                print("Optional arguments:")
-                print("-s | --stats : <stat>,<stat>,...     - only show for listed stats")
-                print("-nv | --no-values                    - don't include exact value labels")
-                print("-nl | --no-legend                    - don't include legend")
-                print("-c | --centerize                     - center the data")
-                inp = input("> ").split(' ')
-                print("\n" * 1)
-                args = parseCompare(inp)
-                if inp[0] == "-s" or inp[0] == "s" or inp[0] == "-stats" or inp[0] == "--stats":
-                    params = Parameters.config()
-                    base_stat_list = params.getGroup("reward")
-                    print(f"Base stats:({base_stat_list})")
-                if inp[0] == "0" or inp[0] == "rerun":
-                    rerunAndCompare(filepaths, args);
-                elif inp[0] == "1" or inp[0] == "best":
-                    compareByBest(filepaths, args);
-                elif inp[0] == "2" or inp[0] == "duration" or inp[0] == "time":
-                    compareByDuration(filepaths, args);
-                print("\n" * 3)
-            sys.exit(0)
-
-    ## Network
-    # if vehicle data selected use the attached network
-    if "vehicle-data" in args:
-        vehicle_data_filepath = args["vehicle-data"]
-        vehicle_data_name = pathlib.Path(vehicle_data_filepath).name
-        metadata = dm.getVehicleDataMetadata(vehicle_data_name)
-        network_name = metadata["network_name"]
-        args["vehicle-data"] = vehicle_data_name
-    # else let user select
-    else:
-        networks_data, default_net = dm.getNetworkList("networks")
-        print()
-        if value == "generateChargeData":
-            print("Generate charge data for network:")
+            print(f"  - Agents:             {AGENT_COUNT}")
+        print(f"  - Network:            {network_name}")
+        if "iterations" in args:
+            print(f"  - Iterations:         {int(args['iterations'])}")
         else:
-            print("Run on network:")
-        printNetworks(networks_data, default_net)
-
-        network_name = input("Select available: ").strip()
-
-        if not network_name:
-            network_name = "manhattan" if (default_net is None) else default_net
-        elif network_name.isdigit():
-            network_name = networks_data[int(network_name)][0]
-    # Join
-    network_filepath = os.path.join("networks", network_name)
-
-    # Check if network exists
-    if not os.path.exists(network_filepath):
-        print(
-            f'ERROR: Network folder not found: "{network_name}" '
-            f'(path: "{network_filepath}")'
-        )
-        input("Press Enter to continue...")
-        sys.exit(1)
-
-    # Confirm
-    params = Parameters.config()
-    print(f"\n{value}")
-    if AGENT_COUNT > 1:
-        print(f"  - Agents:             {AGENT_COUNT}")
-    print(f"  - Network:            {network_name}")
-    if "iterations" in args:
-        print(f"  - Iterations:         {int(args['iterations'])}")
-    else:
-        print(f"  - Iterations:         {params['training.iterations']}")
-    centralized = params["station.routing.centralized"]
-    stationfinder = params["station.routing.useStationFinder"]
-    if stationfinder:
-        print("  - Routing:            Stationfinder")
-    elif centralized:
-        print("  - Routing:            centralized");
-    else:
-        print("  - Routing:            selfish")
-    if "vehicle-data" in args:
-        print(f"  - Vehicle data:       {vehicle_data_name}")
-        print(f"      - vehicle count:  {metadata['vehicle_count']}")
-        print(f"      - EV count:       {metadata['EV_count']}")
-        #print(f"    - network:       {metadata['network_name']}")
-    else:
-        print("  vehicle data: generate")
-    input("Confirm")
-
-    if pyfile is not None:
-        # Call
-        args = stringifyArgs(args)
-        system = platform.system()
-        if system == "Windows":
-            proc = subprocess.Popen(
-                f'start "{value}" cmd /k "{VENV_PYTHON} {pyfile} {network_name} {args}"',
-                shell=True)
-            #proc = subprocess.Popen(
-            #    ["cmd", "/k", VENV_PYTHON, pyfile, network_name] + args,
-            #    creationflags=subprocess.CREATE_NEW_CONSOLE
-            #    )
-            #out, err = proc.communicate()
-            #print("STDOUT:\n", out)
-            #print("STDERR:\n", err)
-            #print("Return code:", proc.returncode)
+            print(f"  - Iterations:         {params['training.iterations']}")
+        centralized = params["station.routing.centralized"]
+        stationfinder = params["station.routing.useStationFinder"]
+        if stationfinder:
+            print("  - Routing:            Stationfinder")
+        elif centralized:
+            print("  - Routing:            centralized");
         else:
-            cmd = [VENV_PYTHON, pyfile, network_name]
-            proc = subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
-        #proc.wait()
-    else:
-        if value == "generateChargeData":
-            generateVehicleData(network_name);
-        else: raise Exception(f"ERROR: Unknown command '{value}'");
-    print("\n\n\n")
-    main()
+            print("  - Routing:            selfish")
+        if "vehicle-data" in args:
+            print(f"  - Vehicle data:       {vehicle_data_name}")
+            print(f"      - vehicle count:  {metadata['vehicle_count']}")
+            print(f"      - EV count:       {metadata['EV_count']}")
+            #print(f"    - network:       {metadata['network_name']}")
+        else:
+            print("  vehicle data: generate")
+        inp = input("Confirm (anything for no): ")
+        if inp != "": continue; main(True);
+
+        if pyfile is not None:
+            # Call
+            args = stringifyArgs(args)
+            system = platform.system()
+            if system == "Windows":
+                proc = subprocess.Popen(
+                    f'start "{value}" cmd /k "{VENV_PYTHON} {pyfile} {network_name} {args}"',
+                    shell=True)
+                #proc = subprocess.Popen(
+                #    ["cmd", "/k", VENV_PYTHON, pyfile, network_name] + args,
+                #    creationflags=subprocess.CREATE_NEW_CONSOLE
+                #    )
+                #out, err = proc.communicate()
+                #print("STDOUT:\n", out)
+                #print("STDERR:\n", err)
+                #print("Return code:", proc.returncode)
+            else:
+                cmd = [VENV_PYTHON, pyfile, network_name]
+                proc = subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            #proc.wait()
+        else:
+            if value == "generateChargeData":
+                generateVehicleData(network_name);
+            else: raise Exception(f"ERROR: Unknown command '{value}'");
+        print("\n\n\n")
 
 #### MAIN
 if __name__ == "__main__":

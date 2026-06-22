@@ -134,7 +134,7 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
     sumo_filepath = cache_data_path + "/" + network_name + ".sumocfg"
     # Side vars
     global network_diameter, EV_len, min_gap, max_charge
-    network_diameter = float(nx.diameter(G, weight="length"))
+    network_diameter = graphutil.diameter(G, weight="length")
     vTypes_tree = ET.parse("networks/vTypes.add.xml")
     EV_len = parkingNetGen.getVehicleLength(vTypes_tree);
     min_gap = prep.getMinGapFromAddTree(vTypes_tree)
@@ -289,6 +289,8 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
                         traci.vehicle.setParkingAreaStop(vehID, target_si.wait_park_id)
                     # > Stop and wait in front of the charging spots; creates jam at the entrance if too many vehicles in queue
                     else:
+                        # -> sometimes error happens because the vehicle is too close to the stop? (less than ~1 in 1000)
+                        # even though the getStationDistance and backup STOP_DISTANCE should always prevent that...
                         try:
                             traci.vehicle.setStop(vehID, target_si.redge_id,
                                                   pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));

@@ -24,6 +24,7 @@ def voronoiPartitions(G, source_edges : list[tuple], use_internal=True, return_d
             edge_len = G[prev][node]["length"]
             new_dist = cur_dist + edge_len
             if use_internal:
+                if next_node not in int_lens[node][prev]: continue;
                 new_dist += int_lens[node][prev][next_node]
             if prev not in dist or new_dist < dist[prev]:
                 dist[prev] = new_dist
@@ -35,6 +36,8 @@ def voronoiPartitions(G, source_edges : list[tuple], use_internal=True, return_d
         partitions[source] = []
     # Assign each graph edge
     for from_node, to_node in G.edges():
+        if from_node not in owner or to_node not in owner:
+            continue;
         source_from = owner[from_node]
         source_to = owner[to_node]
         if return_distances: data = ((from_node, to_node), dist[to_node])

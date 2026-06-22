@@ -157,6 +157,11 @@ def translateEdgeToDetailedEdgeID(edge, alphabetical=False):
         temp = from_id; from_id = to_id; to_id = temp;
     return from_id + NODE_EDGE_ID_SEPARATOR + to_id + ROAD_ID_SEPARATOR +\
            to_id + NODE_EDGE_ID_SEPARATOR + from_id
+def translateEdgeToDetailedEdgeTuple(edge, alphabetical=False):
+    from_id = edge[0]; to_id = edge[1];
+    if alphabetical and to_id < from_id:
+        temp = from_id; from_id = to_id; to_id = temp;
+    return (from_id + NODE_EDGE_ID_SEPARATOR + to_id, to_id + NODE_EDGE_ID_SEPARATOR + from_id)
 def translateNetEdgeToDetailedEdgeID(net_edge):
     from_id = net_edge.getFromNode().getID(); to_id = net_edge.getToNode().getID();
     return from_id + NODE_EDGE_ID_SEPARATOR + to_id + ROAD_ID_SEPARATOR +\
@@ -561,12 +566,49 @@ def getEdgesInEdgeRadius(G, start, radius, ignore_edges=None, use_internal=True,
                         continue
                 if next_node not in nodes_checked:
                     distance = all_lens[c]
+                    if use_internal:
+                        distance += float(int_lens[node][prev][next_node])
                     if distance <= dis_left:
                         heap.push((dis_left - distance, next_node, node))
                     if distance <= dis_left or include_reached:
                         edges_covered.add(c)
                         if include_reverse:
                             edges_covered.add((c[1], c[0]))
+    return edges_covered
+def getEdgesInEdgeRadius_lineGraph(G, G_line, start, radius, ignore_edges=None, use_internal=True,
+                         include_reverse=True, include_reached=False) -> set:
+    if not isinstance(start, tuple):
+        raise Exception(f"Given start is not a tuple ('{start}')");
+    nodes_checked = set()
+    edges_covered = set()
+    heap = TupleMaxHeap(2); heap.push((radius, start));
+    all_lens = nx.get_edge_attributes(G, "length")
+    if use_internal:
+        int_lens = nx.get_node_attributes(G, "intLens");
+    while len(heap) > 0:
+        dis_left, state = heap.pop()
+        if state not in nodes_checked:
+            nodes_checked.add(state)
+            u, v = state
+            conns = G_line.out_edges(state)
+            for c in conns:
+                _, next_state = c
+                if ignore_edges != None and next_state in ignore_edges:
+                    continue;
+                _, w = next_state
+                if use_internal:
+                    if w not in int_lens[v][u]:
+                        continue
+                if next_state not in nodes_checked:
+                    distance = all_lens.get((v, w), None)
+                    if use_internal:
+                        distance += float(int_lens[v][u][w])
+                    if distance <= dis_left:
+                        heap.push((dis_left - distance, next_state))
+                    if distance <= dis_left or include_reached:
+                        edges_covered.add(next_state)
+                        if include_reverse:
+                            edges_covered.add((next_state[1], next_state[0]))
     return edges_covered
 ## At edge of radius
 def getValidNodesAtRadius(G, start_node, radius, valid) -> dict:

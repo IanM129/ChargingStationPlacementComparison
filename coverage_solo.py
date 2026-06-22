@@ -57,7 +57,7 @@ def stationDistributionStart(weights_dict):
 RANDOM_STATIONS = False
 def stationDistribution(G, base_G_d, k, output_path, edge_value_weights="length", first_station=None, debug=False):
     G_d = copy.deepcopy(base_G_d)
-    candidates = graphing.calcCandidates(G_d, detailed_graph=True)
+    candidates = graphing.calcCandidates(G_d, detailed_graph=True)  #candidate_edges=candidate_edges_d
     ## Charging stations
     #print("-- Station distribution algorithm (" +
     #      ("random" if RANDOM_STATIONS else "binary search") +
@@ -167,6 +167,11 @@ if __name__ == "__main__":
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:
         MAX_DISTANCE = abs(MAX_DISTANCE * network_diameter)
+    #candidate_edges = graphing.getCandidateEdges(base_G)
+    #candidate_edges_d = []
+    #for edge_tup in candidate_edges:
+    #    edge_d = graphutil.translateEdgeToDetailedEdgeTuple(edge_tup)
+    #    candidate_edges_d.append(edge_d)
 ###### PRE-RUN
     start_datetime_str = str(datetime.now().strftime('%Y%m%d_%H%M%S'))
     output_folder = network_name + "_cover1_" + start_datetime_str
@@ -207,6 +212,7 @@ if __name__ == "__main__":
                            output_path=output_path, output_subfolder="blank")
     G = graphutil.resultsToEdgeAttributes(G, translator, ["vehicles", "flow"], results)
     flow_dict = nx.get_edge_attributes(G, "flow")
+    #flow_dict = {k: v for k, v in flow_dict.items() if k in candidate_edges}
     
 ###### RUN
     pbar = tqdm(total=ITERATIONS)
@@ -240,6 +246,7 @@ if __name__ == "__main__":
                       params, results, iteration=None, debug=False)
         G = graphutil.resultsToEdgeAttributes(G, translator, ["vehicles", "flow"], results)
         flow_dict = nx.get_edge_attributes(G, "flow")
+        #flow_dict = {k: v for k, v in flow_dict.items() if k in candidate_edges}
         #### Bookkeeping
         # Update best
         if best is None:
@@ -289,6 +296,7 @@ if __name__ == "__main__":
         ET.indent(res_tree, space="    ")
         res_tree.write(output_path + "/training/best.xml");
         res_tree.write(output_path + "/results/best.xml");
+        plt.show()
     # Print
     full_path = pathlib.Path(output_path + "/results/").resolve()
     print(f"\nTraining finished in {round(time_diff, 2)}, saved results inside\n'{full_path}'")

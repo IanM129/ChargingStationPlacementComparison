@@ -107,6 +107,9 @@ def parseArgs(args_str):
             value = int(args_str[i+1])
             args_dict["iterations"] = value
             i += 2
+        elif args_str[i] == "-l" or args_str[i] == "--limit":
+            args_dict["limit"] = True
+            i += 1
         else: i += 1;
     return args_dict
 def stringifyArgs(args_dict):
@@ -117,6 +120,8 @@ def stringifyArgs(args_dict):
         args_str += " --agents " + str(args_dict["agent-count"])
     if "iterations" in args_dict:
         args_str += " --iterations " + str(args_dict["iterations"])
+    if "limit" in args_dict:
+        args_str += " --limit"
     return args_str.strip()
 
 #### Bookkeeping

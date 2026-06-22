@@ -24,6 +24,13 @@ import lib.graphing.draw as graphdraw
 
 
 
+#### Strongly connected DiGraph
+def getLargestConnected(G):
+    if not nx.is_strongly_connected(G):
+        largest_scc = max(nx.strongly_connected_components(G), key=len)
+        return G.subgraph(largest_scc).copy()
+    return G
+
 #### Network to networkx graph
 def netToGraph(net_xml_filepath, net=None,
                lengths=True, travel_time=False,             # edge attributes
@@ -123,20 +130,163 @@ def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=T
 
 #### Networkx graph to line graph
 def lineGraph(G):
-    base_pos = nx.get_node_attributes(G, "pos")
-    G_line = nx.line_graph(G.to_undirected())
-    # Define pos
-    pos = {}
-    for u, v in G_line.nodes():
-        x_avg = (base_pos[u][0] + base_pos[v][0]) / 2.0
-        y_avg = (base_pos[u][1] + base_pos[v][1]) / 2.0
-        pos[(u, v)] = (x_avg, y_avg)
-    nx.set_node_attributes(G_line, pos, "pos")
+##    base_pos = nx.get_node_attributes(G, "pos")
+##    G_line = nx.line_graph(G.to_undirected())
+##    # Define pos
+##    pos = {}
+##    for u, v in G_line.nodes():
+##        x_avg = (base_pos[u][0] + base_pos[v][0]) / 2.0
+##        y_avg = (base_pos[u][1] + base_pos[v][1]) / 2.0
+##        pos[(u, v)] = (x_avg, y_avg)
+##    nx.set_node_attributes(G_line, pos, "pos")
+##    return G_line
+    int_lens = nx.get_node_attributes(G, "intLens");
+    G_line = nx.DiGraph()
+    for u, v in G.edges():
+        G_line.add_node((u, v))
+    for u, v in G.edges():
+        for _, w, _ in G.out_edges(v, data=True):
+            if w in int_lens[v].get(u, {}):
+                G_line.add_edge((u, v), (v, w))
     return G_line
+def getCandidateEdges(G, net):
+    ## Version 1
+    #G_line_sc = getLargestConnected(lineGraph(G))
+    #return sorted(list(G_line_sc.nodes()))
+    ## Version 2
+    #edges = list(G.edges())
+    #valid = set()
+    #for e in edges:
+    #    for f in edges:
+    #        if astar.edgePath(G, e, f, debug=False) is not None:
+    #            valid.add(e)
+    #            valid.add(f)
+    #return sorted(list(valid))
+    ## Version 3
+    import sumolib
+    R = nx.DiGraph()
+    edges = net.getEdges()
+    for e in edges:
+        e_id = e.getID();
+        for t in edges:
+            t_id = t.getID();
+            if e_id == t_id: continue;
+            try:
+                path = net.getShortestPath(e, t)
+                # SUMO returns (cost, edges) or similar depending on version
+                if path is None: continue;
+                edge_list, cost = path
+                # valid if a path exists and is non-empty
+                if edge_list and len(edge_list) > 0:
+                    from_edge = (e.getFromNode().getID(), e.getToNode().getID())
+                    to_edge = (t.getFromNode().getID(), t.getToNode().getID())
+                    R.add_edge(from_edge, to_edge)
+            except Exception:
+                continue
+    print("R:", R)
+    return set(R.nodes())
+    # Get largest strongly connected
+    #R_sc = max(nx.strongly_connected_components(R), key=len)
+    #valid_edges = set(R_sc)
+    #return valid_edges
+def getCandidateEdges_online(G, net, network_filepath):
+    import libsumo as traci
+    valid_edges = set()
+    # Start sim
+    sumoBinary = sumolib.checkBinary("sumo")
+    traci.start([
+        sumoBinary,
+        "-n", network_filepath,
+        "--start",
+        "--no-step-log",
+        "--quit-on-end"
+    ])
+    edges = [e for e in traci.edge.getIDList() if not e.startswith(":")]
+    # Compute reachable
+    for e_id in edges:
+        is_valid = True
+        for t_id in edges:
+            if e_id == t_id: continue;
+            try:
+                route = traci.simulation.findRoute(e_id, t_id)
+                if not route or not route.edges:
+                    is_valid = False; break;
+            except Exception:
+                is_valid = False; break;
+        if is_valid:
+            e = net.getEdge(e_id)
+            R.add_edge(e_id, t_id)
+            #valid_edges.add((e.getFromNode().getID(), e.getToNode().getID()))
+    traci.close()
+    return set(R.edges())
+def getCandidateEdges_trips(G, net, trips):
+    R = nx.DiGraph()
+    edges = net.getEdges()
+    for e in edges:
+        e_id = e.getID();
+        is_valid = True
+        for vehID, trip in trips.dict.items():
+            for dest in trip.destinations:
+                dest_edge = net.getEdge(dest)
+                dest_id = dest_edge.getID();
+                if e_id == dest_id: continue;
+                try:
+                    path = net.getShortestPath(dest_edge, e)
+                    # SUMO returns (cost, edges) or similar depending on version
+                    if path is None:
+                        is_valid = False; break;
+                    edge_list, cost = path
+                    # valid if a path exists and is non-empty
+                    if edge_list is None or len(edge_list) < 1:
+                        is_valid = False; break;
+                except Exception:
+                    is_valid = False; break;
+        if is_valid:
+            R.add_edge(e.getFromNode().getID(), e.getToNode().getID())
+    print("R:", R)
+    return set(R.edges())
+    # Get largest strongly connected
+    #R_sc = max(nx.strongly_connected_components(R), key=len)
+    #valid_edges = set(R_sc)
+    #return valid_edges
+def getCandidateEdges_tripsonline(G, net, network_filepath, trips):
+    import libsumo as traci
+    valid_edges = set()
+    # Start sim
+    sumoBinary = sumolib.checkBinary("sumo")
+    traci.start([
+        sumoBinary,
+        "-n", network_filepath,
+        "--start",
+        "--no-step-log",
+        "--quit-on-end"
+    ])
+    edges = [e for e in traci.edge.getIDList() if not e.startswith(":")]
+    all_destinations = set()
+    for vehID, trip in trips.dict.items():
+        for d in trip.destinations:
+            all_destinations.add(d)
+    # Compute reachable
+    for e_id in edges:
+        is_valid = True
+        for dest_id in all_destinations:
+            if e_id == dest_id: continue;
+            try:
+                route = traci.simulation.findRoute(dest_id, e_id)
+                if not route or not route.edges:
+                    is_valid = False; break;
+            except Exception:
+                is_valid = False; break;
+        if is_valid:
+            e = net.getEdge(e_id)
+            valid_edges.add((e.getFromNode().getID(), e.getToNode().getID()))
+    traci.close()
+    return valid_edges
     
 
 #### Graph utility
 def discretizeGraph(G, max_distance, add_min=0, add_max=-1,
+                    edges_only=None,
                     roads_only=False, add_internal=False):
     edges = set()
     for edge in G.edges():
@@ -148,6 +298,8 @@ def discretizeGraph(G, max_distance, add_min=0, add_max=-1,
     lengths = nx.get_edge_attributes(G, "length")
     for edge in edges:
         #print("----", edge)
+        if edges_only is not None and edge not in edges_only:
+            continue;
         if roads_only and util.areNodeEdgesSameNode(edge[0], edge[1]):
             continue;
         length = lengths[edge]
@@ -205,7 +357,7 @@ def calcGraphSpaceRadius(G, start_node, radius, nodes_only=False) -> list[EdgePo
 ## -> vertices + edge interior points where distances balance
 ## ----> for now add vertices created on edges as candidates
 ##       (so we dont place stations on intersections)
-def calcCandidates(G, detailed_graph=True, add_internal=False):
+def calcCandidates(G, candidate_edges=None, detailed_graph=True, add_internal=False):
     candidates = []
     # Add vertices
     #for node in G.nodes():
@@ -213,6 +365,7 @@ def calcCandidates(G, detailed_graph=True, add_internal=False):
     og_verts = set(G.nodes())
     # Add points on edges
     discretizeGraph(G, 50, add_min=1, add_max=1,
+                    edges_only=candidate_edges,
                     roads_only=detailed_graph, add_internal=add_internal)
     candidates = set(G.nodes()) - og_verts
     return candidates

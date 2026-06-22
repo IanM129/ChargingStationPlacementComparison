@@ -79,7 +79,9 @@ def detailedEdgePoint(G, start : EdgePoint = None, target : EdgePoint = None, le
 
 
 # Graph with junction weights
-def edgePath(G, start, target, weight="length", use_internal=True):
+def edgePath(G, start, target, weight="length", use_internal=True, debug=False):
+    #from lib.graphing.bfs import has_edge_path
+    #print(has_edge_path(G, start, target, nx.get_node_attributes(G, "intLens")))
     if (len(start) > 2): start = (start[0], start[1]);
     if (len(target) > 2): target = (target[0], target[1]);
     import heapq
@@ -144,7 +146,8 @@ def edgePath(G, start, target, weight="length", use_internal=True):
     start_len = float(G.get_edge_data(start[0], start[1])[weight])
     target_id = G[target[0]][target[1]].get("id", "/")
     target_len = float(G.get_edge_data(target[0], target[1])[weight])
-    print(f"ERROR: No A* path found from {start} ({start_id}) [{start_len}] -> {target} ({target_id}) [{target_len}].")
+    if debug:
+        print(f"ERROR: No A* path found from {start} ({start_id}) [{start_len}] -> {target} ({target_id}) [{target_len}].")
     return None
 
 

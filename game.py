@@ -100,7 +100,8 @@ def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
             cost = 0.0;
             # Get detour trip
             trip_st = copy.deepcopy(trip)
-            trip_st.insert(st_redge_tup, i)
+            insert_ret = trip_st.insert(st_redge_tup, i)
+            if insert_ret is None: continue;
             # Calculate distance
             path = trip_st.path
             distance = graphutil.edgePathLength(G, trip_st.path, weight="length", use_internal=True)
@@ -120,13 +121,14 @@ def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, tran
     # Coefficients
     congestion_c = 10.0;
     # Return vars
-    chosen_sttn = None; chosen_trip = None; min_cost = 0.0;
+    chosen_sttn = None; chosen_trip = None; min_cost = np.inf;
     ## Total detour cost for each station
     for si in stations:
         redge_tuple = translator.IDToEdge(si.redge_id)
         # Calculate
         trip_st = None
         insertIndex, cost = detourCost(G, vehID, trip, redge_tuple, chosen_trip=trip_st)
+        if insertIndex == -1: continue;
         # Add congestion
         cong = congestion[si.edge_id]
         if cur_chosen is None or si != cur_chosen: cong += 1;
@@ -134,7 +136,7 @@ def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, tran
         # Recreate trip if not set
         if (trip_st is None):
             trip_st = copy.deepcopy(trip)
-            trip_st.insert(redge_tuple, insertIndex)
+            insert_ret = trip_st.insert(redge_tuple, insertIndex)
         ## Update
         if chosen_sttn is None or cost < min_cost:
             chosen_sttn = si; chosen_trip = trip_st;
@@ -267,6 +269,9 @@ if __name__ == "__main__":
     QUEUE_PARKING = params["station.routing.waitParking"]
     print(params.groupPrint())
     # Inform about arg changes
+    if "limit" in args:
+        LIMIT_CANDIDATES = True
+        print("INFO: Limiting candidates.")
     if "iterations" in args:
         print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
     # Get price
@@ -288,7 +293,7 @@ if __name__ == "__main__":
     translator = GraphTranslator(base_G)
     ## Other
     global network_diameter
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)
     if MAX_DISTANCE < 0:

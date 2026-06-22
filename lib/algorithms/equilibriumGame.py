@@ -86,7 +86,7 @@ def preprocess(base_G, data_path, network_name, output_path, trips, k, params=No
     vTypes_tree.write(cache_data_path + "/vTypes.add.xml") # rewrite modified vTypes XML tree
     ## Side vars
     global network_diameter, EV_len, min_gap
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     EV_len = parkingNetGen.getVehicleLength(vTypes_tree);
     min_gap = prep.getMinGapFromAddTree(vTypes_tree)
 

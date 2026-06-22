@@ -124,7 +124,8 @@ def detourCost(G, vehID, trip : TripNX, st_redge_tup : tuple, chosen_trip=None):
             cost = 0.0;
             # Get detour trip
             trip_st = copy.deepcopy(trip)
-            trip_st.insert(st_redge_tup, i)
+            insert_ret = trip_st.insert(st_redge_tup, i)
+            if insert_ret is None: continue;
             # Calculate distance
             path = trip_st.path
             distance = graphutil.edgePathLength(G, trip_st.path, weight="length", use_internal=True)
@@ -148,7 +149,7 @@ def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, tran
     # Coefficients
     congestion_c = 10.0; price_c = 0.2;
     # Return vars
-    chosen_sttn = None; chosen_trip = None; min_cost = 0.0;
+    chosen_sttn = None; chosen_trip = None; min_cost = np.inf;
     ## Total detour cost for each station
     #if (not congestion_empty): print(f"\n\n------------ {vehID}:")
     for si in stations:
@@ -157,6 +158,7 @@ def costFunction(G, vehID, trip : TripNX, stations, cur_chosen, congestion, tran
         # Calculate
         trip_st = None
         insertIndex, cost = detourCost(G, vehID, trip, redge_tuple, chosen_trip=trip_st)
+        if insertIndex == -1: continue;
         #if (not congestion_empty): print(f"- detour cost: {cost}")
         # Add congestion
         cong = congestion[si.edge_id]
@@ -351,6 +353,9 @@ if __name__ == "__main__":
     QUEUE_PARKING = params["station.routing.waitParking"]
     print(params.groupPrint())
     # Inform about arg changes
+    if "limit" in args:
+        LIMIT_CANDIDATES = True
+        print("INFO: Limiting candidates.")
     if "iterations" in args:
         print(f"INFO: Set ITERATIONS to {ITERATIONS} by received argument.")
     if "agent-count" in args:
@@ -391,7 +396,7 @@ if __name__ == "__main__":
     translator = GraphTranslator(base_G)
     ## Other
     global network_diameter
-    network_diameter = float(nx.diameter(base_G, weight="length"))
+    network_diameter = graphutil.diameter(base_G, weight="length")
     suffixes = [("_" + n) for n in agent_colors]
     if MIN_DISTANCE < 0:
         MIN_DISTANCE = abs(MIN_DISTANCE * network_diameter)

@@ -82,8 +82,11 @@ class TripNX:
         path_after = self.path[self.destinationIndeces[idx]:]
         #print(f"before [{len(path_before) if path_before is not None else '/'}]:", path_before)
         #print(f"after [{len(path_after) if path_after is not None else '/'}]:", path_after)
-        path_front = edgePath(self.G, self.destinations[idx-1], edge)[:-1]
-        path_back = edgePath(self.G, edge, self.destinations[idx])[:-1]
+        path_front = edgePath(self.G, self.destinations[idx-1], edge)
+        path_back = edgePath(self.G, edge, self.destinations[idx])
+        if path_front is None or path_back is None: return False;
+        path_front = path_front[:-1]
+        path_back = path_back[:-1]
         #print(f"front [{len(path_front) if path_front is not None else '/'}]:", path_front)
         #print(f"back [{len(path_back) if path_back is not None else '/'}]:", path_back)
         self.path = path_before + path_front + path_back + path_after
@@ -99,6 +102,7 @@ class TripNX:
             self.destinationIndeces[i] += delta
         self.total_distance = None
         self.travel_time = None
+        return True;
     def __repr__(self):
         s = "Trip("
         s += str(self.destinations[0]) + " -> " + str(self.destinations[-1])
