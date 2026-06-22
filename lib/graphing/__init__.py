@@ -124,12 +124,10 @@ def netToDetailedGraph(net_xml_filepath, save_position=True, save_junction_deg=T
 #### Networkx graph to line graph
 def lineGraph(G):
     base_pos = nx.get_node_attributes(G, "pos")
-    print(base_pos)
     G_line = nx.line_graph(G.to_undirected())
     # Define pos
     pos = {}
     for u, v in G_line.nodes():
-        print(u, v)
         x_avg = (base_pos[u][0] + base_pos[v][0]) / 2.0
         y_avg = (base_pos[u][1] + base_pos[v][1]) / 2.0
         pos[(u, v)] = (x_avg, y_avg)

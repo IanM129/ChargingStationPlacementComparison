@@ -1,5 +1,4 @@
-- Albert Y.S.; Electric Vehicle Charging Station Placement:
-- Albert Y.S.; Electric Vehicle Charging Station Placement: Formulation, Complexity, and Solutions:
+X - Albert Y.S.; Electric Vehicle Charging Station Placement: Formulation, Complexity, and Solutions:
 undirected graph with a set of possible construction sites
 construction sites are connected by edges where distance = road distance
 D = average distance to be traversed by most typical EV models when fully charged
@@ -24,7 +23,7 @@ MILP:
 
 
 
-- Roy A.; Examining spatial disparities in electric vehicle charging station placements using machine learning:
+X - Roy A.; Examining spatial disparities in electric vehicle charging station placements using machine learning:
 developed a machine learning model to predict the needed density of charging stations for an area using the region's socioeconomic data
 
 
@@ -55,7 +54,7 @@ Finally, the study analyzes two factors, which possibly influence the optimizati
 
 
 
-- Bae, S.; A Game Approach for Charging Station Placement Based on User Preferences and Crowdedness
+X - Bae, S.; A Game Approach for Charging Station Placement Based on User Preferences and Crowdedness
 [EVU = EV user; EVCS = EV charging station]
 minimizing installation costs, but also user perspective; considers crowdedness and individual preferences
 decentralized game theoretical decision-making algorithm + k-means clustering -> k-GRAPE (GRoup Agent Partitioning and Placing Event) (Stackelberg-style game):
@@ -98,7 +97,7 @@ Takes
 
 
 
-- Optimal Location of Charging Stations for Electric Vehicles in a Neighborhood in Lisbon, Portugal
+X - Optimal Location of Charging Stations for Electric Vehicles in a Neighborhood in Lisbon, Portugal
 Analyses the Avenidas Novas neighbourhood in Lisbon, Portugal
 estimates daytime (workplaces) and night time demand (residences)
 estimates that from the 406 total stations planned to be installed in Lisbon, 43 will be located in the neighbourhood
