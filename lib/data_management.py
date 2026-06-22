@@ -140,6 +140,7 @@ def getVehicleDataHashList(parent_folder="vehicle_data"):
 def getSessionGroups(parent_folder="results"):
     vd_hashlist = getVehicleDataHashList()
     vd_pathlist = getVehicleDataList()
+    if (not os.path.exists(parent_folder)): return None, 0;
     groups = {}
     prec = 0
     for folder in os.listdir(parent_folder):

@@ -23,9 +23,6 @@ from lib.structs.evaluation import Evaluation
 #from lib.structs.params import Parameters
 
 import sumolib
-from lib.sumo.blank import sumoBlankRun
-from lib.sumo.solo import sumoSoloRun
-from lib.sumo.comp import sumoCompRun
 
 
 
@@ -237,8 +234,9 @@ def EdgePosAndPriceGNN_chooseEdgesAndPrice(model, graph, K):
     unit_price = unit_price.detach().item()
     return selected_edge_indices, unit_price
 ## Run simulation
-def runSimulation_blank(network_name, data_path, output_path, net, trips, params, results):
-    results = sumoBlankRun(net, data_path, network_name, trips, results, params=params,
+"""
+def runSimulation_blank(network_name, output_path, net, trips, params, results):
+    results = sumoBlankRun(net, "networks/" + network_name, network_name, trips, results, params=params,
                            output_path=output_path, output_subfolder="blank")
     return results
 def runSimulation_solo(network_name, data_path, output_path,
@@ -263,7 +261,7 @@ def runSimulation_comp(network_name, data_path, output_path,
                           agent_colors=agent_colors, coverage_G_d=coverage_G_d,
                           params=params, debug=debug)
     return results
-
+"""
 
 ###### Bookkeeping
 #### Training dictionaries

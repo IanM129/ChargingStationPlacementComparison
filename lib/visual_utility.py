@@ -1,6 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+def statDisplayName(stat):
+    stat_names = {
+        "totalCoverage": "Globalni radijus pokrivenosti",
+        "totalCharge": "Ukupna napunjena energija",
+        "simDuration": "Vrijeme izvršavanja",
+        "tripDuration": "Dugotrajnost puta",
+        "tripLength": "Duljina puta",
+        "waitTime": "Vrijeme čekanja",
+        "stopTime": "Vrijeme stajanja",
+        "timeLoss": "Izgubljeno vrijeme",
+        "energyConsumed": "Iskorištena energija",
+        # Competitive
+        "coverage": "Radijus pokrivenosti",
+        "charge": "Napunjena energija",
+        "moneyEarned": "Ukupna zarada"
+    }
+    if stat in stat_names: return stat_names[stat];
+    return stat
+    
+
 def compare_lists(a : list, b : list):
     max_len = max(len(a), len(b))
     print("Compare lists (" + str(len(a)) + "|" + str(len(b)) + "):\n", end="")
@@ -215,38 +236,45 @@ def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
             figs[stat] = (fig, ax)
     return figs
 def plotResultDataset(results_ds, names, params, stat_list=None,
-                      legend=True, value_labels=True, centerize=False):
+                      invert_min=False,
+                      legend=True, value_labels=True, centerize=False, 
+                      croatian=True):
     from lib.structs.evaluation import getStatFromResult
     from lib.utility import isMinOrMax, invertRange
     default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     if isinstance(params, list):
         params_arr = params
-        stats = params_arr[0].getGroup("reward")
+        stats = sorted(params_arr[0].getGroup("reward"))
     else:
         params_arr = None;
-        stats = params_arr.getGroups("reward")
+        stats = sorted(params_arr.getGroups("reward"))
     if stat_list is not None:
         stats = set(stat_list).intersection(stats)
     stats = sorted(stats)
+    if croatian:
+        stats_display = [statDisplayName(s) for s in stats];
+    else: stats_display = stats;
     # Get values
-    real_vals = results_ds.realStats(params)
-    norm_vals = results_ds.normalizedStats(params, invert_by_coeff=False)
-    # Invert range
-    rev_norm_vals = {}
+    real_vals = results_ds.realStats(params, stat_list=stats)
+    norm_vals = results_ds.normalizedStats(params, stat_list=stats, invert_by_coeff=False)
+    # Extract
+    ext_vals = {}
     for stat in stats:
         vals = []
         for i in range(len(results_ds.arr)):
             vals.append(norm_vals[i][stat])
         # Invert if minimizing or coefficient is negative
-        invert = False
-        if (isMinOrMax(stat) == -1): invert = True;
-        rev_norm_vals[stat] = invertRange(vals) if invert else vals
+        if invert_min:
+            invert = False
+            if (isMinOrMax(stat) == -1): invert = True;
+            ext_vals[stat] = invertRange(vals) if invert else vals
+        else: ext_vals[stat] = vals;
     # Create plot data
     data = {}
     for i in range(len(results_ds.arr)):
         vals = []
         for stat in stats:
-            vals.append(rev_norm_vals[stat][i])
+            vals.append(ext_vals[stat][i])
         data[names[i]] = vals
     # Plot
     fig, ax = plt.subplots()
@@ -266,13 +294,14 @@ def plotResultDataset(results_ds, names, params, stat_list=None,
             for name in data:
                 for i in range(len(stats)):
                     data[name][i] = (0.1 + ((data[name][i] - min_vals[i]) * (0.9 / deltas[i])))
-        plot = ax.grouped_bar(data, tick_labels=stats, group_spacing=1, orientation="horizontal")
+        plot = ax.grouped_bar(data, tick_labels=stats_display, group_spacing=1, orientation="horizontal")
         if value_labels:
             for i in range(len(plot.bar_containers)):
                 container = plot.bar_containers[i]
                 labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
                 ax.bar_label(container, padding=3,labels=labels)
-        ax.set_title("Result comparison")
+        ax.set_title("Usporedba rezultata")
+        ax.set_xlabel("Normalizirani uspjeh")
     else:
         values = []
         #for val in data.values(): values.append(val[0]);
@@ -291,19 +320,146 @@ def plotResultDataset(results_ds, names, params, stat_list=None,
                 stat_title += " ";
             stat_title += stats[0][i].lower()
         ax.set_title(stat_title.capitalize() + " comparison")
-    ax.set_ylabel("Normalized score")
+        ax.set_ylabel("Normalizirani uspjeh")
     if legend: ax.legend(loc="best");
     return fig
-def plotScores(scores, names, title="Score comparison", ylabel="Score",
-               legend=True, value_labels=True):
+def plotCompetitiveResultDataset(results_ds, names, params, stat,
+                                  invert_min=False,
+                                  legend=True, value_labels=True, centerize=False, 
+                                  croatian=True):
+    from lib.structs.evaluation import getStatFromResult
+    from lib.utility import isMinOrMax, invertRange
     default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    if isinstance(params, list):
+        params = params[0]
+    stats = sorted(params.getGroup("compReward"))
+    if stat not in stats: 
+        print("Invalid stat given")
+        return;
+    if croatian:
+        stat_display = statDisplayName(stat)
+    else: stat_display = stat;
+    # Get values
+    real_vals = results_ds.realStats(params, stat_list=[stat])
+    norm_vals = results_ds.normalizedStats(params, stat_list=[stat], invert_by_coeff=False)
+    # Extract
+    ext_vals = []
+    for i in range(len(results_ds.arr)):
+        val = norm_vals[i][stat]
+        # Invert if minimizing or coefficient is negative
+        if invert_min:
+            invert = False
+            if (isMinOrMax(stat) == -1): invert = True;
+            val = invertRange(val) if invert else val
+        ext_vals.append(val);
+    # Create plot data
+    data = []
+    max_len = len(max([ev for ev in ext_vals if ev is not None], key=len))
+    for i in range(max_len):
+        vals = []
+        for j in range(len(ext_vals)):
+            if ext_vals[j] is not None:
+                if i < len(ext_vals[j]):
+                    vals.append(ext_vals[j][i]);
+                else: vals.append(np.nan);
+        data.append(vals)
     # Plot
     fig, ax = plt.subplots()
-    bars = ax.bar(names, scores, color=default_colors[:len(scores)])
-    if value_labels: ax.bar_label(bars, padding=3);
+    bars = ax.grouped_bar(data, group_spacing=1, orientation="horizontal")
+    if value_labels:
+        for i in range(len(bars.bar_containers)):
+            container = bars.bar_containers[i]
+            labels = [f"{data[i][j]:.2f}" for j in range(max_len)]
+            ax.bar_label(container, padding=3, labels=labels)
+    ax.set_yticks(range(len(data[0])))
+    ax.set_yticklabels([names[i] for i in range(len(names)) if ext_vals[i] is not None])
+    ax.set_title(stat_display.capitalize())
+    ax.set_ylabel("Normalizirana vrijednost")
+    #if legend: ax.legend(loc="best");
+    return fig
+def plotCompetitiveValues(values, names, stat_name,
+                          title="Title", xlabel="Normalizirana vrijednost",
+                          invert_min=False,
+                          legend=True, value_labels=True, centerize=False, 
+                          croatian=True):
+    from lib.structs.evaluation import getStatFromResult
+    from lib.utility import isMinOrMax, invertRange
+    import matplotlib.patches as mpatches
+    default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    # Create plot data
+    data = []
+    max_len = len(max(values, key=len))
+    for i in range(max_len):
+        vals = []
+        for j in range(len(values)):
+            if i < len(values[j]):
+                vals.append(values[j][i]);
+            else: vals.append(np.nan);
+        data.append(vals)
+    # Colors
+    colors = []
+    seen = {}
+    for name in names:
+        if name in seen:
+            seen[name] += 1
+        else:
+            seen[name] = 0
+        colors.append(seen[name] % len(default_colors))
+    # Plot
+    fig, ax = plt.subplots()
+    bars = ax.grouped_bar(data, group_spacing=1, orientation="horizontal")
+    if value_labels:
+        for i in range(len(bars.bar_containers)):
+            container = bars.bar_containers[i]
+            labels = [f"{v:.2f}" if not np.isnan(v) else "" for v in data[i]]
+            ax.bar_label(container, padding=3, labels=labels)
+    # Colors
+    for i, container in enumerate(bars.bar_containers):
+        color = default_colors[i % len(default_colors)]
+        j = 0
+        for bar in container:
+            bar.set_color(default_colors[colors[j]])
+            j += 1
+    ax.set_yticks(range(len(data[0])))
+    ax.set_yticklabels([names[i] for i in range(len(names))])
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    #if legend: ax.legend(loc="best");
+    if max(colors) > 0:
+        handles = [mpatches.Patch(color=default_colors[0],label="Centralizirano"),
+                   mpatches.Patch(color=default_colors[1],label="Sebično")]
+        ax.legend(handles=handles, loc="best");
+    return fig
+def plotScores(scores, names, title="Usporedba uspješnosti", ylabel="Uspjeh",
+               legend=True, value_labels=True):
+    default_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    # Define colors per type
+    data = {}
+    colors = []
+    labels = []
+    cnt = {}
+    for i in range(len(scores)):
+        name = names[i]; score = scores[i];
+        name_i = names.index(name)
+        cnt[name] = cnt.get(name, -1) + 1
+        if cnt[name] == 0: labels.append(name);
+        colors.append(default_colors[cnt[name]])
+        if cnt[name] not in data: data[cnt[name]] = [];
+        data[cnt[name]].append(score)
+    # Plot
+    fig, ax = plt.subplots()
+    if max(cnt.values()) > 0:
+        bars = ax.grouped_bar(data, tick_labels=labels, group_spacing=1)
+        if value_labels:
+            for i in range(len(bars.bar_containers)):
+                container = bars.bar_containers[i]
+                ax.bar_label(container, padding=3)
+        ax.legend(["Centralizirano", "Sebično"])
+    else:
+        bars = ax.bar(names, scores)
+        if value_labels: ax.bar_label(bars, padding=3);
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    #if legend: ax.legend(names, loc="best");
     return fig
     
 ## High

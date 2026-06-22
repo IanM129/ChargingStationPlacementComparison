@@ -72,9 +72,19 @@ if __name__ == "__main__":
         per_iteration.append(round((dur / iterations), 2))
         i += 1
     sess_names = [filepath.rsplit('/', 1)[1] for filepath in filepaths]
+    rank_prec = len(str(len(durations)))
+    name_prec = len(max(sess_names, key=len)) + 4
+    ranked_indeces = list(np.argsort(durations))
+    ranked_indeces.reverse()
+    print("Final durations:")
+    for rank in range(len(ranked_indeces)):
+        i = ranked_indeces[rank]
+        filepath = filepaths[i]
+        print(f"  {(rank+1):{rank_prec}}. {filepaths[i]:{name_prec}s}: {durations[i]}")
+    print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
     # Plot
-    fig1 = visutil.plotScores(durations, sess_names, title="Total duration", ylabel="Seconds")
-    fig2 = visutil.plotScores(per_iteration, sess_names, title="Duration per iteration", ylabel="Seconds")
+    fig1 = visutil.plotScores(durations, sess_names, title="Vrijeme izvršavanja", ylabel="Sekunda")
+    fig2 = visutil.plotScores(per_iteration, sess_names, title="Vrijeme izvršavanja iteracije", ylabel="Sekunda")
     plt.show()

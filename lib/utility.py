@@ -1,5 +1,6 @@
 import math
 import random
+import copy
 import numpy as np
 import xml.etree.ElementTree as ET
 
@@ -159,6 +160,60 @@ def updateResultsDict_comp(train_results, agent_stations, results, iteration):
                 train_results[p][a][iteration] = stats[suffixes[a]];
         else:
             train_results[p][iteration] = getStatFromResult(results, p);
+
+#### Simulation
+## Network
+def loadEnvironment(network_name):
+    import sumolib
+    import lib.graphing as graphing
+    from lib.structs.graphtranslator import GraphTranslator
+    # Folder paths (file organization)
+    data_path = "networks/" + network_name + "/";
+    #print("Using network '" + network_name + "' under '" + data_path + "'")
+    ## Graph
+    base_net = sumolib.net.readNet(data_path + "/base_net.net.xml")
+    base_G = graphing.netToGraph(data_path + "/base_net.net.xml",
+                                 lengths=True, travel_time=True,
+                                 internal_lengths=True, node_position=True)
+    base_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml")
+    print("Graph:    " + str(base_G) + "\nDetailed: " + str(base_G_d) + "\n");
+    num_nodes = base_G.number_of_nodes()
+    # Detailed graph for coverage calculations
+    #global coverage_G_d
+    coverage_G_d = graphing.netToDetailedGraph(data_path + "/base_net.net.xml", add_road_centers=True)
+    # Edge translator
+    translator = GraphTranslator(base_G)
+    return base_net, base_G, base_G_d, coverage_G_d, translator
+## Run simulation
+def runSimulation_blank(network_name, output_path, net, trips, params, results):
+    from lib.sumo.blank import sumoBlankRun
+    results = sumoBlankRun(net, "networks/" + network_name, network_name, trips, results, params=params,
+                           output_path=output_path, output_subfolder="blank")
+    return results
+def runSimulation_solo(network_name, output_path,
+                       net, G, stations, base_trips, charge_data, coverage_G_d, 
+                       params, results, iteration=None, debug=False):
+    from lib.sumo.solo import sumoSoloRun
+    trips = copy.deepcopy(base_trips)
+    output_subfolder = "solo";
+    if iteration != None: output_subfolder += "_" + str(iteration);
+    results = sumoSoloRun(net, G, "networks/" + network_name, network_name, trips, stations, results,
+                          output_path=output_path, output_subfolder=output_subfolder,
+                          charge_data=charge_data, coverage_G_d=coverage_G_d, params=params, debug=debug)
+    return results
+def runSimulation_comp(network_name, output_path,
+                       net, G, stations, all_stations, prices, base_trips, charge_data, coverage_G_d,
+                       params, results, iteration=None, debug=False, agent_colors=None):
+    from lib.sumo.comp import sumoCompRun
+    trips = copy.deepcopy(base_trips)
+    output_subfolder = "comp";
+    if iteration != None: output_subfolder += "_" + str(iteration);
+    results = sumoCompRun(net, G, "networks/" + network_name, network_name, trips, stations, all_stations,
+                          results, output_path, output_subfolder=output_subfolder,
+                          charge_data=charge_data, prices=prices,
+                          agent_colors=agent_colors, coverage_G_d=coverage_G_d,
+                          params=params, debug=debug)
+    return results
 
 #### Other
 #["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]

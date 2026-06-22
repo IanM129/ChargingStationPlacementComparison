@@ -313,7 +313,7 @@ def findEquilibrium(network_name, net, G,
 
 LIMIT_CANDIDATES = False
 
-agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
+agent_colors = visutil.getAgentColors()
 
 ###### MAIN
 if __name__ == "__main__":

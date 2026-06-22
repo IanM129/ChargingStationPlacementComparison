@@ -228,15 +228,15 @@ if __name__ == "__main__":
                                                       edge_value_weights=flow_dict,
                                                       first_station=first_station)
         # Station info from detailed edges
-        stations_ids = []
-        for st_d in stations_d:
-            from_node, to_node = graphutil.getNodesOfDetailedRoad(st_d)
-            if base_G.has_edge(from_node, to_node):
-                edge_id = base_G[from_node][to_node]["id"]
-            else:
-                edge_id = base_G[to_node][from_node]["id"]
-            stations_ids.append(edge_id)
-        #stations = StationInfoDataset([StationInfo.fromDetailedEdge(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations])
+        stations_ids = graphutil.edgeIDsFromDetailed(base_G, stations_d)
+        #stations_ids = []
+        #for st_d in stations_d:
+        #    from_node, to_node = graphutil.getNodesOfDetailedRoad(st_d)
+        #    if base_G.has_edge(from_node, to_node):
+        #        edge_id = base_G[from_node][to_node]["id"]
+        #    else:
+        #        edge_id = base_G[to_node][from_node]["id"]
+        #    stations_ids.append(edge_id)
         stations = StationInfoDataset([StationInfo(s, STATION_CAPACITY, MONEY_PER_KWH) for s in stations_ids])
         #print("-- stations:", stations.printEdges())
         #### Run

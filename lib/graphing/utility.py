@@ -169,7 +169,18 @@ def translateNetEdgeToDetailedEdgeID(net_edge):
 def translateNetEdgeToDetailedEdgeTuple(net_edge):
     from_id = net_edge.getFromNode().getID(); to_id = net_edge.getToNode().getID();
     return (from_id + NODE_EDGE_ID_SEPARATOR + to_id, to_id + NODE_EDGE_ID_SEPARATOR + from_id)
-    
+
+## Translate detailed edge ID to normal edge IDs
+def edgeIDsFromDetailed(base_G, stations_d):
+    stations_ids = []
+    for st_d in stations_d:
+        from_node, to_node = getNodesOfDetailedRoad(st_d)
+        if base_G.has_edge(from_node, to_node):
+            edge_id = base_G[from_node][to_node]["id"]
+        else:
+            edge_id = base_G[to_node][from_node]["id"]
+        stations_ids.append(edge_id)
+    return stations_ids
 
 
 ## Extract original edge ID from edge ID

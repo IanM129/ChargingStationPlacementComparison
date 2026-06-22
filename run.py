@@ -7,8 +7,6 @@ import platform
 import xml.etree.ElementTree as ET
 
 from lib.utility import parseArgs, stringifyArgs
-from lib.graphing.utility import diameter as graphutil_diameter
-
 import lib.data_management as dm
 
 from lib.structs.params import Parameters
@@ -121,6 +119,7 @@ def generateVehicleData(network_name):
     import sumolib
     import preprocess as prep
     import lib.graphing as graphing  #= lib/graphing/__init__.py
+    from lib.graphing.utility import diameter as graphutil_diameter
     import lib.xml.tripsGen as tripsGen
     # Prepare folder
     network_filepath = os.path.join("networks", network_name)
@@ -226,7 +225,7 @@ def parseSessionGroupSelect(inp, group_opts, groups):
             fps = [(el[1] + "/" + el[0]) for el in data]
             filepaths.extend(fps)
     return filepaths
-def rerunAndCompare(filepaths, stat_list=None):
+def rerunAndCompare(filepaths, args=None):
     #global groups
     #data = groups[sel[0]][sel[1]]
     #filepaths = [(el[1] + "/" + el[0]) for el in data]
@@ -274,7 +273,7 @@ def main(print_options=True):
     groups = None; prec = 0;
     while True:
         if temp_print_options:
-            print("Main selection:")
+            print("\n\nMain selection:")
             print("=" * 20)
             print("Analysis:")
             print("1  | gen             - generate new vehicle data in '/vehicle_data'")
@@ -384,6 +383,9 @@ def main(print_options=True):
                 # Select group
                 if groups is None:
                     groups, prec = dm.getSessionGroups("results")
+                if groups is None:
+                    print("ERROR: No '/results' folder found.");
+                    continue;
                 print("\n\n\n\nChoose sessions to compare:")
                 group_opts = printSessionGroups(groups, prefix="  ", prec=prec)
                 print("")
@@ -424,7 +426,7 @@ def main(print_options=True):
                     elif inp[0] == "2" or inp[0] == "duration" or inp[0] == "time":
                         compareByDuration(filepaths, args);
                     print("\n" * 3)
-                print("Returning to main menu...\n\n");
+                print("Returning to main menu...");
                 continue; #sys.exit(0)
 
         ## Network
@@ -515,7 +517,7 @@ def main(print_options=True):
             if value == "generateChargeData":
                 generateVehicleData(network_name);
             else: raise Exception(f"ERROR: Unknown command '{value}'");
-        print("\n\n\n")
+        #print("\n\n\n")
 
 #### MAIN
 if __name__ == "__main__":

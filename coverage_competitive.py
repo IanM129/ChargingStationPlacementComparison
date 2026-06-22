@@ -112,7 +112,7 @@ def runSimulation(network_name, G, stations, all_stations, base_trips, charge_da
 
 
 ###### SETTINGS
-agent_colors = ["red", "blue", "green", "orange", "purple", "olive", "brown", "cyan", "pink", "gray"]
+agent_colors = visutil.getAgentColors()
 
 if __name__ == "__main__":
     # Parse arguments
@@ -316,7 +316,7 @@ if __name__ == "__main__":
             #agent_demand_norm.append(agent_demand[a] / demand_sum)
         # Update prices
         for a in range(AGENT_COUNT):
-            prices[a] = prices[a] + (EMA_ALPHA * agent_demand_norm[a])
+            prices[a] = max(min(prices[a] + (EMA_ALPHA * agent_demand_norm[a]), MAX_PRICE), MIN_PRICE)
         #### Run
         # Prepare results
         results = Evaluation(translator)

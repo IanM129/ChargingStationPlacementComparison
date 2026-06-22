@@ -7,7 +7,6 @@ import lib.graphing.utility as graphutil
 import lib.xml.parkingNetGen as parkingNetGen
 
 
-
 #### Station info
 class StationInfo:
     # name_id           station id without index

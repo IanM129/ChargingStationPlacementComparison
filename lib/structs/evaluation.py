@@ -231,13 +231,13 @@ def getStatFromResult(result, stat):
             return result.trip_data["energyConsumed"]
         # Competitive
         case "coverage":
-            return result.agent_data["coverage"]
+            return result.agent_data.get("coverage", None)
         case "charge":
-            return result.agent_data["totalCharge"]
+            return result.agent_data.get("totalCharge", None)
         case "price":
-            return result.station_data["price"]
+            return result.station_data.get("price", None)
         case "moneyEarned":
-            return result.agent_data["moneyEarned"]
+            return result.agent_data.get("moneyEarned", None)
     return None
 def setStatToResult(result, stat, value):
     match (stat):
@@ -280,45 +280,74 @@ class EvaluationDataset:
         train_results_arr = []
         for i in range(iterations):
             data = {}
-            for p in params.getGroup("reward"):
-                data[p] = train_results[p][i];
+            for p in train_results:
+                if len(train_results[p].shape) > 1:
+                    data[p] = [];
+                    shape = train_results[p].shape
+                    if shape[0] > shape[1]:
+                        for a in range(len(train_results[p][i])):
+                            data[p].append(train_results[p][i][a]);
+                    else:
+                        for a in range(len(train_results[p])):
+                            data[p].append(train_results[p][a][i]);
+                else:
+                    data[p] = train_results[p][i];
             results = Evaluation.fromTrainResults(data, network_diameter)
             train_results_arr.append(results)
         return EvaluationDataset(train_results_arr)
-    def realStats(self, params, rounded=0):
+    def realStats(self, params, rounded=0, stat_list=None):
         ## Validate params and define statistics
         if isinstance(params, list):
             if len(params) != len(self.arr):
                 raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
-            stats = sorted(params[0].getGroup("reward"))
-        else: stats = sorted(params.getGroup("reward"))
+            stats = sorted(params[0].getGroup("reward")) + sorted(params[0].getGroup("compReward"))
+        else: stats = sorted(params.getGroup("reward")) + sorted(params.getGroup("compReward"))
+        if stat_list is not None:
+            stats = set(stat_list).intersection(stats)
         ## Get values
         values = []
         for i in range(len(self.arr)):
             res = self.arr[i]; v = {};
             for stat in stats:
                  val = getStatFromResult(res, stat);
-                 if rounded > 0: val = round(val, rounded);
+                 if val is not None:
+                     if rounded > 0: val = round(val, rounded);
                  v[stat] = val
             values.append(v)
         return values
-    def normalizedStats(self, params, invert_by_coeff=True, rounded=0):
+    def normalizedStats(self, params, invert_by_coeff=True, rounded=0, stat_list=None):
         ## Validate params and define statistics
         if isinstance(params, list):
             if len(params) != len(self.arr):
                 raise Exception(f"Received list of params is of different size than the rewards list ({len(params)} != {len(self.arr)}).")
             params_arr = params
-            stats = sorted(params[0].getGroup("reward"))
+            stats = sorted(params[0].getGroup("reward"))  + sorted(params[0].getGroup("compReward"))
         else:
             params_arr = None
-            stats = sorted(params.getGroup("reward"))
+            stats = sorted(params.getGroup("reward"))  + sorted(params.getGroup("compReward"))
+        if stat_list is not None:
+            stats = set(stat_list).intersection(stats)
         ## Get values
         values = self.realStats(params)
         ## Get max values for normalization
         max_vals = {}
         for stat in stats:
             if stat == "totalCoverage": pass;
-            else: max_vals[stat] = max([values[i][stat] for i in range(len(values))])
+            else:
+                values_temp = []
+                for i in range(len(values)):
+                    val = values[i][stat]
+                    if val is not None:
+                        if isinstance(val, list):
+                            for val_val in val: values_temp.append(val_val);
+                        else: values_temp.append(val);
+                values_a = [values[i][stat] for i in range(len(values)) if values[i][stat] is not None]
+                #if isinstance(values_a, list):
+                #    values_a = [x for sublist in values_a for x in sublist]
+                if len(values_temp) > 0:
+                    max_vals[stat] = max(values_temp);  #[values[i][stat] for i in range(len(values)) if values[i][stat] is not None])
+                else:
+                    max_vals[stat] = None
         ## Normalize
         norm_vals = []
         for i in range(len(self.arr)):
@@ -328,15 +357,23 @@ class EvaluationDataset:
             for stat in stats:
                 # Normalize
                 if stat == "totalCoverage": val = float(vals[stat]) / float(res.networkDiameter);  # [0, 1]
-                else: val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
-                if invert_by_coeff:
-                    coeff = float(params["reward." + stat])
-                    # Invert for minimizing and if coefficient is negative
-                    invert = False
-                    if (isMinOrMax(stat) == -1): invert = not invert;                       
-                    if (coeff < 0): invert = not invert;
-                    if invert: val = (1.0 - float(val));
-                    if rounded > 0: val = round(val, rounded);
+                else:
+                    if vals[stat] is not None:
+                        if isinstance(vals[stat], list):
+                            val = []
+                            for v in vals[stat]: val.append(float(v) / float(max_vals[stat]));
+                        else:
+                            val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
+                    else: val = None;
+                if val is not None:
+                    if invert_by_coeff:
+                        coeff = float(params["reward." + stat])
+                        # Invert for minimizing and if coefficient is negative
+                        invert = False
+                        if (isMinOrMax(stat) == -1): invert = not invert;                       
+                        if (coeff < 0): invert = not invert;
+                        if invert: val = (1.0 - float(val));
+                        if rounded > 0: val = round(val, rounded);
                 norm[stat] = val
             norm_vals.append(norm)
         return norm_vals

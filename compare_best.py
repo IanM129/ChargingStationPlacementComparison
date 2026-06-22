@@ -102,15 +102,35 @@ if __name__ == "__main__":
     print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
-    # Plot
-    fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr, stat_list=stats,
+    #### Plot stats
+    ## Global
+    fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr, stat_list=["simDuration", "tripDuration", "totalCoverage"],
                                      legend=("no-legend" not in args),
                                      value_labels=("no-values" not in args),
                                      centerize=("centerize" in args))
+    ## Competitive
+    # Coverage
+    if stats is None or "coverage" in stats:
+        fig2 = visutil.plotCompetitiveResultDataset(results_ds, sess_names, params_arr, stat="coverage",
+                                                     legend=("no-legend" not in args),
+                                                     value_labels=("no-values" not in args),
+                                                     centerize=("centerize" in args))
+    # Price
+    price_data = []
+    name_data = []
+    for i in range(len(results_ds.arr)):
+        res = results_ds.arr[i]
+        if "price" in res.station_data:
+            prices = res.station_data["price"]
+            price_data.append(prices)
+            name_data.append(sess_names[i])
+    fig3 = visutil.plotCompetitiveValues(price_data, name_data, "price",
+                                         title="Usporedba cijena", xlabel="Cijena punjenja (€ po kWh)")
+    ## Plot scores
     # Round to 2
     for i in range(len(scores)):
         scores[i] = round(scores[i], 2)
-    fig2 = visutil.plotScores(scores, sess_names,
+    fig3 = visutil.plotScores(scores, sess_names,
                               legend=("no-legend" not in args),
                               value_labels=("no-values" not in args))
     plt.show()
