@@ -295,7 +295,7 @@ def sumoAssignedRun(base_net, G, data_path, network_name, trips, stations, chose
                             traci.vehicle.setStop(vehID, target_si.redge_id,
                                                   pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
                         except Exception as e:
-                            removeFromSimulationVars({vehID})
+                            #removeFromSimulationVars({vehID})
                             vaporized.add(vehID)
                             traci.vehicle.remove(vehID)
                             continue;

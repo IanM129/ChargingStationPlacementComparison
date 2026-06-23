@@ -369,7 +369,7 @@ def sumoCompRun(base_net, G, data_path, network_name, trips : TripDataset, agent
                                 traci.vehicle.setStop(vehID, target_si.redge_id,
                                                       pos=parkingNetGen.getStationStopDistance(target_si, STOP_DISTANCE));
                             except Exception as e:
-                                removeFromSimulationVars({vehID})
+                                #removeFromSimulationVars({vehID}, all_stations, params)
                                 vaporized.add(vehID)
                                 traci.vehicle.remove(vehID)
                                 continue;
