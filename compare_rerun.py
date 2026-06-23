@@ -341,6 +341,105 @@ if __name__ == "__main__":
     print("")
     etime = time.perf_counter()
     print(f"Finished in {round(etime - stime, 2)} seconds")
-    # Plot
-    fig = visutil.plotResultDataset(results_ds, sess_names, params_arr)
+    #### Plot stats
+    ## Global
+    # Check if dups
+    seen = set()
+    dup = False
+    for name in sess_names:
+        if name in seen:
+            dup = True; break;
+        seen.add(name)
+    if dup:
+        indeces = {};
+        for i in range(len(filepaths)):
+            p = filepaths[i].rsplit('/', 1)[0]
+            if p not in indeces: indeces[p] = [];
+            indeces[p].append(i)
+        print(indeces)
+        for key, inds in indeces.items():
+            fig = visutil.plotResultDataset(results_ds, sess_names, params_arr, win_title=key,
+                                            stat_list=["simDuration", "tripDuration", "totalCoverage"],
+                                            index_list=inds,
+                                            legend=("no-legend" not in args),
+                                            value_labels=("no-values" not in args),
+                                            centerize=("centerize" in args))
+    else:
+        fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr,
+                                         stat_list=["simDuration", "tripDuration", "totalCoverage"],
+                                         legend=("no-legend" not in args),
+                                         value_labels=("no-values" not in args),
+                                         centerize=("centerize" in args))
+    ## Competitive
+    # Coverage
+    if False:
+        if stats is None or "coverage" in stats:
+            fig2 = visutil.plotCompetitiveResultDataset(results_ds, sess_names, params_arr, stat="coverage",
+                                                         legend=("no-legend" not in args),
+                                                         value_labels=("no-values" not in args),
+                                                         centerize=("centerize" in args))
+    else:
+        cov_data = []
+        name_data = []
+        for i in range(len(results_ds.arr)):
+            res = results_ds.arr[i]
+            if "coverage" in res.agent_data:
+                covs = res.agent_data["coverage"]
+                if isinstance(covs, dict):
+                    covs_list = []
+                    for key in sorted(covs.keys()):
+                        covs_list.append(covs[key])
+                    covs = covs_list
+                cov_data.append(covs)
+                name_data.append(sess_names[i])
+        fig2 = visutil.plotCompetitiveValues(cov_data, name_data, "coverage",
+                                         title="Usporedba radijusa pokrivenosti", xlabel="Metar (m)")
+    # Price
+    price_data = []
+    name_data = []
+    for i in range(len(results_ds.arr)):
+        res = results_ds.arr[i]
+        if "price" in res.station_data:
+            prices = res.station_data["price"]
+            print("prices:", prices)
+            if isinstance(prices, list):
+                price_data.append(prices)
+            elif isinstance(prices, dict):
+                prices_list = []
+                for key in sorted(prices.keys()):
+                    prices_list.append(prices[key])
+                prices = prices_list
+                price_data.append(prices)
+            else: continue;
+            name_data.append(sess_names[i])
+    print("price_data:", price_data)
+    fig3 = visutil.plotCompetitiveValues(price_data, name_data, "price",
+                                         title="Usporedba cijena", xlabel="Cijena punjenja (€ po kWh)")
+    # Charge
+    charged_data = []
+    name_data = []
+    for i in range(len(results_ds.arr)):
+        res = results_ds.arr[i]
+        if "totalCharge" in res.agent_data:
+            charges = res.agent_data["totalCharge"]
+            if isinstance(charges, dict):
+                charges_list = []
+                for key in sorted(charges.keys()):
+                    charges_list.append(charges[key])
+                charges = charges_list
+            charged_data.append(charges)
+            name_data.append(sess_names[i])
+    fig3 = visutil.plotCompetitiveValues(charged_data, name_data, "charge",
+                                         title="Usporedba napunjene energije", xlabel="Napunjena električna energija (kWh)")
+    ## Plot scores
+    # Round to 2
+    for i in range(len(scores)):
+        scores[i] = round(scores[i], 2)
+    fig3 = visutil.plotScores(scores, sess_names,
+                              legend=("no-legend" not in args),
+                              value_labels=("no-values" not in args))
     plt.show()
+    
+    # Plot
+    #fig = visutil.plotResultDataset(results_ds, sess_names, params_arr)
+    #plt.show()

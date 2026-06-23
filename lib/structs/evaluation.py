@@ -340,14 +340,20 @@ class EvaluationDataset:
                     if val is not None:
                         if isinstance(val, list):
                             for val_val in val: values_temp.append(val_val);
+                        elif isinstance(val, dict):
+                            for val_val in val.values(): values_temp.append(val_val);
                         else: values_temp.append(val);
-                values_a = [values[i][stat] for i in range(len(values)) if values[i][stat] is not None]
+                #values_a = [values[i][stat] for i in range(len(values)) if values[i][stat] is not None]
                 #if isinstance(values_a, list):
                 #    values_a = [x for sublist in values_a for x in sublist]
-                if len(values_temp) > 0:
-                    max_vals[stat] = max(values_temp);  #[values[i][stat] for i in range(len(values)) if values[i][stat] is not None])
-                else:
-                    max_vals[stat] = None
+                try:
+                    if len(values_temp) > 0:
+                        max_vals[stat] = max(values_temp);  #[values[i][stat] for i in range(len(values)) if values[i][stat] is not None])
+                    else:
+                        max_vals[stat] = None
+                except Exception as e:
+                    print(values_temp)
+                    raise e
         ## Normalize
         norm_vals = []
         for i in range(len(self.arr)):
@@ -362,6 +368,11 @@ class EvaluationDataset:
                         if isinstance(vals[stat], list):
                             val = []
                             for v in vals[stat]: val.append(float(v) / float(max_vals[stat]));
+                        elif isinstance(vals[stat], dict):
+                            val = []
+                            for key in sorted(vals[stat].keys()):
+                                v = vals[stat][key]
+                                val.append(float(v) / float(max_vals[stat]));
                         else:
                             val = float(vals[stat]) / float(max_vals[stat]);  # [0, 1]
                     else: val = None;

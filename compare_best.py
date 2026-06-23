@@ -133,11 +133,23 @@ if __name__ == "__main__":
                                          centerize=("centerize" in args))
     ## Competitive
     # Coverage
-    if stats is None or "coverage" in stats:
-        fig2 = visutil.plotCompetitiveResultDataset(results_ds, sess_names, params_arr, stat="coverage",
-                                                     legend=("no-legend" not in args),
-                                                     value_labels=("no-values" not in args),
-                                                     centerize=("centerize" in args))
+    if False:
+        if stats is None or "coverage" in stats:
+            fig2 = visutil.plotCompetitiveResultDataset(results_ds, sess_names, params_arr, stat="coverage",
+                                                         legend=("no-legend" not in args),
+                                                         value_labels=("no-values" not in args),
+                                                         centerize=("centerize" in args))
+    else:
+        cov_data = []
+        name_data = []
+        for i in range(len(results_ds.arr)):
+            res = results_ds.arr[i]
+            if "coverage" in res.agent_data:
+                covs = res.agent_data["coverage"]
+                cov_data.append(covs)
+                name_data.append(sess_names[i])
+        fig2 = visutil.plotCompetitiveValues(cov_data, name_data, "coverage",
+                                         title="Usporedba radijusa pokrivenosti", xlabel="Metar (m)")
     # Price
     price_data = []
     name_data = []
@@ -149,6 +161,17 @@ if __name__ == "__main__":
             name_data.append(sess_names[i])
     fig3 = visutil.plotCompetitiveValues(price_data, name_data, "price",
                                          title="Usporedba cijena", xlabel="Cijena punjenja (€ po kWh)")
+    # Charge
+    charged_data = []
+    name_data = []
+    for i in range(len(results_ds.arr)):
+        res = results_ds.arr[i]
+        if "totalCharge" in res.agent_data:
+            charges = res.agent_data["totalCharge"]
+            charged_data.append(charges)
+            name_data.append(sess_names[i])
+    fig3 = visutil.plotCompetitiveValues(charged_data, name_data, "charge",
+                                         title="Usporedba napunjene energije", xlabel="Napunjena električna energija (kWh)")
     ## Plot scores
     # Round to 2
     for i in range(len(scores)):

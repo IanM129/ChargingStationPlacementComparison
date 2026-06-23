@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+plt.rcParams.update({'font.size': 14})
+
 def statDisplayName(stat):
     stat_names = {
         "totalCoverage": "Globalni radijus pokrivenosti",
@@ -308,8 +310,8 @@ def plotResultDataset(results_ds, names, params, win_title=None,
             for bar in container:
                 bar.set_edgecolor("black")
                 bar.set_linewidth(0.5)
-        fig.suptitle("Usporedba rezultata")  #ax.set_title("Usporedba rezultata")
-        ax.set_xlabel("Normalizirani uspjeh")
+        ax.set_title("Usporedba rezultata", fontsize=28)  #fig.suptitle("Usporedba rezultata")
+        ax.set_xlabel("Normalizirana vrijednost")
     else:
         values = []
         #for val in data.values(): values.append(val[0]);
@@ -331,8 +333,8 @@ def plotResultDataset(results_ds, names, params, win_title=None,
             if stats[0][i].isupper():
                 stat_title += " ";
             stat_title += stats[0][i].lower()
-        fig.suptitle(stat_title.capitalize() + " comparison")  #ax.set_title(stat_title.capitalize() + " comparison")
-        ax.set_ylabel("Normalizirani uspjeh")
+        ax.set_title(stat_title.capitalize() + " comparison", fontsize=28)  #fig.suptitle(stat_title.capitalize() + " comparison")
+        ax.set_ylabel("Normalizirana vrijednost")
     if legend: 
         ax.legend(loc="best");
         handles, labels = ax.get_legend_handles_labels()
@@ -390,7 +392,13 @@ def plotCompetitiveResultDataset(results_ds, names, params, stat,
             for j in range(len(real_vals)):
                 if real_vals[j][stat] is not None:
                     if i < len(real_vals[j][stat]):
-                        labels.append(f"{real_vals[j][stat][i]:.2f}");
+                        try:
+                            labels.append(f"{real_vals[j][stat][i]:.2f}");
+                        except Exception as e:
+                            print(real_vals)
+                            print(real_vals[j])
+                            print(real_vals[j][stat])
+                            raise e
                     else: labels.append("");
             ax.bar_label(container, padding=3, labels=labels)
     for i, container in enumerate(bars.bar_containers):
@@ -399,9 +407,8 @@ def plotCompetitiveResultDataset(results_ds, names, params, stat,
             bar.set_linewidth(0.5)
     ax.set_yticks(range(len(data[0])))
     ax.set_yticklabels([names[i] for i in range(len(names)) if ext_vals[i] is not None])
-    #ax.set_title(stat_display.capitalize())
-    fig.suptitle(stat_display.capitalize())
-    ax.set_ylabel("Normalizirana vrijednost")
+    ax.set_title(stat_display.capitalize(), fontsize=28)  #fig.suptitle(stat_display.capitalize())
+    ax.set_xlabel("Normalizirana vrijednost")
     #if legend: ax.legend(loc="best");
     return fig
 def plotCompetitiveValues(values, names, stat_name,
@@ -416,6 +423,8 @@ def plotCompetitiveValues(values, names, stat_name,
     # Create plot data
     data = []
     max_len = len(max(values, key=len))
+    print(values)
+    print(max_len)
     for i in range(max_len):
         vals = []
         for j in range(len(values)):
@@ -451,14 +460,13 @@ def plotCompetitiveValues(values, names, stat_name,
             j += 1
     ax.set_yticks(range(len(data[0])))
     ax.set_yticklabels([names[i] for i in range(len(names))])
-    fig.suptitle(title)
-    #ax.set_title(title)
+    ax.set_title(title, fontsize=28)  #fig.suptitle(title)
     ax.set_xlabel(xlabel)
     #if legend: ax.legend(loc="best");
     if max(colors) > 0:
         handles = [mpatches.Patch(color=default_colors[0],label="Centralizirano"),
                    mpatches.Patch(color=default_colors[1],label="Sebično")]
-        ax.legend(handles=handles, loc="best");
+        ax.legend(handles=handles[::-1], loc="best");
     return fig
 def plotScores(scores, names, title="Usporedba uspješnosti", ylabel="Uspjeh",
                legend=True, value_labels=True):
@@ -497,8 +505,7 @@ def plotScores(scores, names, title="Usporedba uspješnosti", ylabel="Uspjeh",
                 bar.set_edgecolor("black")
                 bar.set_linewidth(0.5)
     ax.set_ylabel(ylabel)
-    #ax.set_title(title)
-    fig.suptitle(title)
+    ax.set_title(title, fontsize=28)  #fig.suptitle(title)
     return fig
     
 ## High
