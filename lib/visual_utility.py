@@ -235,7 +235,8 @@ def plotTrainingResults_figs(train_results, iterations, agent_colors=[]):
             ax.plot(x, data, label=metadata["label"])
             figs[stat] = (fig, ax)
     return figs
-def plotResultDataset(results_ds, names, params, stat_list=None,
+def plotResultDataset(results_ds, names, params, win_title=None,
+                      stat_list=None,index_list=None,
                       invert_min=False,
                       legend=True, value_labels=True, centerize=False, 
                       croatian=True):
@@ -272,10 +273,11 @@ def plotResultDataset(results_ds, names, params, stat_list=None,
     # Create plot data
     data = {}
     for i in range(len(results_ds.arr)):
-        vals = []
-        for stat in stats:
-            vals.append(ext_vals[stat][i])
-        data[names[i]] = vals
+        if index_list is None or i in index_list:
+            vals = []
+            for stat in stats:
+                vals.append(ext_vals[stat][i])
+            data[names[i]] = vals
     # Plot
     fig, ax = plt.subplots()
     if len(stats) > 1:
@@ -298,9 +300,15 @@ def plotResultDataset(results_ds, names, params, stat_list=None,
         if value_labels:
             for i in range(len(plot.bar_containers)):
                 container = plot.bar_containers[i]
-                labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
+                if index_list is None: index = i;
+                else: index = index_list[i];
+                labels = [f"{real_vals[index][stat]:.2f}" for stat in stats]
                 ax.bar_label(container, padding=3,labels=labels)
-        ax.set_title("Usporedba rezultata")
+        for i, container in enumerate(plot.bar_containers):
+            for bar in container:
+                bar.set_edgecolor("black")
+                bar.set_linewidth(0.5)
+        fig.suptitle("Usporedba rezultata")  #ax.set_title("Usporedba rezultata")
         ax.set_xlabel("Normalizirani uspjeh")
     else:
         values = []
@@ -312,16 +320,25 @@ def plotResultDataset(results_ds, names, params, stat_list=None,
             delta = max_val - min_val
             ax.set_xlim(max(min_val - (0.1 * delta), 0.0), max_val + (0.1 * delta))
         if value_labels:
-            labels = [f"{real_vals[i][stats[0]]:.2f}" for i in range(len(names))]
-            ax.bar_label(bars, labels, padding=3)
+             for i in range(len(plot.bar_containers)):
+                container = plot.bar_containers[i]
+                labels = [f"{real_vals[i][stat]:.2f}" for stat in stats]
+                ax.bar_label(container, padding=3,labels=labels)
+            #labels = [f"{real_vals[i][stats[0]]:.2f}" for i in range(len(names))]
+            #ax.bar_label(bars, labels, padding=3)
         stat_title = ""
         for i in range(len(stats[0])):
             if stats[0][i].isupper():
                 stat_title += " ";
             stat_title += stats[0][i].lower()
-        ax.set_title(stat_title.capitalize() + " comparison")
+        fig.suptitle(stat_title.capitalize() + " comparison")  #ax.set_title(stat_title.capitalize() + " comparison")
         ax.set_ylabel("Normalizirani uspjeh")
-    if legend: ax.legend(loc="best");
+    if legend: 
+        ax.legend(loc="best");
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1])
+    if win_title is not None: 
+        fig.canvas.manager.set_window_title(win_title)
     return fig
 def plotCompetitiveResultDataset(results_ds, names, params, stat,
                                   invert_min=False,
@@ -369,11 +386,21 @@ def plotCompetitiveResultDataset(results_ds, names, params, stat,
     if value_labels:
         for i in range(len(bars.bar_containers)):
             container = bars.bar_containers[i]
-            labels = [f"{data[i][j]:.2f}" for j in range(max_len)]
+            labels = []
+            for j in range(len(real_vals)):
+                if real_vals[j][stat] is not None:
+                    if i < len(real_vals[j][stat]):
+                        labels.append(f"{real_vals[j][stat][i]:.2f}");
+                    else: labels.append("");
             ax.bar_label(container, padding=3, labels=labels)
+    for i, container in enumerate(bars.bar_containers):
+        for bar in container:
+            bar.set_edgecolor("black")
+            bar.set_linewidth(0.5)
     ax.set_yticks(range(len(data[0])))
     ax.set_yticklabels([names[i] for i in range(len(names)) if ext_vals[i] is not None])
-    ax.set_title(stat_display.capitalize())
+    #ax.set_title(stat_display.capitalize())
+    fig.suptitle(stat_display.capitalize())
     ax.set_ylabel("Normalizirana vrijednost")
     #if legend: ax.legend(loc="best");
     return fig
@@ -419,10 +446,13 @@ def plotCompetitiveValues(values, names, stat_name,
         j = 0
         for bar in container:
             bar.set_color(default_colors[colors[j]])
+            bar.set_edgecolor("black")
+            bar.set_linewidth(0.5)
             j += 1
     ax.set_yticks(range(len(data[0])))
     ax.set_yticklabels([names[i] for i in range(len(names))])
-    ax.set_title(title)
+    fig.suptitle(title)
+    #ax.set_title(title)
     ax.set_xlabel(xlabel)
     #if legend: ax.legend(loc="best");
     if max(colors) > 0:
@@ -455,11 +485,20 @@ def plotScores(scores, names, title="Usporedba uspješnosti", ylabel="Uspjeh",
                 container = bars.bar_containers[i]
                 ax.bar_label(container, padding=3)
         ax.legend(["Centralizirano", "Sebično"])
+        for i, container in enumerate(bars.bar_containers):
+            for bar in container:
+                bar.set_edgecolor("black")
+                bar.set_linewidth(0.5)
     else:
         bars = ax.bar(names, scores)
         if value_labels: ax.bar_label(bars, padding=3);
+        for i, container in enumerate(bars.bar_containers):
+            for bar in container:
+                bar.set_edgecolor("black")
+                bar.set_linewidth(0.5)
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    #ax.set_title(title)
+    fig.suptitle(title)
     return fig
     
 ## High

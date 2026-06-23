@@ -104,10 +104,33 @@ if __name__ == "__main__":
     print(f"Finished in {round(etime - stime, 2)} seconds")
     #### Plot stats
     ## Global
-    fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr, stat_list=["simDuration", "tripDuration", "totalCoverage"],
-                                     legend=("no-legend" not in args),
-                                     value_labels=("no-values" not in args),
-                                     centerize=("centerize" in args))
+    # Check if dups
+    seen = set()
+    dup = False
+    for name in sess_names:
+        if name in seen:
+            dup = True; break;
+        seen.add(name)
+    if dup:
+        indeces = {};
+        for i in range(len(filepaths)):
+            p = filepaths[i].rsplit('/', 1)[0]
+            if p not in indeces: indeces[p] = [];
+            indeces[p].append(i)
+        print(indeces)
+        for key, inds in indeces.items():
+            fig = visutil.plotResultDataset(results_ds, sess_names, params_arr, win_title=key,
+                                            stat_list=["simDuration", "tripDuration", "totalCoverage"],
+                                            index_list=inds,
+                                            legend=("no-legend" not in args),
+                                            value_labels=("no-values" not in args),
+                                            centerize=("centerize" in args))
+    else:
+        fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr,
+                                         stat_list=["simDuration", "tripDuration", "totalCoverage"],
+                                         legend=("no-legend" not in args),
+                                         value_labels=("no-values" not in args),
+                                         centerize=("centerize" in args))
     ## Competitive
     # Coverage
     if stats is None or "coverage" in stats:
