@@ -5,26 +5,40 @@ from datetime import datetime
 import subprocess
 import platform
 import xml.etree.ElementTree as ET
+import matplotlib.pyplot as plt
 
 from lib.utility import parseArgs, stringifyArgs
 import lib.data_management as dm
 
+import lib.visual_utility as visutil
+
 from lib.structs.params import Parameters
+
+import lib.xml.output as xmlOut
 
 #from lib.compare import rerunAndCompareSessions
 
 VENV_PYTHON = os.path.join("_venv", "Scripts", "python.exe")
 
 
-
+def isCover(s):
+    return s == "cover";
+def isGame(s):
+    return s == "game"
+def isGNN(s):
+    return s == "gnn";
+def isMARL(s):
+    return s == "marl";
 #### Functions
 ## Printing
-def printSessionInfo(path, parent_folder="", metadata=None, index=None, prefix="", prec=0, iprec=0):
-    print(prefix, end="")
+def printSessionInfo(path, parent_folder="", metadata=None, index=None, prefix="", index_prefix="", prec=0, iprec=0):
+    first_line = prefix
     if index is not None:
-        print(".{0:{iprec}d}: ".format(index+1, iprec=iprec), end="")
-    print("{0:{prec}s}".format(path, prec=prec), end="")
+        first_line += index_prefix + "{0:{iprec}d}: ".format(index+1, iprec=iprec)
+    first_line += "{0:{prec}s}".format(path, prec=prec)
     if metadata is None: metadata = dm.loadSessionMetadata(parent_folder + "/" + path);
+    first_line_len = len(first_line)
+    print(first_line, end="")
     if metadata["metadataExists"]:
             s = ""
             date = [metadata["date"][:4], metadata["date"][4:6], metadata["date"][6:]]
@@ -40,10 +54,10 @@ def printSessionInfo(path, parent_folder="", metadata=None, index=None, prefix="
         sess = metadata["sessionType"]
         agent_count = metadata["agentCount"]
         if agent_count is None: agent_count = "?";
-        if sess.startswith("cover"): sess = "Coverage"; #agent_count = s[5];
-        elif sess.startswith("game"): sess = "Game"; #agent_count = s[4];
-        elif sess.startswith("marl"): sess = "MARL"; #agent_count = s[4];
-        elif sess == "gnn": sess = "GNN"; #agent_count = 1;
+        if sess.startswith("cover"): sess = "Coverage";
+        elif sess.startswith("game"): sess = "Game";
+        elif sess.startswith("marl"): sess = "MARL";
+        elif sess == "gnn": sess = "GNN";
         # Print agent count
         if agent_count == "?":
             ac_s = "Agents: ?"
@@ -53,11 +67,30 @@ def printSessionInfo(path, parent_folder="", metadata=None, index=None, prefix="
             ac_s = "Agents: " + str(agent_count)
         k_s = "K: " + str(metadata["k"])
         cen_s = ("Centralized" if (metadata["centralizedRouting"]) else "Selfish")
-        print(prefix + (' ' * (prec + 5 + iprec)) + "[ {0:8s} | {1:10s} | {2:4s} | {3:11s} ]".format(sess, ac_s, k_s, cen_s))
+        print(prefix + (' ' * (first_line_len - 2)) + "[ {0:8s} | {1:10s} | {2:4s} | {3:11s} ]".format(sess, ac_s, k_s, cen_s))
 def printSessionPaths(paths, prefix=""):
     prec = len(max(paths, key=len)[0]) + 4
     for i in range(len(paths)):
         printSessionInfo(paths[i], prefix=prefix, prec=prec)
+def printSessionList(sessions, prefix="", prec=0, width=80, parent_folder=None):
+    if prec > 0: prec += 4;
+    options = []
+    print("=" * width);
+    for i in range(len(sessions)):
+        sess = sessions[i]
+        path = sess[0]; prec_t = prec;
+        if parent_folder is not None:
+            path_splt = sess[0].split('\\')
+            if path_splt[0] == parent_folder:
+                path = '\\'.join(path_splt[1:])
+                prec_t -= len(parent_folder)
+        printSessionInfo(path, parent_folder=sess[1], metadata=sess[2],
+                         index=i, prefix=" " * 2, prec=prec_t)
+        options.append((sess[0], sess[2]))
+        print("")
+    return options
+    
+    
 def printSessionGroups(groups, prefix="", prec=0, width=80):
     if prec > 0: prec += 4;
     options = []
@@ -70,7 +103,7 @@ def printSessionGroups(groups, prefix="", prec=0, width=80):
         first_g = True
         for key in fol_groups:
             if first_g: first_g = False;
-            else: print(":" * width)
+            else: print("-" * width)
             prnt_s = f"'{key[0]}' | k = {key[1]} | " + ("centralized" if key[2] else "selfish")
             print("{0:^{1}}".format(prnt_s, width))
             loc_group = fol_groups[key]
@@ -83,7 +116,8 @@ def printSessionGroups(groups, prefix="", prec=0, width=80):
                     print(f"{len(options)+1} | * |{sec_key[2]}|")
                 for i in range(len(loc_group[sec_key])):
                     sess = loc_group[sec_key][i]
-                    printSessionInfo(sess[0], parent_folder=sess[1], metadata=sess[2], index=i,
+                    printSessionInfo(sess[0], parent_folder=sess[1], metadata=sess[2],
+                                     index=i, index_prefix=".",
                                      prefix=" " * 2, prec=prec, iprec=iprec)
                 options.append((parent_folder, key, sec_key))
     print("=" * width)
@@ -225,6 +259,7 @@ def parseSessionGroupSelect(inp, group_opts, groups):
             fps = [(el[1] + "/" + el[0]) for el in data]
             filepaths.extend(fps)
     return filepaths
+#### Compare
 def rerunAndCompare(filepaths, args=None):
     #global groups
     #data = groups[sel[0]][sel[1]]
@@ -261,6 +296,32 @@ def compareByDuration(filepaths, args):
     if "no-values" in args and args["no-values"]: cmnd.append("no-values");
     if "no-legend" in args and args["no-legend"]: cmnd.append("no-legend");
     subprocess.Popen(cmnd)
+#### Visualize
+def visualizeRun(filepath):
+    print(f"Visualizing run...")
+    print("=" * 20)
+    cmnd = ["cmd", "/k", VENV_PYTHON, "visualize_results.py"]
+    cmnd.append(filepath)
+    subprocess.Popen(cmnd)
+def showBest():
+    return
+def ShowTrainingStats(filepath, metadata):
+    # Load training stats
+    train_results = xmlOut.loadTrainResults_numpy(filepath + "/results/data")
+    print(metadata)
+    agent_count = metadata["agentCount"]
+    # Show graphs
+    if metadata["sessionType"] == "GNN":
+        visutil.plotGNN(train_results)
+    elif metadata["sessionType"] == "MARL":
+        visutil.plotMARL(train_results)
+    elif agent_count == 1:
+        visutil.plotSolo(train_results)
+    elif agent_count > 1:
+        visutil.plotComp(train_results)
+    plt.show()
+    return
+
 
 
 
@@ -270,7 +331,8 @@ def inputIsExit(inp):
 def main(print_options=True):
     temp_print_options = print_options
     # Reused vars
-    groups = None; prec = 0;
+    groups = None; g_prec = 0;
+    sess_list = None; l_prec = 0;
     while True:
         if temp_print_options:
             print("\n\nMain selection:")
@@ -282,12 +344,12 @@ def main(print_options=True):
             print("-" * 20)
             print("Run options (n is number of agents or _/0 for reading from params)")
             print("0  | blank           - run a blank example (no charging stations)")
-            print("11 | cover_solo      - run the coverage based algorithm")
-            print("1n | cover_comp      - (default) run the competitive coverage based algorithm")
-            print("21 | game_solo       - run the game theory based algorithm")
-            print("2n | game_comp       - run the competitive game theory based algorithm")
+            print("11 | cover1          - run the coverage based algorithm")
+            print("1n | cover[n]        - (default) run the competitive coverage based algorithm")
+            print("21 | game1           - run the game theory based algorithm")
+            print("2n | game[n]         - run the competitive game theory based algorithm")
             print("31 | gnn             - trains a solo GNN")
-            print("3n | marl            - trains n competing GNNs (MARL)")
+            print("3n | marl[n]         - trains n competing GNNs (MARL)")
             print("=" * 20)
             print("Optional arguments:")
             print("-v | --vehicles : <filepath> | <index>       - use specific vehicle data")
@@ -296,13 +358,45 @@ def main(print_options=True):
 
         choice = input("\n> ")
 
-        if choice == "": choice = "comp";
+        if choice == "": choice = "22";
 
         command = choice.split(' ')[0]
         args = ' '.join(choice.split(' ')[1:])
         args = parseArgs(choice.split(' ')[1:])
 
-        if len(command) == 1:
+        print(command)
+        if len(command) == 2 and command[0].isdigit():
+            if command[1].isdigit() and int(command[1]) >= 0:
+                AGENT_COUNT = int(command[1])
+            elif command[1] == "_": AGENT_COUNT = 0;
+            else:
+                print(f'\nERROR: Invalid number of agents "{command[1]}".')
+                input("Press Enter to restart...")
+                continue;
+            match (command[0]):
+                case "1":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("coverage_solo.py", "Coverage algorithm")
+                    else:
+                        pyfile, value = ("coverage_competitive.py", "Competitive coverage algorithm")
+                case "2":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("game.py", "Equilibrium game algorithm")
+                    else:
+                        pyfile, value = ("game_competitive.py", "Competitive equilibrium game algorithm")
+                case "3":
+                    if AGENT_COUNT == 1:
+                        pyfile, value = ("gnn.py", "Graph NN RL")
+                    else:
+                        pyfile, value = ("marl.py", "Multi-Agent RL")
+            if AGENT_COUNT > 1:
+                args["agent-count"] = AGENT_COUNT
+        else:
+            if len(command) > 1 and command[-1].isdigit():
+                AGENT_COUNT = int(command[-1]);
+                command = command[:-1]
+            else:
+                AGENT_COUNT = 0
             options = {
                 "1": (None, "generateChargeData"),
                 "gen": (None, "generateChargeData"),
@@ -335,37 +429,6 @@ def main(print_options=True):
                 input("Press Enter to continue...")
                 sys.exit(1)
             pyfile, value = options[key]
-            AGENT_COUNT = 0
-        elif len(command) == 2:
-            if not command[1].isdigit() or int(command[1]) == 0:
-                print(f'\nERROR: Invalid number of agents "{command[1]}".')
-                input("Press Enter to continue...")
-                sys.exit(1)
-            if command[1] == "_": AGENT_COUNT = 0;
-            else: AGENT_COUNT = int(command[1])
-            match (command[0]):
-                case "1":
-                    if AGENT_COUNT == 1:
-                        pyfile, value = ("coverage_solo.py", "Coverage algorithm")
-                    else:
-                        pyfile, value = ("coverage_competitive.py", "Competitive coverage algorithm")
-                case "2":
-                    if AGENT_COUNT == 1:
-                        pyfile, value = ("game.py", "Equilibrium game algorithm")
-                    else:
-                        pyfile, value = ("game_competitive.py", "Competitive equilibrium game algorithm")
-                case "3":
-                    if AGENT_COUNT == 1:
-                        pyfile, value = ("gnn.py", "Graph NN RL")
-                    else:
-                        pyfile, value = ("marl.py", "Multi-Agent RL")
-            if AGENT_COUNT > 1:
-                args["agent-count"] = AGENT_COUNT
-        else:
-            print(f'\nERROR: Invalid choice "{choice}".')
-            input("Press Enter to continue...")
-            sys.exit(1)
-
         # Check if file exists
         if (pyfile is not None):
             if (not os.path.exists(pyfile)):
@@ -382,12 +445,13 @@ def main(print_options=True):
             elif value == "compare":
                 # Select group
                 if groups is None:
-                    groups, prec = dm.getSessionGroups("results")
+                    print("Loading results...")
+                    groups, g_prec = dm.getSessionGroups(["results", "output"])
                 if groups is None:
                     print("ERROR: No '/results' folder found.");
                     continue;
                 print("\n\n\n\nChoose sessions to compare:")
-                group_opts = printSessionGroups(groups, prefix="  ", prec=prec)
+                group_opts = printSessionGroups(groups, prefix="  ", prec=g_prec)
                 print("")
                 inp = ""
                 while inp == "":
@@ -395,6 +459,7 @@ def main(print_options=True):
                     if inputIsExit(inp): break;
                     filepaths = parseSessionGroupSelect(inp, group_opts, groups)
                     if filepaths is None:
+                        print("Invalid value.")
                         inp = ""; continue;
                     print(filepaths)
                     print(f"Loaded {len(filepaths)} sessions.")
@@ -403,9 +468,9 @@ def main(print_options=True):
                 while inp[0] != "" and not inputIsExit(inp[0]):
                     print("-" * 20)
                     print("Choose method:")
-                    print("0 | rerun                            - compare by rerunning")
-                    print("1 | best                             - compare by best achieved results")
-                    print("2 | duraition                        - compare execution durations")
+                    print("0 | [r]erun                            - compare by rerunning")
+                    print("1 | [b]est                             - compare by best achieved results")
+                    print("2 | [d]uraition                        - compare execution durations")
                     print("-" * 20)
                     print("Optional arguments:")
                     print("-s | --stats : <stat>,<stat>,...     - only show for listed stats")
@@ -419,15 +484,60 @@ def main(print_options=True):
                         params = Parameters.config()
                         base_stat_list = params.getGroup("reward")
                         print(f"Base stats:({base_stat_list})")
-                    if inp[0] == "0" or inp[0] == "rerun":
+                    if inp[0] == "0" or inp[0] == "r" or inp[0] == "rerun":
                         rerunAndCompare(filepaths, args);
-                    elif inp[0] == "1" or inp[0] == "best":
+                    elif inp[0] == "1" or inp[0] == "b" or inp[0] == "best":
                         compareByBest(filepaths, args);
-                    elif inp[0] == "2" or inp[0] == "duration" or inp[0] == "time":
+                    elif inp[0] == "2" or inp[0] == "d" or inp[0] == "duration" or inp[0] == "time":
                         compareByDuration(filepaths, args);
                     print("\n" * 3)
                 print("Returning to main menu...");
-                continue; #sys.exit(0)
+                continue;
+            elif value == "load":
+                if sess_list is None:
+                    print("Loading results...")
+                    sess_list, s_prec = dm.getSessionList(["results", "output"])
+                if sess_list is None:
+                    print("ERROR: No '/results' folder found.");
+                    continue;
+                if len(sess_list) == 0:
+                    print("ERROR: No sessions found in '/results' folder.");
+                    continue;
+                print("\n\n\n\nChoose sessions to load:")
+                sess_opts = printSessionList(sess_list, prefix="  ", prec=s_prec)
+                                              #parent_folder="results")
+                print("")
+                inp = ""
+                while inp == "":
+                    inp = input("Select session: ")
+                    if inputIsExit(inp): break;
+                    try: filepath, metadata = sess_opts[int(inp)];
+                    except: filepath = None;
+                    if filepath is None:
+                        print("Invalid value.")
+                        inp = ""; continue;
+                    print(filepath)
+                    print(f"Loaded {len(filepath)} sessions.")
+                # Choose method
+                while inp[0] != "" and not inputIsExit(inp[0]):
+                    print("-" * 20)
+                    print("Options:")
+                    print("0 | [r]un      | Run a simulation using the models")
+                    #print("2 | [b]est     | Show the statistics for the best runs")
+                    print("1 | [t]raining | Visualize the training statistics")
+                    print("  | [q]uit     | Quit")
+                    inp = input("> ").split(' ')
+                    print("\n" * 1)
+                    if inp[0] == "r" or inp[0] == "1" or inp[0] == "run":
+                        visualizeRun(filepath)
+                    #elif inp[0] == "b" or inp[0] == "2" or inp[0] == "compare":
+                    #    ShowBest(filepath)
+                    elif inp[0] == "t" or inp[0] == "1" or inp[0] == "training":
+                        ShowTrainingStats(filepath, metadata)
+                    print()
+                    print("\n" * 3)
+                print("Returning to main menu...");
+                continue;
 
         ## Network
         # if vehicle data selected use the attached network
@@ -468,28 +578,34 @@ def main(print_options=True):
         # Confirm
         params = Parameters.config()
         print(f"\n{value}")
-        if AGENT_COUNT > 1:
-            print(f"  - Agents:             {AGENT_COUNT}")
-        print(f"  - Network:            {network_name}")
-        if "iterations" in args:
-            print(f"  - Iterations:         {int(args['iterations'])}")
+        if AGENT_COUNT > 0:
+            print(f"  - Agents:             {AGENT_COUNT} (argument)")
         else:
-            print(f"  - Iterations:         {params['training.iterations']}")
+            AGENT_COUNT = params["training.agents"]
+            print(f"  - Agents:             {AGENT_COUNT} (config)")
+        if "vehicle-data" in args:
+            print(f"  - Network:            {network_name} (from vehicle_data)")
+        else:
+            print(f"  - Network:            {network_name}")
+        if "iterations" in args:
+            print(f"  - Iterations:         {int(args['iterations'])} (argument)")
+        else:
+            print(f"  - Iterations:         {params['training.iterations']} (config)")
         centralized = params["station.routing.centralized"]
         stationfinder = params["station.routing.useStationFinder"]
         if stationfinder:
             print("  - Routing:            Stationfinder")
         elif centralized:
-            print("  - Routing:            centralized");
+            print("  - Routing:            Centralized");
         else:
-            print("  - Routing:            selfish")
+            print("  - Routing:            Selfish")
         if "vehicle-data" in args:
             print(f"  - Vehicle data:       {vehicle_data_name}")
             print(f"      - vehicle count:  {metadata['vehicle_count']}")
             print(f"      - EV count:       {metadata['EV_count']}")
             #print(f"    - network:       {metadata['network_name']}")
         else:
-            print("  vehicle data: generate")
+            print("  vehicle data: Generate new")
         inp = input("Confirm (anything for no): ")
         if inp != "": continue; main(True);
 

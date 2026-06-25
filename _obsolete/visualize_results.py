@@ -1,17 +1,11 @@
 import os
-import sys
-import time
-import copy
 import pathlib
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 
-import lib.data_management as dm
-
 from lib.structs.stationinfo import StationInfo, StationInfoDataset
-from lib.structs.evaluation import Evaluation, EvaluationDataset
+from lib.structs.evaluation import Evaluation
 from lib.structs.params import Parameters
-from lib.structs.trip import Trip, TripDataset
 
 import lib.visual_utility as visutil
 import lib.traci_utility as traciutil
@@ -20,14 +14,9 @@ from lib.xml.tripsGen import load as tripsGen_load
 import lib.xml.output as xmlOut
 
 
-def isCover(s):
-    return s == "cover";
-def isGame(s):
-    return s == "game"
-def isGNN(s):
-    return s == "gnn";
-def isMARL(s):
-    return s == "marl";
+
+RESULTS_PATH = pathlib.Path("results/")
+
 
 def adjustRunParameters(res_params, cfg_params):
     res_params["sim.visualize"] = cfg_params["sim.visualize"]
@@ -104,13 +93,13 @@ def selectNetwork():
 
 
 ###### Options
-def visualizeRerunSession(filepath):
+def rerunSession(filepath, metadata, params=None):
     print(f"---------- Started rerun of '{filepath}'")
     ## Import
     import lib.utility as util
     import lib.graphing.utility as graphutil
     # Get needed
-    params = Parameters.load(filepath + "/config.xml")
+    if params is None: params = Parameters.load(filepath + "/config.xml")
     metadata = dm.loadSessionMetadata(filepath)
     network_name = metadata.get("network", None)
     if network_name is None:
@@ -121,13 +110,12 @@ def visualizeRerunSession(filepath):
     # Preprocess
     output_path = filepath + "/_run"
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-    K = metadata["k"]#params["station.k"]
+    K = metadata[] #params["station.k"]
     STATION_CAPACITY = params["station.capacity"]
+    VISUALIZE = params["sim.visualize"]
     params["sim.visualize"] = True
-    VISUALIZE = True
-    params["training.iterations"] = 1
     if isCover(sess_type):
-        AGENT_COUNT = metadata["agentCount"]
+        AGENT_COUNT = params["training.agents"]
         ### Load system
         print("Importing...")
         ## Import
@@ -140,7 +128,6 @@ def visualizeRerunSession(filepath):
         trips = TripDataset.parseXML(base_G, translator, filepath + "/trips.xml")
         charge_data = dm.loadChargeData(filepath + "/charge_data.xml")
         ## Run blank model
-        params["sim.visualize"] = False
         results = Evaluation(translator)
         G = copy.deepcopy(base_G)
         print("Running blank simulation...")
@@ -148,7 +135,6 @@ def visualizeRerunSession(filepath):
                                            base_net, trips, params, results)
         print(f"Simulation over in {round(results.executionDuration, 2)} seconds")
         print("")
-        params["sim.visualize"] = VISUALIZE
         # Update graph
         G = graphutil.resultsToEdgeAttributes(G, translator, ["vehicles", "flow"], results)
         flow_dict = nx.get_edge_attributes(G, "flow")
@@ -216,7 +202,7 @@ def visualizeRerunSession(filepath):
                                               trips, charge_data, coverage_G_d,
                                               params, results)
     elif isGame(sess_type):
-        AGENT_COUNT = metadata["agentCount"]
+        AGENT_COUNT = params["training.agents"]
         ### Load system
         print("Importing...")
         ## Import
@@ -296,13 +282,13 @@ def visualizeRerunSession(filepath):
         #### Rerun
         results = Evaluation(translator)
         # Run a blank model
+        VISUALIZE = params["sim.visualize"]
         params["sim.visualize"] = False
         print("Running blank simulation...")
         results = util.runSimulation_blank(network_name, filepath + "/_run",
                                            base_net, trips, params, results)
         print(f"Simulation over in {round(results.executionDuration, 2)} seconds")
         print("")
-        params["sim.visualize"] = VISUALIZE
         ## Update graph (Data)
         graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
         results.clear()
@@ -366,6 +352,66 @@ def visualizeRerunSession(filepath):
     print(f"---------- Rerun of '{filepath}' successful.")
     print("\n" * 1)
     return results
+def runSimulation(filepath, network_name, sess_type, params):
+    pathlib.Path(filepath + "/_run").mkdir(parents=True, exist_ok=True)
+    K = params["station.k"]
+    STATION_CAPACITY = params["station.capacity"]
+    if sess_type == "solo" or sess_type == "competitive":
+        pass
+    elif sess_type == "GNN" or sess_type == "MARL":
+        global model, graph, base_net, base_G, base_G_d, translator, trips
+        results = Evaluation(translator)
+        # Run a blank model
+        VISUALIZE = params["sim.visualize"]
+        params["sim.visualize"] = False
+        results = gnnutil.runSimulation_blank(network_name, "networks/" + network_name, filepath + "/_run",
+                                              base_net, trips, params, results)
+        ## Update graph (Data)
+        graph = gnnutil.applyResultsToGraph(graph, translator, ["vehicles", "flow"], results)
+        results = Evaluation(translator)
+        params["sim.visualize"] = VISUALIZE
+        if sess_type == "GNN":
+            MONEY_PER_KWH = params["station.moneyPerKWh"]
+            # Model eval forward
+            sel_edge_idxs = gnnutil.EdgePosGNN_chooseEdges(model, graph, K)
+            sel_edge_ids = [translator.indexToID(sei) for sei in sel_edge_idxs]
+            # Transform to stations
+            stations = []
+            for edge in sel_edge_ids: stations.append(StationInfo(edge, STATION_CAPACITY, MONEY_PER_KWH));
+            stations = StationInfoDataset(stations)
+            results = gnnutil.runSimulation_solo(network_name, "networks/" + network_name, filepath + "/_run",
+                                                 base_net, base_G, stations, trips,
+                                                 params, results)
+        else:
+            MIN_PRICE = params["training.minPrice"]
+            MAX_PRICE = params["training.maxPrice"]
+            global agent_count
+            agent_colors = visutil.getAgentColors()
+            suffixes = gnnutil.getAgentSuffixes(agent_colors)
+            agent_stations = []; all_stations = []; prices = [];
+            for a in range(agent_count):
+                # Model eval forward
+                sel_edge_idxs, unit_price = gnnutil.EdgePosAndPriceGNN_chooseEdgesAndPrice(model[a], graph, K)
+                sel_edge_ids = [translator.indexToID(sei) for sei in sel_edge_idxs]
+                price = (MIN_PRICE + (unit_price * (MAX_PRICE - MIN_PRICE)))
+                # Transform to stations
+                chosen_stations = [];
+                for edge in sel_edge_ids: chosen_stations.append(StationInfo(edge, STATION_CAPACITY, price, suffix=suffixes[a]));
+                chosen_stations = StationInfoDataset(chosen_stations)
+                # Save
+                agent_stations.append(chosen_stations); all_stations.extend(chosen_stations.arr);
+                prices.append(price)
+            all_stations = StationInfoDataset(all_stations)
+            results = gnnutil.runSimulation_comp(network_name, "networks/" + network_name, filepath + "/_run",
+                                                 base_net, base_G, agent_stations, all_stations, prices, trips,
+                                                 params, results)
+        # Showcase results
+        visutil.printResults_general(results, params)
+        visutil.printResults_trips(results)
+        if sess_type == "GNN": visutil.printResults_solo(results);
+        else: visutil.printResults_comp(results);
+        print()
+    return
 def ShowBest(filepath):
     return
 def ShowTrainingStats(filepath, metadata):
@@ -380,144 +426,71 @@ def ShowTrainingStats(filepath, metadata):
     return
 
 
-def parseArgs():
-    filepath = None;
-    args = {"stats": None}
-    i = 1
-    while i < len(sys.argv):
-        print(sys.argv[i])
-        if sys.argv[i] == "-stats":
-            args["stats"] = sys.argv[i+1].split(',')
-            i += 2
-        elif sys.argv[i] == "--no-values":
-            args["no-values"] = True
-            i += 1
-        elif sys.argv[i] == "--no-legend":
-            args["no-legend"] = True
-            i += 1
-        elif sys.argv[i] == "--centerize":
-            args["centerize"] = True
-            i += 1
-        else:
-            filepath = sys.argv[i]
-            i += 1
-    return filepath, args
 
 ###### MAIN
 if __name__ == "__main__":
-    # Parse filepaths from args
-    filepath, args = parseArgs();
-    if "stats" in args: stats = args["stats"];
-    else: stats = None;
-    print("Visualizing rerun:", filepath, "\n")
-    #print("=" * 20)
-    # Rerun and compare
-    stime = time.perf_counter()
-    params = Parameters.load(filepath + "/config.xml")
-    res = visualizeRerunSession(filepath)
-    sess_name = filepath.rsplit('/', 1)[1]
-    etime = time.perf_counter()
-    print(f"Finished in {round(etime - stime, 2)} seconds")
-    #### Plot stats
-    ## Global
-    # Check if dups
-    seen = set()
-    dup = False
-    for name in sess_names:
-        if name in seen:
-            dup = True; break;
-        seen.add(name)
-    if dup:
-        indeces = {};
-        for i in range(len(filepaths)):
-            p = filepaths[i].rsplit('/', 1)[0]
-            if p not in indeces: indeces[p] = [];
-            indeces[p].append(i)
-        print(indeces)
-        for key, inds in indeces.items():
-            fig = visutil.plotResultDataset(results_ds, sess_names, params_arr, win_title=key,
-                                            stat_list=["simDuration", "tripDuration", "totalCoverage"],
-                                            index_list=inds,
-                                            legend=("no-legend" not in args),
-                                            value_labels=("no-values" not in args),
-                                            centerize=("centerize" in args))
-    else:
-        fig1 = visutil.plotResultDataset(results_ds, sess_names, params_arr,
-                                         stat_list=["simDuration", "tripDuration", "totalCoverage"],
-                                         legend=("no-legend" not in args),
-                                         value_labels=("no-values" not in args),
-                                         centerize=("centerize" in args))
-    ## Competitive
-    # Coverage
-    if False:
-        if stats is None or "coverage" in stats:
-            fig2 = visutil.plotCompetitiveResultDataset(results_ds, sess_names, params_arr, stat="coverage",
-                                                         legend=("no-legend" not in args),
-                                                         value_labels=("no-values" not in args),
-                                                         centerize=("centerize" in args))
-    else:
-        cov_data = []
-        name_data = []
-        for i in range(len(results_ds.arr)):
-            res = results_ds.arr[i]
-            if "coverage" in res.agent_data:
-                covs = res.agent_data["coverage"]
-                if isinstance(covs, dict):
-                    covs_list = []
-                    for key in sorted(covs.keys()):
-                        covs_list.append(covs[key])
-                    covs = covs_list
-                cov_data.append(covs)
-                name_data.append(sess_names[i])
-        fig2 = visutil.plotCompetitiveValues(cov_data, name_data, "coverage",
-                                         title="Usporedba radijusa pokrivenosti", xlabel="Metar (m)")
-    # Price
-    price_data = []
-    name_data = []
-    for i in range(len(results_ds.arr)):
-        res = results_ds.arr[i]
-        if "price" in res.station_data:
-            prices = res.station_data["price"]
-            print("prices:", prices)
-            if isinstance(prices, list):
-                price_data.append(prices)
-            elif isinstance(prices, dict):
-                prices_list = []
-                for key in sorted(prices.keys()):
-                    prices_list.append(prices[key])
-                prices = prices_list
-                price_data.append(prices)
-            else: continue;
-            name_data.append(sess_names[i])
-    print("price_data:", price_data)
-    fig3 = visutil.plotCompetitiveValues(price_data, name_data, "price",
-                                         title="Usporedba cijena", xlabel="Cijena punjenja (€ po kWh)")
-    # Charge
-    charged_data = []
-    name_data = []
-    for i in range(len(results_ds.arr)):
-        res = results_ds.arr[i]
-        if "totalCharge" in res.agent_data:
-            charges = res.agent_data["totalCharge"]
-            if isinstance(charges, dict):
-                charges_list = []
-                for key in sorted(charges.keys()):
-                    charges_list.append(charges[key])
-                charges = charges_list
-            charged_data.append(charges)
-            name_data.append(sess_names[i])
-    fig3 = visutil.plotCompetitiveValues(charged_data, name_data, "charge",
-                                         title="Usporedba napunjene energije", xlabel="Napunjena električna energija (kWh)")
-    ## Plot scores
-    # Round to 2
-    for i in range(len(scores)):
-        scores[i] = round(scores[i], 2)
-    fig3 = visutil.plotScores(scores, sess_names,
-                              legend=("no-legend" not in args),
-                              value_labels=("no-values" not in args))
-    plt.show()
+    models_paths = getSavedSessionPaths("results")
+    print("Detected results:")
+    printSessionPaths(models_paths, prefix="  ")
+    print("")
     
-    # Plot
-    #fig = visutil.plotResultDataset(results_ds, sess_names, params_arr)
-    #plt.show()
+    inp = input("Enter folder name or index: ").strip()
+    filepath = parseFolderInput(inp, models_paths)
+    # Load params
+    cfg_params = Parameters.parse("config.xml")
+    res_params = Parameters.parse(filepath + "/config.xml")
+    params = adjustRunParameters(res_params, cfg_params)
+    # Load metadata
+    metadata = dm.loadSessionMetadata(filepath)
+    # Load environment and model(s) (if applicable)
+    if (model_folder := isValidModelFolder(filepath)) > 0:
+        print("Training session detected, importing...")
+        import torch
+        #from lib.gnn.model1 import EdgeGNN
+        from lib.gnn.model2 import EdgePosGNN
+        from lib.gnn.model3 import EdgePosAndPriceGNN
+        import lib.gnn.utility as gnnutil
+        if not metadata["metadataExists"]:
+            print("Failed to detect used network, please enter manually:")
+            network_name = selectNetwork()
+        else: network_name = metadata["network"];
+        # Load network
+        print(f"Loading network '{network_name}'...")
+        global device
+        device = gnnutil.initDevice()
+        edge_attr_list = gnnutil.getEdgeAttrList(model_folder == 2)
+        global graph, base_net, base_G, base_G_d, translator, trips
+        graph, base_net, base_G, base_G_d, translator = gnnutil.loadEnvironment(network_name, edge_attr_list)
+        trips = tripsGen_load(filepath + "/trips.xml", base_net, base_G)
+        # Load model(s)
+        global model, agent_count
+        prnt = "Loading model"
+        if model_folder == 2:
+            agent_count = metadata['agentCount'];
+            prnt += f"s [{agent_count}]...";
+        else:
+            agent_count = 1;
+            prnt += "...";
+        print(prnt)
+        model = loadModels(filepath, agent_count, graph)
+    print("Successfully loaded '" + filepath + "'\n")
+
+    while inp != "" and inp != "q" and inp != "quit":
+        # Options
+        print("Options:")
+        print("  - [r]un      | Run a simulation using the models")
+        print("  - [c]ompare  | Compare with another session")
+        if metadata["sessionType"] == "GNN" or metadata["sessionType"] == "MARL":
+            print("  - [b]est     | Show the statistics for the best runs")
+            print("  - [t]raining | Visualize the training statistics")
+        print("  - [q]uit     | Quit")
+        inp = input().strip()
+
+        if inp == "r" or inp == "1":
+            runSimulation(filepath, network_name, metadata["sessionType"], params)
+        elif inp == "b" or inp == "2":
+            ShowBest(filepath)
+        elif inp == "t" or inp == "3":
+            ShowTrainingStats(filepath, metadata)
+        print()
     

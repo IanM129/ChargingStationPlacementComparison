@@ -43,7 +43,7 @@
 		</param>
 		<!-- Inactive during training -->
 		<param name="visualize" type="bool" default="False">
-			False
+			True
 		</param>
 		<param name="frameDur" type="float" default="0.01">
 			0.01
@@ -71,13 +71,13 @@
 	</group>
 	<group name="station">
 		<param name="k" type="int" default="5">
-			6
+			1
 		</param>
 		<param name="capacity" type="int" default="10">
 			8
 		</param>
 		<param name="waitQueue" type="int" default="10">
-			10
+			6
 		</param>
 		<param name="fillReverse" type="bool" default="True">
 			True

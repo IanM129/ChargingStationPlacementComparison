@@ -131,6 +131,30 @@ def getVehicleDataHashList(parent_folder="vehicle_data"):
                 chargedata_hash = hashChargeData(charge_data)    
                 data[(trips_hash, chargedata_hash)] = folder
     return data
+def getSessionList(parent_folder="results"):
+    if isinstance(parent_folder, list):
+        sess_list = []; prec = 0;
+        for pf in parent_folder:
+            sl, p = getSessionList(pf)
+            sess_list.extend(sl);
+            if p > prec: prec = p;
+        return sess_list, prec;
+    if (not os.path.exists(parent_folder)): return None, 0;
+    sess_list = []
+    prec = 0
+    for folder in os.listdir(parent_folder):
+        folder_path = os.path.join(parent_folder, folder)
+        if os.path.isdir(folder_path) and folder[0] != '_':
+            if isValidSessionFolder(folder_path) and\
+                isValidResultsFolder(folder, parent_folder) == 0:
+                metadata = loadSessionMetadata(folder_path)
+                sess_list.append((folder_path, parent_folder, metadata))
+                if len(folder_path) > prec: prec = len(folder_path);
+            else:
+                sub_sess_list, sub_prec = getSessionList(folder_path)
+                sess_list.extend(sub_sess_list)
+                if sub_prec > prec: prec = sub_prec;
+    return sess_list, prec
 ## Get session groups based on network and vehicle data they were trained on
 # - network
 # - vehicle data (trips, charge_data)
@@ -138,6 +162,13 @@ def getVehicleDataHashList(parent_folder="vehicle_data"):
 # - centralized
 # - (maxDuration?)
 def getSessionGroups(parent_folder="results"):
+    if isinstance(parent_folder, list):
+        groups = {}; prec = 0;
+        for pf in parent_folder:
+            g, p = getSessionGroups(pf);
+            groups.update(g)
+            if p > prec: prec = p;
+        return groups, prec;
     vd_hashlist = getVehicleDataHashList()
     vd_pathlist = getVehicleDataList()
     if (not os.path.exists(parent_folder)): return None, 0;
