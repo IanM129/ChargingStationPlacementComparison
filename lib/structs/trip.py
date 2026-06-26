@@ -159,6 +159,8 @@ class TripDataset:
         return res
     def averageTripLen(self):
         return np.mean([trip.total_distance for trip in self.dict.values()])
+    def averageDestinationCount(self):
+        return np.mean([len(trip.distances) for trip in self.dict.values()])
     def __hash__(self):
         trips = []
         for vehID, trip in self.dict.items():

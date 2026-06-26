@@ -135,13 +135,51 @@ def printNetworks(networks_data, default_net=None):
         if data[2] != "": print(f"{data[2]}", end="");
         print("")
     print("==========================")
-def printVehicleData(vehicle_data):
-    name_prec = len(max([data[0] for data in vehicle_data], key=len))
-    i_prec = len(str(len(vehicle_data)))
+def printVehicleData(veh_data_filepath, load=False):
+    from lib.graphing import netToGraph
+    from lib.graphing.utility import diameter as graphutil_diameter
+    from lib.structs.graphtranslator import GraphTranslator
+    from lib.structs.trip import TripDataset
+    from lib.data_management import loadChargeData
+    print("->", veh_data_filepath)
+    vehicle_data_name = pathlib.Path(veh_data_filepath).name
+    metadata = dm.getVehicleDataMetadata(vehicle_data_name)
+    network_name = metadata["network_name"]
+    print(f"  - Vehicle data:       {vehicle_data_name}")
+    print(f"      - vehicle count:  {metadata['vehicle_count']}")
+    print(f"      - EV count:       {metadata['EV_count']}")
+    print(f"      - network:        {metadata['network_name']}", end="")
+    if load:
+        base_G = netToGraph("networks/" + network_name + "/base_net.net.xml",
+                            lengths=True, travel_time=True,
+                            internal_lengths=True, node_position=True)
+        network_diameter = graphutil_diameter(base_G, weight="length")
+        print(f"  (diameter: {network_diameter:0.2f})")
+        translator = GraphTranslator(base_G)
+        trips = TripDataset.parseXML(base_G, translator, veh_data_filepath + "/trips.xml")
+        avg_trip_len = trips.averageTripLen()
+        avg_dest_count = trips.averageDestinationCount()
+        print(f"      - average trip length: {avg_trip_len:0.2f}")
+        print(f"      - average destination count: {avg_dest_count:0.2f}")
+        charge_data = loadChargeData(veh_data_filepath + "/charge_data.xml")
+        avg_set_charge = 0.0
+        avg_min_charge = 0.0
+        for cd in charge_data.values():
+            avg_set_charge += cd[1]
+            avg_min_charge += cd[2]
+        avg_set_charge /= len(charge_data)
+        avg_min_charge /= len(charge_data)
+        print(f"      - average set charge: {avg_set_charge:0.2f}")
+        print(f"      - average min charge: {avg_min_charge:0.2f}")
+    else:
+        print("")
+def printVehicleDataList(veh_data_list):
+    name_prec = len(max([data[0] for data in veh_data_list], key=len))
+    i_prec = len(str(len(veh_data_list)))
     print("==========================")
     print("Available vehicle data:")
-    for i in range(len(vehicle_data)):
-        data = vehicle_data[i]
+    for i in range(len(veh_data_list)):
+        data = veh_data_list[i]
         print(f"{i+1:{i_prec}} | {data[0]:{name_prec}s}  > ", end="")
         if data[2] is not None: print(f"'{data[2]}'");
         else: print("");
@@ -174,8 +212,6 @@ def generateVehicleData(network_name):
                              internal_lengths=True, node_position=True)
     # Adjust max and min distances
     network_diameter = graphutil_diameter(base_G, weight="length")
-    
-    
     print("Generating vehicle data using parameter minimum and maximum distances:")
     print(f"  MIN_DISTANCE: {round(MIN_DISTANCE, 2)}", end="")
     if MIN_DISTANCE < 0:
@@ -364,7 +400,7 @@ def main(print_options=True):
         args = ' '.join(choice.split(' ')[1:])
         args = parseArgs(choice.split(' ')[1:])
 
-        print(command)
+        #print(command)
         if len(command) == 2 and command[0].isdigit():
             if command[1].isdigit() and int(command[1]) >= 0:
                 AGENT_COUNT = int(command[1])
@@ -437,10 +473,15 @@ def main(print_options=True):
                 sys.exit(1)
         else:
             if value == "listVehicleData":
-                vehicle_data = dm.getVehicleDataList()
-                printVehicleData(vehicle_data);
-                #main(print_options=False)
-                temp_print_options = False
+                veh_dt_list = dm.getVehicleDataList()
+                try: target_vd = int(choice.split(' ')[1]);
+                except: target_vd = 0;
+                # Print details about one of them
+                if target_vd > 0:
+                    printVehicleData(veh_dt_list[target_vd-1][1], True)
+                else:
+                    printVehicleDataList(veh_dt_list);
+                    temp_print_options = False
                 continue
             elif value == "compare":
                 # Select group
